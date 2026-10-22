@@ -10,6 +10,7 @@ import PlanoWizardPage from './pages/PlanoWizardPage'
 import TreinoPlanoPage from './pages/TreinoPlanoPage'
 import TreinoDiaPage from './pages/TreinoDiaPage'
 import { Spinner } from './components/UI'
+import WelcomeSplash from './components/WelcomeSplash'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -88,6 +89,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <WelcomeSplash />
       </AuthProvider>
     </BrowserRouter>
   )
