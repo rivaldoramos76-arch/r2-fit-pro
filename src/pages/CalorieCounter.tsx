@@ -13,6 +13,21 @@ interface FoodLog {
 
 const MEALS = ['Café da manhã', 'Lanche da manhã', 'Almoço', 'Lanche da tarde', 'Jantar', 'Ceia', 'Outro']
 
+// Datas sempre no fuso local do usuário (YYYY-MM-DD), sem conversão para UTC.
+function hojeLocal(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function somarDias(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, m - 1, d + n)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+function formatarData(iso: string): string {
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
 function Modal({ onClose, title, children }: { onClose: () => void; title: string; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-zinc-950/80 backdrop-blur-sm" onClick={onClose}>
@@ -180,7 +195,7 @@ function PhotoModal({ onClose, onSaved, data }: { onClose: () => void; onSaved: 
 
 export default function CalorieCounter({ onBack }: { onBack: () => void }) {
   const { user } = useAuth()
-  const [data, setData] = useState(() => new Date().toISOString().slice(0, 10))
+  const [data, setData] = useState(hojeLocal)
   const [items, setItems] = useState<FoodLog[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<null | 'texto' | 'foto'>(null)
@@ -213,7 +228,7 @@ export default function CalorieCounter({ onBack }: { onBack: () => void }) {
     setItems(p => p.filter(i => i.id !== id))
   }
 
-  const isToday = data === new Date().toISOString().slice(0, 10)
+  const isToday = data === hojeLocal()
 
   return (
     <div className="flex flex-col gap-5" translate="no">
@@ -221,9 +236,17 @@ export default function CalorieCounter({ onBack }: { onBack: () => void }) {
         <button onClick={onBack} className="text-zinc-400 p-1.5 -ml-1.5 rounded-lg hover:bg-zinc-800">←</button>
         <div className="flex-1">
           <h1 className="text-xl font-bold text-zinc-100">Contador de Calorias</h1>
-          <div className="flex items-center gap-2 mt-0.5">
-            <input type="date" value={data} onChange={e => setData(e.target.value)} className="bg-transparent text-sm text-zinc-400 border-none p-0 focus:outline-none" />
+          <div className="flex items-center gap-1 mt-0.5">
+            <button onClick={() => setData(d => somarDias(d, -1))} aria-label="Dia anterior"
+              className="text-zinc-400 hover:text-zinc-100 px-1.5 py-0.5 rounded-md hover:bg-zinc-800 text-base leading-none">←</button>
+            <label className="relative text-sm text-zinc-300 tabular-nums cursor-pointer">
+              {formatarData(data)}
+              <input type="date" value={data} onChange={e => e.target.value && setData(e.target.value)} aria-label="Escolher data"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+            </label>
             {isToday && <span className="text-xs text-blue-400">(hoje)</span>}
+            <button onClick={() => setData(d => somarDias(d, 1))} aria-label="Próximo dia"
+              className="text-zinc-400 hover:text-zinc-100 px-1.5 py-0.5 rounded-md hover:bg-zinc-800 text-base leading-none">→</button>
           </div>
         </div>
       </div>
