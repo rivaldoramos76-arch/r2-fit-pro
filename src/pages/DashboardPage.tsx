@@ -4,9 +4,11 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import type { Dieta, Treino } from '../types'
 import { Card, Badge, Spinner } from '../components/UI'
+import { useAcesso } from '../context/AcessoContext'
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const { premium, carregando: carregandoAcesso } = useAcesso()
   const [lastDieta, setLastDieta] = useState<Dieta | null>(null)
   const [lastTreino, setLastTreino] = useState<Treino | null>(null)
   const [loading, setLoading] = useState(true)
@@ -49,6 +51,14 @@ export default function DashboardPage() {
         <p className="text-zinc-500 text-sm">{greeting()},</p>
         <h1 className="text-2xl font-bold text-zinc-100 mt-0.5 capitalize">{nomeUsuario} 👋</h1>
       </div>
+
+      {!carregandoAcesso && !premium && (
+        <Link to="/assinatura" className="block bg-gradient-to-br from-green-500/20 to-zinc-900 border border-green-500/30 rounded-2xl p-4">
+          <p className="font-semibold">Ative o R2 Fit Pro Premium</p>
+          <p className="text-sm text-zinc-400 mt-1">Libere treinos com IA, contador com áudio, dietas personalizadas e contador de calorias.</p>
+          <span className="inline-block mt-3 text-sm font-semibold text-green-400">Ver planos →</span>
+        </Link>
+      )}
 
       {/* Quick actions */}
       <div className="grid grid-cols-2 gap-3">

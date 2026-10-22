@@ -7,4 +7,7 @@ export default defineConfig({
     tailwindcss(),
     react(),
   ],
+  define: {
+    __APP_VERSION__: JSON.stringify('1.1.0'),
+  },
 })

@@ -1,14 +1,15 @@
 {
   "name": "r2-fit-pro",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "node scripts/gen-voice.mjs && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "voz": "node scripts/gen-voice.mjs"
+    "voz": "node scripts/gen-voice.mjs",
+    "test": "npx --yes tsx tests/logica.test.ts && npx --yes tsx tests/comercial.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",

@@ -43,13 +43,14 @@ export default function WelcomeSplash() {
   }
 
   useEffect(() => {
-    if (!visivel || saindo) return
+    if (!visivel || saindo || !user) return
     const t = setTimeout(fechar, AUTO_FECHAR_MS)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visivel, saindo])
+  }, [visivel, saindo, user])
 
-  if (!visivel) return null
+  // Exibida ao abrir o app já logado; visitantes vão direto para a página comercial
+  if (!visivel || loading || !user) return null
 
   const nome = user?.user_metadata?.nome ?? user?.email?.split('@')[0]
   const recursos = [

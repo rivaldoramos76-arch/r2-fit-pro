@@ -1,10 +1,4 @@
-import OpenAI from 'openai'
-
-const apiKey = import.meta.env.VITE_OPENAI_API_KEY as string | undefined
-
-const client = apiKey
-  ? new OpenAI({ apiKey, dangerouslyAllowBrowser: true })
-  : null
+import { chatCompletion } from './aiClient'
 
 export interface FoodEstimate {
   nome: string
@@ -44,8 +38,7 @@ function parseJson(content: string | null | undefined): FoodEstimate[] {
 }
 
 export async function estimarAlimentoTexto(descricao: string): Promise<FoodEstimate[]> {
-  if (!client) throw new Error('API key da OpenAI não configurada')
-  const resp = await client.chat.completions.create({
+  const resp = await chatCompletion({
     model: 'gpt-4o',
     response_format: { type: 'json_object' },
     temperature: 0.3,
@@ -58,8 +51,7 @@ export async function estimarAlimentoTexto(descricao: string): Promise<FoodEstim
 }
 
 export async function analisarImagemAlimento(base64DataUrl: string): Promise<FoodEstimate[]> {
-  if (!client) throw new Error('API key da OpenAI não configurada')
-  const resp = await client.chat.completions.create({
+  const resp = await chatCompletion({
     model: 'gpt-4o',
     response_format: { type: 'json_object' },
     temperature: 0.3,

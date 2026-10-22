@@ -1,18 +1,10 @@
-import OpenAI from 'openai'
 import { CATALOGO, GRUPOS } from '../data/exercicios'
 import { encontrarPorNome } from './busca'
 import {
   equipamentosCobertos, normalizarExercicio, uid,
   type ConfigTreino, type DiaTreino, type PlanoTreino, type SlotAgenda, type TreinoDivisao,
 } from './treinoModel'
-
-
-const apiKey = import.meta.env.VITE_OPENAI_API_KEY as string
-
-export const openai = new OpenAI({
-  apiKey,
-  dangerouslyAllowBrowser: true,
-})
+import { chatCompletion } from './aiClient'
 
 // --- Geração de Dieta ---
 
@@ -77,7 +69,7 @@ Retorne APENAS JSON válido neste formato exato:
   "dicas": ["dica 1", "dica 2", "dica 3"]
 }`
 
-  const response = await openai.chat.completions.create({
+  const response = await chatCompletion({
     model: 'gpt-4o',
     messages: [{ role: 'user', content: prompt }],
     response_format: { type: 'json_object' },
@@ -144,7 +136,7 @@ Retorne APENAS JSON válido neste formato:
   ]
 }`
 
-  const response = await openai.chat.completions.create({
+  const response = await chatCompletion({
     model: 'gpt-4o',
     messages: [{ role: 'user', content: prompt }],
     response_format: { type: 'json_object' },

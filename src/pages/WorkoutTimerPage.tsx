@@ -5,6 +5,7 @@ import { useTreino } from '../lib/treinoApi'
 import { concluirExercicio } from '../lib/sessoes'
 import { TreinoPlayer, carregarClipes, estadoEm, type ClipKey, type FaseTipo } from '../lib/workoutAudio'
 import { Spinner } from '../components/UI'
+import { carregarPreferencias } from '../lib/preferencias'
 
 type Tela = 'pronto' | 'rodando' | 'concluido' | 'interrompido'
 interface CfgContador { series: number; exec: number; desc: number }
@@ -50,6 +51,12 @@ export default function WorkoutTimerPage() {
   const [treinoCompleto, setTreinoCompleto] = useState(false)
   const [erroAudio, setErroAudio] = useState('')
   const playerRef = useRef<TreinoPlayer | null>(null)
+
+  // Volume e modo silencioso padrão definidos em Configurações
+  useEffect(() => {
+    if (!user) return
+    carregarPreferencias(user.id).then(p => { setVolume(p.audio.volume); setMudo(p.audio.mudo) }).catch(() => {})
+  }, [user])
   const wakeRef = useRef<WakeLockSentinel | null>(null)
 
   const dia = treino?.plano.dias[diaIdx]
