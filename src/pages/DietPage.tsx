@@ -11,31 +11,39 @@ import CalorieCounter from './CalorieCounter'
 function DietMenu({ onSelect }: { onSelect: (v: 'planos' | 'contador') => void }) {
   return (
     <div className="flex flex-col gap-5" translate="no">
-      <div><h1 className="text-2xl font-bold text-zinc-100">Dieta</h1><p className="text-sm text-zinc-500">Escolha uma opção</p></div>
-      <button onClick={() => onSelect('planos')} className="text-left">
-        <Card className="hover:border-green-500/40 transition active:scale-[0.99]">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-green-500/15 rounded-2xl flex items-center justify-center shrink-0 text-2xl">✨</div>
-            <div className="flex-1">
-              <p className="font-semibold text-zinc-100">Plano de Dieta com IA</p>
-              <p className="text-xs text-zinc-500 mt-0.5">Gera plano personalizado com refeições e macros</p>
-            </div>
-            <span className="text-zinc-500">→</span>
-          </div>
-        </Card>
-      </button>
-      <button onClick={() => onSelect('contador')} className="text-left">
-        <Card className="hover:border-blue-500/40 transition active:scale-[0.99]">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-500/15 rounded-2xl flex items-center justify-center shrink-0 text-2xl">🍽️</div>
-            <div className="flex-1">
-              <p className="font-semibold text-zinc-100">Contador de Calorias</p>
-              <p className="text-xs text-zinc-500 mt-0.5">Registra por foto ou texto, IA estima nutrientes</p>
-            </div>
-            <span className="text-zinc-500">→</span>
-          </div>
-        </Card>
-      </button>
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100">Dieta</h1>
+        <p className="text-sm text-zinc-500 mt-0.5">Escolha uma opção</p>
+      </div>
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3">
+        <button
+          onClick={() => onSelect('planos')}
+          className="group text-left rounded-3xl p-5 min-h-[150px] flex flex-col justify-between gap-4 bg-gradient-to-br from-green-500/20 via-green-500/10 to-zinc-900 border border-green-500/30 hover:border-green-400/60 transition active:scale-[0.98]">
+          <span className="w-12 h-12 rounded-2xl bg-green-500 text-zinc-950 flex items-center justify-center shadow-lg shadow-green-500/20">
+            <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
+            </svg>
+          </span>
+          <span>
+            <span className="block font-bold text-lg text-zinc-100 leading-tight">Plano de Dieta com IA</span>
+            <span className="block text-sm text-zinc-400 mt-1 leading-snug">Gera plano personalizado com refeições e macros</span>
+          </span>
+        </button>
+        <button
+          onClick={() => onSelect('contador')}
+          className="group text-left rounded-3xl p-5 min-h-[150px] flex flex-col justify-between gap-4 bg-zinc-900 border border-zinc-800 hover:border-green-500/40 transition active:scale-[0.98]">
+          <span className="w-12 h-12 rounded-2xl bg-zinc-800 text-green-400 border border-zinc-700 flex items-center justify-center group-hover:bg-zinc-700 transition">
+            <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+            </svg>
+          </span>
+          <span>
+            <span className="block font-bold text-lg text-zinc-100 leading-tight">Contador de Calorias</span>
+            <span className="block text-sm text-zinc-400 mt-1 leading-snug">Registra por foto ou texto, IA estima nutrientes</span>
+          </span>
+        </button>
+      </div>
     </div>
   )
 }
