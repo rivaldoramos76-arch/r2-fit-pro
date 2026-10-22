@@ -13,7 +13,7 @@ export default function TermosPage() {
     <PublicLayout>
       <Documento titulo="Termos de Uso" versao={t.versao_termos}>
         <Secao titulo="1. Quem somos">
-          <p>O R2 Fit Pro é um aplicativo de treino e alimentação oferecido por {ou(e.razao_social)}, inscrita no CNPJ {ou(e.cnpj)}, com endereço em {ou(e.endereco)} ("R2 Fit Pro", "nós").</p>
+          <p>O R2 Fit Pro é um aplicativo de treino e alimentação oferecido por {ou(e.razao_social)}, inscrito(a) no CPF/CNPJ {ou(e.cnpj)}, com endereço em {ou(e.endereco)} ("R2 Fit Pro", "nós").</p>
           <p>Contato: {ou(e.email_suporte)}{e.telefone ? ` · ${e.telefone}` : ''}.</p>
         </Secao>
         <Secao titulo="2. Aceitação">

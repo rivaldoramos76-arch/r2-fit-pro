@@ -12,7 +12,7 @@ export default function PrivacidadePage() {
     <PublicLayout>
       <Documento titulo="Política de Privacidade" versao={t.versao_privacidade}>
         <Secao titulo="1. Controlador e contato">
-          <p>O controlador dos dados é {ou(e.razao_social)}, CNPJ {ou(e.cnpj)}, {ou(e.endereco)}.</p>
+          <p>O controlador dos dados é {ou(e.razao_social)}, inscrito(a) no CPF/CNPJ {ou(e.cnpj)}, com endereço em {ou(e.endereco)}.</p>
           <p>Encarregado pelo tratamento de dados (DPO): {ou(e.encarregado_dados)} — e-mail para assuntos de privacidade: {ou(e.email_privacidade ?? e.email_suporte)}.</p>
         </Secao>
         <Secao titulo="2. Dados que coletamos">

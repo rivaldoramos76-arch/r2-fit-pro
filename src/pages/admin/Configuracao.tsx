@@ -6,7 +6,7 @@ import { Button, Input, Spinner, Textarea } from '../../components/UI'
 import { Erro, msgErro } from './comum'
 
 const CAMPOS_EMPRESA: [keyof AppConfig['empresa'], string][] = [
-  ['nome_fantasia', 'Nome fantasia'], ['razao_social', 'Razão social'], ['cnpj', 'CNPJ'], ['endereco', 'Endereço completo'],
+  ['nome_fantasia', 'Nome fantasia'], ['razao_social', 'Nome completo (pessoa física) ou razão social'], ['cnpj', 'CPF ou CNPJ'], ['endereco', 'Endereço completo'],
   ['email_suporte', 'E-mail de suporte'], ['email_privacidade', 'E-mail de privacidade (LGPD)'], ['telefone', 'Telefone'],
   ['encarregado_dados', 'Encarregado de dados (DPO)'], ['foro', 'Foro (cidade/UF)'],
 ]

@@ -13,8 +13,8 @@ export default function SobrePage() {
           <p>O R2 Fit Pro reúne treino e alimentação em um só lugar: planos de treino gerados por inteligência artificial ou montados por você, contador de séries com áudio, planos alimentares personalizados e contador de calorias por texto ou foto.</p>
           <p>As sugestões são educativas e não substituem o acompanhamento de profissionais de saúde.</p>
         </Secao>
-        <Secao titulo="Empresa responsável">
-          <p>{ou(e?.razao_social)} — CNPJ {ou(e?.cnpj)}</p>
+        <Secao titulo="Responsável pelo serviço">
+          <p>{ou(e?.razao_social)} — CPF/CNPJ {ou(e?.cnpj)}</p>
           <p>{ou(e?.endereco)}</p>
           <p>Suporte: {ou(e?.email_suporte)}{config?.textos.horario_suporte ? ` (${config.textos.horario_suporte})` : ''}</p>
         </Secao>
