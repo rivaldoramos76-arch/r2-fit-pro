@@ -32,8 +32,11 @@ criado exclusivamente por `billing_registrar_pagamento` com pagamento aprovado c
    com os eventos **Pagamentos**, **Planos e assinaturas (subscription_preapproval)** e **subscription_authorized_payment**. Copie a **assinatura secreta**.
 4. No Supabase → Edge Functions → Secrets (ou `supabase secrets set`):
    `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`, `SITE_URL=https://r2-fit-pro.vercel.app`.
-5. Teste com **usuários de teste** do Mercado Pago (vendedor e comprador). O e-mail da conta no app precisa ser o do comprador de teste para o checkout em modo teste.
-6. Valide: assinar → pagar com cartão de teste aprovado → Premium liberado; cartão recusado → permanece bloqueado; cancelar → acesso até o fim do período; cancelar em até 7 dias com reembolso → acesso encerrado e estorno.
+5. **Testes já executados em 23/10/2026** com contas de teste (vendedor + comprador): compra aprovada (saldo e cartão), recusada, duplicatas, cancelamento e reativação — tudo validado de ponta a ponta com webhooks reais. Observações do ambiente de teste do MP:
+   - o checkout exige navegador logado na conta compradora de teste, e o e-mail do usuário no app deve ser o da conta de teste (`test_user_...@testuser.com`);
+   - o MP cancela sozinho um checkout pendente após recusa (o app já cria outro link);
+   - **reembolso automático não funciona entre contas de teste** ("Unauthorized use of live credentials"); o app cancela mesmo assim, avisa o cliente e registra `assinatura.reembolso_pendente_manual` na auditoria. Acompanhar o primeiro reembolso real em produção.
+6. **Antes do lançamento**: trocar `MP_ACCESS_TOKEN` pelo token de produção da conta real, reconfigurar o webhook na aplicação da conta real (mesma URL, novos eventos "Pagamentos" e "Planos e assinaturas", novo `MP_WEBHOOK_SECRET`) e rodar `docs/limpeza-dados-de-teste.sql`.
 
 ### 2. E-mails
 - **Supabase Auth → SMTP personalizado (obrigatório)**: o SMTP padrão do Supabase limita poucos e-mails por hora (testado: retornou `over_email_send_rate_limit`). Configure em *Authentication → Emails → SMTP Settings* (ex.: Resend SMTP `smtp.resend.com:465`, usuário `resend`, senha = API key).
