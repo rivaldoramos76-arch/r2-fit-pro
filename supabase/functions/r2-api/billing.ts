@@ -86,6 +86,39 @@ export async function handleBilling(req: Request): Promise<Response> {
       return json(req, { ok: true, reembolsado, assinatura: r })
     }
 
+    // Diagnóstico da integração (somente admin): mostra a resposta completa do Mercado Pago
+    if (acao === 'diagnostico') {
+      if (!(await rpc<boolean>(admin, 'is_admin', { uid: user.id }))) throw new ErroHttp(403, 'Acesso negado')
+      const token = Deno.env.get('MP_ACCESS_TOKEN') ?? ''
+      const bruto = async (metodo: string, caminho: string, corpoReq?: unknown) => {
+        try {
+          const r = await fetch('https://api.mercadopago.com' + caminho, {
+            method: metodo,
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: corpoReq ? JSON.stringify(corpoReq) : undefined,
+            signal: AbortSignal.timeout(15000),
+          })
+          return { status: r.status, corpo: await r.json().catch(() => null) }
+        } catch (e) { return { status: 0, corpo: String(e) } }
+      }
+      const me = await bruto('GET', '/users/me')
+      let preapproval = null
+      if (typeof corpo?.payer_email === 'string' && corpo.payer_email.includes('@')) {
+        preapproval = await bruto('POST', '/preapproval', corpoCriarAssinatura({
+          userId: user.id, email: corpo.payer_email, planoNome: 'R2 Fit Pro Premium', precoCentavos: 1990,
+          voltarPara: `${siteUrl()}/assinatura/retorno`,
+        }))
+        // Cancela imediatamente se por acaso criou
+        if (preapproval.status === 201 && preapproval.corpo?.id) {
+          await bruto('PUT', `/preapproval/${preapproval.corpo.id}`, { status: 'cancelled' })
+        }
+      }
+      return json(req, {
+        colecionador: { status: me.status, id: me.corpo?.id, nickname: me.corpo?.nickname, email: me.corpo?.email, site: me.corpo?.site_id, teste: me.corpo?.tags },
+        preapproval,
+      })
+    }
+
     if (acao === 'processar_emails') {
       if (!(await rpc<boolean>(admin, 'is_admin', { uid: user.id }))) throw new ErroHttp(403, 'Acesso negado')
       if (corpo?.reenviar_sem_provedor) {
