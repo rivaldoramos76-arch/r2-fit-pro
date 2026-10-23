@@ -175,6 +175,15 @@ BEGIN
   j := public.billing_registrar_pagamento(jsonb_build_object('provider_payment_id', 'PAY6-'||a, 'provider_subscription_id', 'PRE2-'||a, 'status', 'estornado', 'valor_centavos', 1990, 'valor_estornado_centavos', 1990));
   IF j ->> 'transicao' <> 'estorno' OR public.tem_premium(a) THEN RAISE EXCEPTION 'FALHA 46: estorno não encerrou acesso'; END IF; n := n + 1;
 
+  -- Regressão: checkout novo (sem período) não pode rebaixar acesso vigente de assinatura anterior
+  PERFORM public.billing_registrar_assinatura(jsonb_build_object('provider_subscription_id', 'PRE3-'||a, 'user_id', a, 'provider_status', 'pending'));
+  UPDATE public.subscriptions SET status = 'cancelada', periodo_atual_fim = NOW() + INTERVAL '10 days' WHERE provider_subscription_id = 'PRE2-'||a;
+  IF public.estado_acesso(a) <> 'cancelada_vigente' THEN RAISE EXCEPTION 'FALHA 46b: checkout pendente rebaixou acesso vigente (%)', public.estado_acesso(a); END IF; n := n + 1;
+  PERFORM public.billing_registrar_assinatura(jsonb_build_object('provider_subscription_id', 'PRE3-'||a, 'provider_status', 'cancelled'));
+  IF public.estado_acesso(a) <> 'cancelada_vigente' THEN RAISE EXCEPTION 'FALHA 46c: cancelamento de checkout nunca ativado rebaixou acesso'; END IF; n := n + 1;
+  SELECT count(*) INTO cnt FROM public.email_outbox WHERE user_id = a AND dedupe_key = 'cancelada:' || (SELECT id FROM public.subscriptions WHERE provider_subscription_id = 'PRE3-'||a);
+  IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 46d: e-mail de cancelamento para assinatura nunca ativada'; END IF; n := n + 1;
+
   -- ── Administrador ───────────────────────────────────────────────────────
   PERFORM public.provisionar_admin('teste-c-'||c||'@exemplo.invalid', 'teste');
   PERFORM set_config('request.jwt.claims', json_build_object('sub', c, 'role', 'authenticated')::TEXT, TRUE);

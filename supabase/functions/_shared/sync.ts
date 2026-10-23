@@ -37,7 +37,7 @@ export async function sincronizarUsuario(admin: SupabaseClient, userId: string) 
   for (const s of subs ?? []) {
     await registrarPreapproval(admin, s.provider_subscription_id!)
     try {
-      const busca = await mp('GET', `/authorized_payments/search?preapproval_id=${encodeURIComponent(s.provider_subscription_id!)}&limit=20`)
+      const busca = await mp('GET', `/authorized_payments/search?preapproval_id=${encodeURIComponent(s.provider_subscription_id!)}`)
       for (const ap of busca?.results ?? []) {
         if (ap?.payment?.id) await registrarPagamento(admin, String(ap.payment.id), s.provider_subscription_id)
       }
