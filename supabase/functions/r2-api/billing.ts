@@ -69,21 +69,38 @@ export async function handleBilling(req: Request): Promise<Response> {
         await mp('PUT', `/preapproval/${encodeURIComponent(sub.provider_subscription_id)}`, { status: 'cancelled' })
       }
 
-      // Direito de arrependimento: reembolso integral dos pagamentos do período inicial
+      // Direito de arrependimento: reembolso integral dos pagamentos do período inicial.
+      // Uma falha no reembolso NUNCA desfaz o cancelamento: registra para tratamento manual.
       let reembolsado = false
+      let reembolsoFalhou = false
       const pedirReembolso = corpo?.reembolso === true
       if (pedirReembolso && elegivelArrependimento(sub.iniciada_em, dias)) {
         const { data: pagos } = await admin.from('payments').select('provider_payment_id')
           .eq('subscription_id', sub.id).eq('status', 'aprovado')
+        let okReembolsos = 0
         for (const p of pagos ?? []) {
-          await mp('POST', `/v1/payments/${encodeURIComponent(p.provider_payment_id)}/refunds`, {}, `reembolso-${p.provider_payment_id}`)
+          try {
+            await mp('POST', `/v1/payments/${encodeURIComponent(p.provider_payment_id)}/refunds`, {}, `reembolso-${p.provider_payment_id}`)
+            okReembolsos++
+          } catch (e) {
+            reembolsoFalhou = true
+            log('error', 'reembolso_falhou', { pagamento: p.provider_payment_id, erro: String(e) })
+            await auditar(admin, user.id, 'assinatura.reembolso_pendente_manual', sub.id,
+              { pagamento: p.provider_payment_id, erro: String(e).slice(0, 300) })
+          }
         }
-        reembolsado = (pagos?.length ?? 0) > 0
+        reembolsado = okReembolsos > 0 && !reembolsoFalhou
       }
       const r = await rpc(admin, 'billing_cancelar', { p_sub: sub.id, p_encerrar_agora: reembolsado || sub.status === 'pendente' })
-      await auditar(admin, user.id, 'assinatura.cancelada_pelo_usuario', sub.id, { reembolso: reembolsado })
+      await auditar(admin, user.id, 'assinatura.cancelada_pelo_usuario', sub.id, { reembolso: reembolsado, reembolso_falhou: reembolsoFalhou })
       await processarFilaEmails(admin, 5)
-      return json(req, { ok: true, reembolsado, assinatura: r })
+      return json(req, {
+        ok: true, reembolsado,
+        aviso: reembolsoFalhou
+          ? 'A assinatura foi cancelada, mas o reembolso automático falhou. Nossa equipe fará o estorno manualmente pelo Mercado Pago.'
+          : undefined,
+        assinatura: r,
+      })
     }
 
     // Diagnóstico da integração (somente admin): mostra a resposta completa do Mercado Pago
