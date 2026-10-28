@@ -39,15 +39,16 @@ criado exclusivamente por `billing_registrar_pagamento` com pagamento aprovado c
 6. **Antes do lançamento**: trocar `MP_ACCESS_TOKEN` pelo token de produção da conta real, reconfigurar o webhook na aplicação da conta real (mesma URL, novos eventos "Pagamentos" e "Planos e assinaturas", novo `MP_WEBHOOK_SECRET`) e rodar `docs/limpeza-dados-de-teste.sql`.
 
 ### 2. E-mails
-- **Supabase Auth → SMTP personalizado (obrigatório)**: o SMTP padrão do Supabase limita poucos e-mails por hora (testado: retornou `over_email_send_rate_limit`). Configure em *Authentication → Emails → SMTP Settings* (ex.: Resend SMTP `smtp.resend.com:465`, usuário `resend`, senha = API key).
-- Cole os modelos de `docs/emails/*.html` em *Authentication → Email Templates*.
-- **Resend**: crie a conta, verifique o domínio de envio (SPF/DKIM) e configure os secrets `RESEND_API_KEY` e `EMAIL_FROM` na Edge Function. E-mails gerados antes disso ficam como `sem_provedor` e podem ser reenviados no painel (Integrações → Reenviar pendentes).
+**Concluído em 28/10/2026.** Domínio `r2fitpro.com.br` verificado no Resend (região São Paulo); secrets `RESEND_API_KEY`, `EMAIL_FROM` (`R2 Fit Pro <nao-responda@r2fitpro.com.br>`) e `SITE_URL` configurados na Edge Function; SMTP personalizado do Supabase Auth apontando para o Resend; modelos de `docs/emails/*.html` aplicados em *Confirm signup* e *Reset password*. Testado: e-mail transacional e recuperação de senha chegaram na caixa de entrada do Gmail.
+- SMTP do Auth: `smtp.resend.com:465`, usuário `resend`, senha = API key própria (`supabase-auth-smtp`), remetente `nao-responda@r2fitpro.com.br`.
+- Os 6 e-mails gerados nos testes do Mercado Pago (destinatário `@testuser.com`, inexistente) foram marcados como `erro` com 5 tentativas para não serem enviados; `docs/limpeza-dados-de-teste.sql` os remove.
+- E-mails futuros que falharem podem ser reenviados no painel (Integrações e erros → Reenviar pendentes).
 
 ### 3. Supabase Auth
-- *Authentication → URL Configuration*: **Site URL** `https://r2fitpro.com.br`; **Redirect URLs**: `https://r2fitpro.com.br/**` e `https://r2-fit-pro.vercel.app/**`.
+- *Authentication → URL Configuration* (configurado em 28/10/2026): **Site URL** `https://r2fitpro.com.br`; **Redirect URLs**: `https://r2fitpro.com.br/**` e `https://r2-fit-pro.vercel.app/**`.
 - Domínio oficial: `r2fitpro.com.br` (Registro.br, zona DNS própria com A 76.76.21.21 e CNAME www→cname.vercel-dns.com; e-mail via Resend com DKIM `resend._domainkey` e CNAMEs `send`/`rsend`). O endereço `r2-fit-pro.vercel.app` segue ativo como alternativa.
 - *Authentication → Providers → Email*: manter **Confirm email** ativado (verificado: ativo); senha mínima 8.
-- *Password security*: ativar **Leaked password protection** (aviso do Security Advisor).
+- *Password security*: ativar **Leaked password protection** (aviso do Security Advisor; recurso do plano Pro do Supabase).
 
 ### 4. Dados empresariais e jurídico
 Preencha no painel (`/admin` → Plano e empresa): razão social, CNPJ, endereço, e-mails de suporte e privacidade, encarregado (DPO), foro.
@@ -62,7 +63,7 @@ select public.provisionar_admin('seu-email@exemplo.com', 'proprietário');
 A função não é acessível pela API (sem permissão para `anon`, `authenticated` ou `service_role`). Para revogar: `select public.revogar_admin('email');`.
 
 ### 6. OpenAI
-A chave foi exposta no navegador nas versões anteriores ao lançamento comercial. **Gere uma nova chave**, cadastre-a na Vercel como `OPENAI_API_KEY` (sem prefixo `VITE_`) e revogue a antiga.
+**Concluído em 28/10/2026.** A chave exposta no navegador nas versões anteriores foi revogada; a nova está na Vercel como `OPENAI_API_KEY` (sem prefixo `VITE_`, só no servidor). A variável antiga `VITE_OPENAI_API_KEY` contém a chave revogada e pode ser removida da Vercel (o código usa `OPENAI_API_KEY` primeiro).
 
 ## Ambientes
 - **Produção**: Vercel production + Supabase `pzmhlxhdqghamyxgegwq` + token `APP_USR-` do Mercado Pago.
