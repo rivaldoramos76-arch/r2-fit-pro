@@ -3,7 +3,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.49.4'
 import { renderizarEmail } from './emailTemplates.ts'
 import { log } from './http.ts'
 
-export const siteUrl = () => (Deno.env.get('SITE_URL') ?? 'https://r2-fit-pro.vercel.app').replace(/\/$/, '')
+export const siteUrl = () => (Deno.env.get('SITE_URL') ?? 'https://r2fitpro.com.br').replace(/\/$/, '')
 
 export async function processarFilaEmails(admin: SupabaseClient, limite = 10): Promise<{ enviados: number; falhas: number; semProvedor: number }> {
   const chave = Deno.env.get('RESEND_API_KEY')

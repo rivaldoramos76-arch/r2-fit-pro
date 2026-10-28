@@ -1,5 +1,5 @@
 // Utilitários HTTP das Edge Functions.
-const ORIGENS = (Deno.env.get('ALLOWED_ORIGINS') ?? 'https://r2-fit-pro.vercel.app,http://localhost:5173,http://localhost:4173')
+const ORIGENS = (Deno.env.get('ALLOWED_ORIGINS') ?? 'https://r2fitpro.com.br,https://www.r2fitpro.com.br,https://r2-fit-pro.vercel.app,http://localhost:5173,http://localhost:4173')
   .split(',').map(o => o.trim()).filter(Boolean)
 
 export function corsHeaders(req: Request): Record<string, string> {

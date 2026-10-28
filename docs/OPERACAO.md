@@ -31,7 +31,7 @@ criado exclusivamente por `billing_registrar_pagamento` com pagamento aprovado c
    `https://pzmhlxhdqghamyxgegwq.supabase.co/functions/v1/r2-api/webhook/mercadopago`
    com os eventos **Pagamentos**, **Planos e assinaturas (subscription_preapproval)** e **subscription_authorized_payment**. Copie a **assinatura secreta**.
 4. No Supabase → Edge Functions → Secrets (ou `supabase secrets set`):
-   `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`, `SITE_URL=https://r2-fit-pro.vercel.app`.
+   `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`, `SITE_URL=https://r2fitpro.com.br`.
 5. **Testes já executados em 23/10/2026** com contas de teste (vendedor + comprador): compra aprovada (saldo e cartão), recusada, duplicatas, cancelamento e reativação — tudo validado de ponta a ponta com webhooks reais. Observações do ambiente de teste do MP:
    - o checkout exige navegador logado na conta compradora de teste, e o e-mail do usuário no app deve ser o da conta de teste (`test_user_...@testuser.com`);
    - o MP cancela sozinho um checkout pendente após recusa (o app já cria outro link);
@@ -44,7 +44,8 @@ criado exclusivamente por `billing_registrar_pagamento` com pagamento aprovado c
 - **Resend**: crie a conta, verifique o domínio de envio (SPF/DKIM) e configure os secrets `RESEND_API_KEY` e `EMAIL_FROM` na Edge Function. E-mails gerados antes disso ficam como `sem_provedor` e podem ser reenviados no painel (Integrações → Reenviar pendentes).
 
 ### 3. Supabase Auth
-- *Authentication → URL Configuration*: **Site URL** `https://r2-fit-pro.vercel.app`; **Redirect URLs**: `https://r2-fit-pro.vercel.app/**`.
+- *Authentication → URL Configuration*: **Site URL** `https://r2fitpro.com.br`; **Redirect URLs**: `https://r2fitpro.com.br/**` e `https://r2-fit-pro.vercel.app/**`.
+- Domínio oficial: `r2fitpro.com.br` (Registro.br, zona DNS própria com A 76.76.21.21 e CNAME www→cname.vercel-dns.com; e-mail via Resend com DKIM `resend._domainkey` e CNAMEs `send`/`rsend`). O endereço `r2-fit-pro.vercel.app` segue ativo como alternativa.
 - *Authentication → Providers → Email*: manter **Confirm email** ativado (verificado: ativo); senha mínima 8.
 - *Password security*: ativar **Leaked password protection** (aviso do Security Advisor).
 
