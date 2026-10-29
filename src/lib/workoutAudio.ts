@@ -1,7 +1,6 @@
 // Motor do contador de séries.
 //
-// Estratégia para funcionar em segundo plano e com a tela bloqueada:
-// todo o exercício (contagens, "Trabalho!", "Repouso!", silêncio dos cronômetros e o
+// Modo "com tela bloqueada": todo o exercício (contagens, "Trabalho!", "Repouso!", silêncio dos cronômetros e o
 // aviso final) é renderizado como UMA faixa de áudio contínua e tocado por um
 // <audio>. Navegadores mantêm a reprodução de mídia iniciada pelo usuário mesmo com
 // a aba em segundo plano/tela bloqueada, enquanto timers JavaScript são suspensos.
@@ -168,41 +167,70 @@ export function duracoes(clips: Record<ClipKey, Float32Array>): Record<ClipKey, 
 }
 
 // --- Player ---
+//
+// Três modos:
+// - "mix" (padrão quando a pessoa escolhe "por cima da música"): os clipes são agendados
+//   no Web Audio. Não pede o foco de áudio do sistema, então Spotify/Apple Music continuam
+//   tocando por baixo. No iPhone usa a sessão "ambient" (mistura, mas para com a tela
+//   bloqueada); ao voltar, o treino continua do ponto certo.
+// - "audio" ("com tela bloqueada"): uma faixa contínua num <audio>, que segue com a tela
+//   bloqueada, mas assume o som do aparelho e pausa a música.
+// - "voz": sem as vozes gravadas, usa a síntese de voz do navegador (tela ligada).
+
+export type ModoSom = 'musica' | 'bloqueio'
 
 export interface Ouvintes {
   onSeriesConcluidas: () => void // todas as séries terminaram (antes do aviso final)
   onFim: () => void // aviso final terminou
 }
 
+type Ctx = AudioContext
+
+function definirSessaoAudio(tipo: 'ambient' | 'playback') {
+  // Safari 16.4+: "ambient" mistura com outros apps; "playback" segue em segundo plano
+  const sessao = (navigator as Navigator & { audioSession?: { type: string } }).audioSession
+  if (sessao) { try { sessao.type = tipo } catch { /* não suportado */ } }
+}
+
 export class TreinoPlayer {
-  readonly modo: 'audio' | 'voz'
+  readonly modo: 'mix' | 'audio' | 'voz'
   readonly crono: Cronograma
-  private audio: HTMLAudioElement | null = null
-  private url: string | null = null
   private ouv: Ouvintes
   private concluidoAvisado = false
   private fimAvisado = false
   private parado = false
+  private volume = 1
+  private mudo = false
+  // Relógio de parede: se o sistema pausar o som (tela bloqueada, ligação, outro app),
+  // ao voltar o treino continua do ponto em que deveria estar, sem "congelar".
+  private baseParede = 0
+  private pausaPedida = false
+  /** O som foi pausado pelo sistema, não pela pessoa. */
+  interrompido = false
+  // modo audio
+  private audio: HTMLAudioElement | null = null
+  private url: string | null = null
+  // modo mix
+  private clips: Record<ClipKey, Float32Array> | null = null
+  private ctx: Ctx | null = null
+  private ganho: GainNode | null = null
+  private buffers: Partial<Record<ClipKey, AudioBuffer>> = {}
+  private fontes: AudioBufferSourceNode[] = []
+  private t0Ctx = 0
+  private pausadoMix = false
   // modo voz
   private t0 = 0
   private pausadoEm: number | null = null
   private acumuladoPausa = 0
   private proximoCue = 0
   private timer: ReturnType<typeof setInterval> | null = null
-  private volume = 1
-  private mudo = false
-  // Relógio de parede: se o sistema pausar o áudio (tela bloqueada, ligação),
-  // ao voltar o treino continua do ponto em que deveria estar, sem "congelar".
-  private baseParede = 0
-  private pausaPedida = false
-  /** O áudio foi pausado pelo sistema, não pela pessoa. */
-  interrompido = false
 
-  constructor(cfg: ConfigCrono, clips: Record<ClipKey, Float32Array> | null, ouv: Ouvintes) {
+  constructor(cfg: ConfigCrono, clips: Record<ClipKey, Float32Array> | null, ouv: Ouvintes, modoSom: ModoSom = 'musica') {
     this.ouv = ouv
-    this.modo = clips ? 'audio' : 'voz'
+    this.modo = !clips ? 'voz' : modoSom === 'musica' ? 'mix' : 'audio'
     this.crono = montarCronograma(cfg, clips ? duracoes(clips) : {})
-    if (clips) {
+    if (this.modo === 'mix') this.clips = clips
+    if (this.modo === 'audio' && clips) {
       const blob = renderizarFaixa(this.crono, clips, TAXA)
       this.url = URL.createObjectURL(blob)
       const a = new Audio()
@@ -222,17 +250,64 @@ export class TreinoPlayer {
 
   /** Deve ser chamado dentro do gesto do usuário (toque em "Iniciar"). */
   iniciar(): Promise<void> {
-    // Safari 16.4+: sessão de reprodução, para o áudio seguir com a tela bloqueada e no modo silencioso
-    const sessao = (navigator as Navigator & { audioSession?: { type: string } }).audioSession
-    if (sessao) { try { sessao.type = 'playback' } catch { /* não suportado */ } }
-    if (this.audio) return this.tocarDe(0)
+    if (this.modo === 'mix') return this.iniciarMix()
+    if (this.audio) { definirSessaoAudio('playback'); return this.tocarDe(0) }
     this.t0 = Date.now()
     this.timer = setInterval(() => this.tickVoz(), 80)
     this.tickVoz()
     return Promise.resolve()
   }
 
+  private async iniciarMix() {
+    definirSessaoAudio('ambient')
+    const W = window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }
+    const Ctor = W.AudioContext ?? W.webkitAudioContext
+    if (!Ctor || !this.clips) throw new Error('Web Audio indisponível')
+    const ctx = new Ctor()
+    this.ctx = ctx
+    this.ganho = ctx.createGain()
+    this.ganho.connect(ctx.destination)
+    this.aplicarVolume()
+    for (const k of CLIP_KEYS) {
+      const dados = this.clips[k]
+      const b = ctx.createBuffer(1, dados.length, TAXA)
+      b.getChannelData(0).set(dados)
+      this.buffers[k] = b
+    }
+    ctx.addEventListener('statechange', () => {
+      if (this.parado) return
+      if (ctx.state !== 'running' && !this.pausaPedida && !this.pausadoMix) this.interrompido = true
+    })
+    await ctx.resume()
+    this.agendarDe(0)
+  }
+
+  /** Agenda no Web Audio todos os avisos a partir da posição `pos` (s). */
+  private agendarDe(pos: number) {
+    const ctx = this.ctx!
+    for (const f of this.fontes) { try { f.stop() } catch { /* já parou */ } }
+    this.fontes = []
+    this.t0Ctx = ctx.currentTime + 0.05 - pos
+    this.baseParede = Date.now() - pos * 1000
+    for (const cue of this.crono.cues) {
+      if (cue.t < pos - 0.05) continue
+      const b = this.buffers[cue.clip]
+      if (!b) continue
+      const src = ctx.createBufferSource()
+      src.buffer = b
+      src.connect(this.ganho!)
+      src.start(this.t0Ctx + cue.t)
+      this.fontes.push(src)
+    }
+    this.interrompido = false
+  }
+
   tempo(): number {
+    if (this.modo === 'mix') {
+      if (!this.ctx) return 0
+      if (this.interrompido) return Math.min(this.crono.total, this.posicaoEsperada())
+      return Math.min(this.crono.total, Math.max(0, this.ctx.currentTime - this.t0Ctx))
+    }
     if (this.audio) {
       if (this.audio.ended) return this.crono.total
       // Enquanto o sistema segura o áudio, a tela mostra o tempo real do treino
@@ -244,10 +319,19 @@ export class TreinoPlayer {
   }
 
   get pausado(): boolean {
+    if (this.modo === 'mix') return this.pausadoMix
     return this.audio ? this.audio.paused && !this.audio.ended && !this.interrompido : this.pausadoEm !== null
   }
 
   pausar() {
+    if (this.modo === 'mix') {
+      if (!this.ctx || this.pausadoMix) return
+      this.pausadoMix = true
+      this.pausaPedida = true
+      this.interrompido = false
+      this.ctx.suspend().finally(() => { this.pausaPedida = false })
+      return
+    }
     if (this.audio) { this.pausaPedida = !this.audio.paused; this.interrompido = false; this.audio.pause(); return }
     if (this.pausadoEm === null) { this.pausadoEm = Date.now(); window.speechSynthesis?.pause() }
   }
@@ -265,43 +349,66 @@ export class TreinoPlayer {
   }
 
   /** Depois de uma interrupção do sistema, pula para onde o treino deveria estar e volta a tocar. */
-  recuperar(): Promise<void> {
-    if (!this.audio || !this.interrompido || this.parado) return Promise.resolve()
+  async recuperar(): Promise<void> {
+    if (!this.interrompido || this.parado) return
     const pos = this.posicaoEsperada()
     if (pos >= this.crono.total) {
       this.interrompido = false
-      this.audio.currentTime = this.crono.total
+      if (this.audio) this.audio.currentTime = this.crono.total
       this.verificar(true)
-      return Promise.resolve()
+      return
     }
-    return this.tocarDe(pos)
+    if (this.modo === 'mix' && this.ctx) {
+      await this.ctx.resume()
+      this.agendarDe(pos)
+      return
+    }
+    if (this.audio) return this.tocarDe(pos)
   }
 
-  retomar(): Promise<void> {
+  async retomar(): Promise<void> {
+    if (this.modo === 'mix') {
+      if (!this.ctx) return
+      if (this.interrompido) return this.recuperar()
+      if (!this.pausadoMix) return
+      await this.ctx.resume()
+      this.pausadoMix = false
+      this.baseParede = Date.now() - this.tempo() * 1000
+      return
+    }
     if (this.audio) return this.interrompido ? this.recuperar() : this.tocarDe(this.audio.currentTime)
     if (this.pausadoEm !== null) {
       this.acumuladoPausa += Date.now() - this.pausadoEm
       this.pausadoEm = null
       window.speechSynthesis?.resume()
     }
-    return Promise.resolve()
+  }
+
+  private aplicarVolume() {
+    if (this.ganho) this.ganho.gain.value = this.mudo ? 0 : this.volume
   }
 
   setVolume(v: number) {
     this.volume = v
     if (this.audio) this.audio.volume = v
+    this.aplicarVolume()
   }
 
   setMudo(m: boolean) {
     this.mudo = m
     if (this.audio) this.audio.muted = m
-    else if (m) window.speechSynthesis?.cancel()
+    else if (m && this.modo === 'voz') window.speechSynthesis?.cancel()
+    this.aplicarVolume()
   }
 
   parar() {
     this.parado = true
     if (this.timer) clearInterval(this.timer)
     this.timer = null
+    for (const f of this.fontes) { try { f.stop() } catch { /* já parou */ } }
+    this.fontes = []
+    this.ctx?.close().catch(() => {})
+    this.ctx = null
     if (this.audio) { this.audio.pause(); this.audio.removeAttribute('src'); this.audio.load() }
     if (this.url) URL.revokeObjectURL(this.url)
     this.url = null

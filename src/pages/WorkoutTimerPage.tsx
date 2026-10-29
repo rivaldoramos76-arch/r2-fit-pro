@@ -3,9 +3,11 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTreino } from '../lib/treinoApi'
 import { concluirExercicio } from '../lib/sessoes'
-import { TreinoPlayer, carregarClipes, estadoEm, type ClipKey, type FaseTipo } from '../lib/workoutAudio'
+import { TreinoPlayer, carregarClipes, estadoEm, type ClipKey, type FaseTipo, type ModoSom } from '../lib/workoutAudio'
 import { Spinner } from '../components/UI'
-import { carregarPreferencias } from '../lib/preferencias'
+import { carregarPreferencias, salvarPreferencias } from '../lib/preferencias'
+import type { PrefsAudio } from '../lib/preferencias'
+import { detectarSistema } from '../lib/instalacao'
 
 type Tela = 'pronto' | 'rodando' | 'concluido' | 'interrompido'
 interface CfgContador { series: number; exec: number; desc: number }
@@ -54,11 +56,19 @@ export default function WorkoutTimerPage() {
   const [precisaToque, setPrecisaToque] = useState(false)
   const recuperando = useRef(false)
 
-  // Volume e modo silencioso padrão definidos em Configurações
+  const [modoSom, setModoSom] = useState<ModoSom>('musica')
+  const prefsAudio = useRef<PrefsAudio | null>(null)
+  const sistema = detectarSistema()
+
+  // Volume, modo silencioso e modo de som padrão definidos em Configurações
   useEffect(() => {
     if (!user) return
-    carregarPreferencias(user.id).then(p => { setVolume(p.audio.volume); setMudo(p.audio.mudo) }).catch(() => {})
+    carregarPreferencias(user.id).then(p => { prefsAudio.current = p.audio; setVolume(p.audio.volume); setMudo(p.audio.mudo); setModoSom(p.audio.modo) }).catch(() => {})
   }, [user])
+  const escolherModo = (m: ModoSom) => {
+    setModoSom(m)
+    if (user) salvarPreferencias(user.id, { audio: { ...(prefsAudio.current ?? { volume, mudo }), modo: m } }).catch(() => {})
+  }
   const wakeRef = useRef<WakeLockSentinel | null>(null)
 
   const dia = treino?.plano.dias[diaIdx]
@@ -108,7 +118,9 @@ export default function WorkoutTimerPage() {
       // O sistema pausou o áudio (tela bloqueada, ligação): ao voltar, segue do ponto certo
       if (p.interrompido && document.visibilityState === 'visible' && !recuperando.current) {
         recuperando.current = true
-        p.recuperar().then(() => setPrecisaToque(false)).catch(() => setPrecisaToque(true)).finally(() => { recuperando.current = false })
+        // Se o navegador não deixar retomar sozinho em 2 s, pede um toque
+        const limite = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('tempo')), 2000))
+        Promise.race([p.recuperar(), limite]).then(() => setPrecisaToque(false)).catch(() => setPrecisaToque(true)).finally(() => { recuperando.current = false })
       }
       setT(p.tempo())
       setPausado(p.pausado)
@@ -139,7 +151,7 @@ export default function WorkoutTimerPage() {
     const p = new TreinoPlayer({ series: cfg.series, execSeg: cfg.exec, descansoSeg: cfg.desc }, clips, {
       onSeriesConcluidas: () => { registrar() },
       onFim: () => { setTela('concluido'); liberarWakeLock() },
-    })
+    }, modoSom)
     p.setVolume(volume)
     p.setMudo(mudo)
     playerRef.current = p
@@ -257,11 +269,26 @@ export default function WorkoutTimerPage() {
             <div className="text-center">
               <p className="text-6xl mb-3">💪</p>
               <p className="text-zinc-300 font-semibold">{cfg.series} séries · {mmss(cfg.exec)} de execução · {mmss(cfg.desc)} de descanso</p>
-              <p className="text-xs text-zinc-500 mt-2 max-w-xs">
-                {vozes === 'fallback'
-                  ? 'Vozes gravadas indisponíveis: usando a voz do navegador. Neste modo, mantenha a tela ligada.'
-                  : 'Pode bloquear a tela: os avisos sonoros continuam tocando. Se o celular pausar o som, ao desbloquear o treino continua do ponto certo.'}
-              </p>
+              {vozes === 'fallback' ? (
+                <p className="text-xs text-zinc-500 mt-2 max-w-xs mx-auto">Vozes gravadas indisponíveis: usando a voz do navegador. Neste modo, mantenha a tela ligada.</p>
+              ) : (
+                <div className="mt-4 w-full max-w-sm mx-auto text-left">
+                  <p className="text-xs font-semibold text-zinc-400 mb-1.5">Som do contador</p>
+                  <div className="grid grid-cols-2 gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1" role="radiogroup" aria-label="Som do contador">
+                    {([['musica', '🎵 Por cima da música'], ['bloqueio', '🔒 Tela bloqueada']] as const).map(([m, r]) => (
+                      <button key={m} type="button" role="radio" aria-checked={modoSom === m} onClick={() => escolherModo(m)}
+                        className={`py-2 rounded-lg text-xs font-semibold transition ${modoSom === m ? 'bg-green-500 text-zinc-950' : 'text-zinc-400'}`}>{r}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
+                    {modoSom === 'musica'
+                      ? sistema === 'iphone'
+                        ? 'A voz toca junto com a sua música. No iPhone, a tela fica ligada durante o exercício e o modo silencioso precisa estar desligado. Se bloquear, ao voltar o treino continua do ponto certo.'
+                        : 'A voz toca junto com a sua música, sem pausar. Pode trocar de app ou bloquear a tela.'
+                      : 'Segue tocando com a tela bloqueada, mas o celular pausa a sua música durante o exercício.'}
+                  </p>
+                </div>
+              )}
             </div>
           )}
           {tela === 'rodando' && isContagem && estado && (

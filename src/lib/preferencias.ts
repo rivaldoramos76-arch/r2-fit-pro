@@ -1,12 +1,13 @@
 import { supabase } from './supabase'
 
 export interface PrefsNotificacoes { email_cobranca: boolean; email_novidades: boolean; lembrete_treino: boolean }
-export interface PrefsAudio { volume: number; mudo: boolean }
+/** modo: 'musica' = voz por cima da música; 'bloqueio' = segue com a tela bloqueada (pausa a música). */
+export interface PrefsAudio { volume: number; mudo: boolean; modo: 'musica' | 'bloqueio' }
 export interface Preferencias { notificacoes: PrefsNotificacoes; audio: PrefsAudio }
 
 const PADRAO: Preferencias = {
   notificacoes: { email_cobranca: true, email_novidades: false, lembrete_treino: false },
-  audio: { volume: 1, mudo: false },
+  audio: { volume: 1, mudo: false, modo: 'musica' },
 }
 
 export async function carregarPreferencias(userId: string): Promise<Preferencias> {

@@ -27,12 +27,22 @@ const DIETA = { id: 'd1', user_id: UID, nome: 'Plano Cutting', objetivo: 'Perda 
     refeicoes: [{ nome: 'Café da manhã', horario: '07:00', calorias: 300, alimentos: [{ nome: 'Ovos mexidos', quantidade: '3 ovos', calorias: 210 }, { nome: 'Pão integral', quantidade: '1 fatia', calorias: 90 }] },
       { nome: 'Almoço', horario: '12:30', calorias: 300, alimentos: [{ nome: 'Frango grelhado', quantidade: '150 g', calorias: 300 }] }] } }
 const CLIENTE = { id: '99999999-2222-4333-8444-555555555555', nome: 'Maria Cliente', email: 'maria@teste.com', criado_em: '2026-10-25T10:00:00Z', ultimo_login: '2026-10-29T10:00:00Z', email_confirmado: true, estado: 'sem_assinatura', admin: false, total: 1 }
+const TREINO = { id: 't1', user_id: UID, nome: 'Treino teste', objetivo: 'Hipertrofia', nivel: 'Iniciante', frequencia_semanal: 3, created_at: '2026-10-20T00:00:00Z',
+  plano: { versao: 2, dias: [{ id: 'd0', letra: 'A', dia: 'Treino A', exercicios: [{ id: 'e1', nome: 'Supino reto com barra', series: 2, tempo_execucao_segundos: 3, tempo_descanso_segundos: 2 }] }] } }
+// Vozes de teste: tons curtos em WAV (o navegador reconhece o formato pelo conteúdo)
+function tomWav(seg = 0.3, sr = 16000) {
+  const n = Math.round(seg * sr), b = Buffer.alloc(44 + n * 2)
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22)
+  b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40)
+  for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / 4) * 12000), 44 + i * 2)
+  return b
+}
 
 let ok = 0
 const erros = []
 const t = async (nome, f) => { try { await f(); ok++; console.log('✓', nome) } catch (e) { erros.push(nome); console.log('✗', nome, '\n   ', e.message.split('\n')[0]) } }
 
-async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, nutricao = false, viewport = { width: 390, height: 844 } } = {}) {
+async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, nutricao = false, treino = false, viewport = { width: 390, height: 844 } } = {}) {
   const chamadasBilling = []
   const gravacoes = []
   const ctx = await browser.newContext({ viewport })
@@ -65,6 +75,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       if (p.endsWith('metas_nutricionais')) return json(nutricao === 'sem_meta' ? [] : [META])
       return json([])
     }
+    if (treino && p === '/rest/v1/treinos') return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? TREINO : [TREINO])
     if (nutricao && p === '/rest/v1/dietas') {
       const objeto = rota.request().headers()['accept']?.includes('vnd.pgrst.object')
       if (rota.request().method() !== 'GET') { const corpo = rota.request().postDataJSON(); gravacoes.push({ tabela: 'dietas', metodo: rota.request().method(), corpo }); return json({ ...DIETA, ...corpo }) }
@@ -81,6 +92,19 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
     }
     return json({})
   })
+  if (treino) {
+    await ctx.route('**/audio/*.mp3', r => r.fulfill({ status: 200, contentType: 'audio/wav', body: tomWav() }))
+    await ctx.addInitScript(() => {
+      const w = window
+      w.__agendados = []; w.__mediaPlays = 0
+      const start = AudioBufferSourceNode.prototype.start
+      AudioBufferSourceNode.prototype.start = function (...a) { w.__agendados.push(a[0]); return start.apply(this, a) }
+      const Orig = window.AudioContext
+      window.AudioContext = class extends Orig { constructor(...a) { super(...a); w.__ctx = this } }
+      const play = HTMLMediaElement.prototype.play
+      HTMLMediaElement.prototype.play = function (...a) { w.__mediaPlays++; return play.apply(this, a) }
+    })
+  }
   const page = await ctx.newPage()
   page.chamadasBilling = chamadasBilling
   page.gravacoes = gravacoes
@@ -376,6 +400,43 @@ await t('início mostra o lembrete para instalar com passo a passo', async () =>
   await card.getByRole('tab', { name: 'Android' }).click()
   await card.getByText('Instalar app').waitFor()
   await page.screenshot({ path: `${SHOTS}/instalar.png` })
+  await ctx.close()
+})
+
+await t('contador: por cima da música toca só os avisos curtos, agendados, e retoma após interrupção', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
+  await page.goto(BASE + '/assistente/t1/0')
+  await page.getByRole('radio', { name: /Por cima da música/ }).waitFor()
+  assert.equal(await page.getByRole('radio', { name: /Por cima da música/ }).getAttribute('aria-checked'), 'true', 'modo padrão')
+  await page.getByRole('button', { name: /Iniciar treino/ }).click()
+  await page.waitForTimeout(600)
+  const agendados = await page.evaluate(() => window.__agendados.length)
+  assert.equal(agendados, 19, '2 séries: 5-4-3-2-1 + comando por contagem (3 contagens) + aviso final')
+  assert.equal(await page.evaluate(() => window.__mediaPlays), 0, 'não usa faixa de mídia (não pausa a música)')
+  // Interrupção do sistema (ex.: tela bloqueada no iPhone): ao voltar, retoma e reagenda do ponto certo
+  await page.evaluate(() => window.__ctx.suspend())
+  await page.waitForTimeout(1200)
+  assert.equal(await page.evaluate(() => window.__ctx.state), 'running', 'retomou sozinho')
+  assert.ok(await page.evaluate(() => window.__agendados.length) > 19, 'reagendou os avisos restantes')
+  await page.getByRole('button', { name: /Pausar/ }).click()
+  await page.getByText('Pausado').waitFor()
+  assert.equal(await page.evaluate(() => window.__ctx.state), 'suspended')
+  await page.getByRole('button', { name: /Retomar/ }).click()
+  await page.waitForFunction(() => window.__ctx.state === 'running')
+  await page.getByRole('heading', { name: 'Exercício concluído!' }).waitFor({ timeout: 40000 })
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('contador: modo tela bloqueada usa a faixa contínua', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
+  await page.goto(BASE + '/assistente/t1/0')
+  await page.getByRole('radio', { name: /Tela bloqueada/ }).click()
+  await page.getByText(/pausa a sua música/).waitFor()
+  await page.getByRole('button', { name: /Iniciar treino/ }).click()
+  await page.waitForTimeout(500)
+  assert.equal(await page.evaluate(() => window.__mediaPlays), 1)
+  assert.equal(await page.evaluate(() => window.__agendados.length), 0)
   await ctx.close()
 })
 

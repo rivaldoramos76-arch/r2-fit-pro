@@ -135,6 +135,18 @@ export default function ConfiguracoesPage() {
       <Card>
         <h2 className="font-semibold">Áudio dos treinos</h2>
         <div className="divide-y divide-zinc-800">
+          <div className="py-3">
+            <p className="text-sm font-medium">Som do contador</p>
+            <div className="grid grid-cols-2 gap-1 bg-zinc-800/60 rounded-xl p-1 mt-2" role="radiogroup" aria-label="Som do contador">
+              {([['musica', 'Por cima da música'], ['bloqueio', 'Com tela bloqueada']] as const).map(([m, r]) => (
+                <button key={m} type="button" role="radio" aria-checked={prefs.audio.modo === m} onClick={() => atualizarPrefs({ ...prefs, audio: { ...prefs.audio, modo: m } })}
+                  className={`py-2 rounded-lg text-xs font-semibold transition ${prefs.audio.modo === m ? 'bg-green-500 text-zinc-950' : 'text-zinc-400'}`}>{r}</button>
+              ))}
+            </div>
+            <p className="text-xs text-zinc-500 mt-2">{prefs.audio.modo === 'musica'
+              ? 'Só os avisos curtos tocam, junto com a sua música. No iPhone, a tela fica ligada durante o exercício.'
+              : 'O som segue com a tela bloqueada, mas o celular pausa a sua música durante o exercício.'}</p>
+          </div>
           <Interruptor rotulo="Iniciar treinos sem som" valor={prefs.audio.mudo} onChange={v => atualizarPrefs({ ...prefs, audio: { ...prefs.audio, mudo: v } })} />
           <label className="flex items-center gap-3 py-3">
             <span className="text-sm font-medium flex-1">Volume padrão</span>
