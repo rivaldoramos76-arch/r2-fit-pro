@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CreditCard, QrCode, RefreshCw } from 'lucide-react'
+import { CreditCard, QrCode } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useAcesso } from '../context/AcessoContext'
@@ -42,7 +42,7 @@ export default function AssinaturaPage() {
   const [assinatura, setAssinatura] = useState<Assinatura | null>(null)
   const [carregando, setCarregando] = useState(true)
   const navigate = useNavigate()
-  const [processando, setProcessando] = useState<'checkout' | 'sincronizar' | 'cancelar' | null>(null)
+  const [processando, setProcessando] = useState<'checkout' | 'cancelar' | null>(null)
   const [periodo, setPeriodo] = useState<Periodo>('mensal')
   const [forma, setForma] = useState<Forma>('cartao')
   const [trocandoCartao, setTrocandoCartao] = useState(false)
@@ -60,7 +60,8 @@ export default function AssinaturaPage() {
       .eq('user_id', user.id).order('created_at', { ascending: false }).limit(5)
     if (error) setErro('Não foi possível carregar sua assinatura. Verifique sua conexão.')
     // Mostra a assinatura com acesso vigente; senão, a mais recente
-    const lista = (data ?? []) as Assinatura[]
+    // Checkout cancelado sem nunca ter sido pago (ex.: cartão recusado) não é mostrado
+    const lista = ((data ?? []) as Assinatura[]).filter(a => !(a.status === 'cancelada' && !a.iniciada_em))
     const vigente = lista.find(s => ['ativa', 'inadimplente', 'cancelada'].includes(s.status) && s.periodo_atual_fim && Date.parse(s.periodo_atual_fim) > Date.now())
     setAssinatura(vigente ?? lista[0] ?? null)
     setCarregando(false)
@@ -104,7 +105,9 @@ export default function AssinaturaPage() {
       navigate('/assinatura/retorno?origem=cartao')
     } catch (e) {
       const msg = e instanceof ErroApi ? e.message : 'Não foi possível concluir a assinatura.'
-      setErro(`${msg} Confira os dados do cartão ou escolha outra forma de pagamento.`)
+      setErro(/CC_VAL_433|validation/i.test(msg)
+        ? 'O cartão não foi aceito para cobrança automática. Use um cartão de crédito (débito não é aceito na renovação automática), confira os dados ou escolha Pix, boleto ou outros.'
+        : `${msg} Confira os dados do cartão ou escolha outra forma de pagamento.`)
       throw e
     }
   }
@@ -119,17 +122,6 @@ export default function AssinaturaPage() {
       setErro(e instanceof ErroApi ? e.message : 'Não foi possível trocar o cartão.')
       throw e
     }
-  }
-
-  const sincronizar = async () => {
-    setErro(''); setAviso(''); setProcessando('sincronizar')
-    try {
-      await chamarApi('billing', { acao: 'sincronizar' })
-      await Promise.all([carregar(), recarregar()])
-      setAviso('Status atualizado com o Mercado Pago.')
-    } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : 'Não foi possível verificar o pagamento.')
-    } finally { setProcessando(null) }
   }
 
   const cancelar = async () => {
@@ -283,9 +275,6 @@ export default function AssinaturaPage() {
 
       {assinatura && !cortesia && (
         <div className="flex flex-col gap-2">
-          <Button variant="secondary" onClick={sincronizar} loading={processando === 'sincronizar'}>
-            <RefreshCw className="w-4 h-4" /> Verificar pagamento no Mercado Pago
-          </Button>
           {assinatura.modalidade === 'recorrente' && ['ativa', 'inadimplente'].includes(assinatura.status) && publicKey && user?.email && (
             trocandoCartao ? (
               <Card>

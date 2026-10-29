@@ -221,6 +221,11 @@ BEGIN
   SELECT count(*) INTO cnt FROM public.email_outbox WHERE user_id = b AND modelo = 'falha_cobranca';
   IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 68: e-mail de falha de cobrança para compra avulsa recusada'; END IF; n := n + 1;
 
+  -- Cartão recusado na validação: o Mercado Pago cria e cancela a assinatura; quem nunca pagou não fica "expirado"
+  PERFORM public.billing_registrar_assinatura(jsonb_build_object('provider_subscription_id', 'RX-'||c, 'user_id', c, 'provider_status', 'authorized'));
+  PERFORM public.billing_registrar_assinatura(jsonb_build_object('provider_subscription_id', 'RX-'||c, 'provider_status', 'cancelled'));
+  IF public.estado_acesso(c) <> 'sem_assinatura' THEN RAISE EXCEPTION 'FALHA 69: cartão recusado aparece como %', public.estado_acesso(c); END IF; n := n + 1;
+
   -- ── Administrador ───────────────────────────────────────────────────────
   PERFORM public.provisionar_admin('teste-c-'||c||'@exemplo.invalid', 'teste');
   PERFORM set_config('request.jwt.claims', json_build_object('sub', c, 'role', 'authenticated')::TEXT, TRUE);

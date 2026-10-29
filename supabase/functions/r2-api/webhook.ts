@@ -1,7 +1,7 @@
 // Rota /webhook/mercadopago da Edge Function r2-api: notificações do Mercado Pago.
 // Autenticação por assinatura HMAC (x-signature); idempotente por evento;
 // o estado é sempre reconsultado na API do Mercado Pago antes de ser aplicado.
-import { log } from '../_shared/http.ts'
+import { ErroHttp, log } from '../_shared/http.ts'
 import { clienteAdmin } from '../_shared/supa.ts'
 import { validarAssinaturaWebhook, lerNotificacao, chaveEvento } from '../_shared/mpLogic.ts'
 import { registrarPreapproval, registrarPagamento, registrarAuthorizedPayment } from '../_shared/sync.ts'
@@ -77,6 +77,14 @@ export async function handleWebhook(req: Request): Promise<Response> {
     await processarFilaEmails(admin, 5)
     return resposta(200, { ok: true, status })
   } catch (e) {
+    // Recurso que não existe no Mercado Pago (ex.: tentativa de cobrança recusada na validação do cartão):
+    // não há o que aplicar e reenviar não adianta
+    if (e instanceof ErroHttp && e.codigo === 'mp_nao_encontrado') {
+      await admin.from('webhook_events').update({
+        status: 'ignorado', processado_em: new Date().toISOString(), erro: 'recurso inexistente no Mercado Pago',
+      }).eq('id', eventoId!)
+      return resposta(200, { ok: true, status: 'ignorado' })
+    }
     log('error', 'webhook_erro', { topico, dataId, erro: String(e) })
     await admin.from('webhook_events').update({ status: 'erro', erro: String(e).slice(0, 1000) }).eq('id', eventoId!)
     // 500 faz o Mercado Pago reenviar a notificação mais tarde

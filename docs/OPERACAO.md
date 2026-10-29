@@ -94,16 +94,17 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 5. `20261029160000_pagamentos_avulsos.sql` — modalidade (recorrente/avulso/cortesia), meses do período e compras avulsas em `billing_registrar_pagamento` (aplicada em 29/10/2026).
 6. `20261029160100_lembretes_metricas_config.sql` — lembretes de renovação, métricas sem cortesias e preço anual.
 7. `20261029160200_rotina_emails.sql` — `cron_tokens`, `billing_rotina` e agendamentos do pg_cron.
+8. `20261029170000_estado_ignora_checkout_recusado.sql` — assinatura cancelada que nunca foi paga (cartão recusado) não deixa o cliente como "expirado".
 
 ## Testes
 - `npm test` — lógica de treinos (14) + lógica comercial/Mercado Pago/e-mails (14).
-- `tests/sql/rls_billing.test.sql` — 68 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (68)`).
+- `tests/sql/rls_billing.test.sql` — 69 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (69)`).
 - `tests/e2e/ui.test.mjs` — 15 testes de interface (Playwright, celular e desktop) com API simulada.
 
 ## Monitoramento e recuperação
 - Painel `/admin`: webhooks com erro, e-mails não enviados, falhas de cobrança, auditoria.
 - Saúde do backend: `GET https://pzmhlxhdqghamyxgegwq.supabase.co/functions/v1/r2-api/saude`.
 - Logs: Supabase → Edge Functions → r2-api → Logs (logs estruturados sem tokens); Vercel → Logs (função `/api/ai`).
-- Webhook com erro retorna 500 e o Mercado Pago reenvia; reprocessamento é idempotente. Em último caso, o usuário pode usar “Verificar pagamento” (reconsulta o Mercado Pago).
+- Webhook com erro retorna 500 e o Mercado Pago reenvia; reprocessamento é idempotente. Além disso, com pagamento pendente o app reconsulta o Mercado Pago sozinho ao abrir e ao voltar para a aba. Avisos de recursos que não existem no Mercado Pago (ex.: cobrança de validação de cartão recusada) são marcados como ignorados.
 - Backups: plano Pro do Supabase inclui backups diários (recomendado PITR para produção). Plano gratuito não tem backup automático — **contratar antes do lançamento** ou agendar `pg_dump`.
 - Publicação: `npm run build` → deploy Vercel; Edge Function via `supabase functions deploy r2-api --no-verify-jwt`.

@@ -33,7 +33,7 @@ export async function mp<T = any>(metodo: string, caminho: string, corpo?: unkno
   if (!resp.ok) {
     log('warn', 'mp_erro', { caminho, status: resp.status, mensagem: dados?.message, causa: dados?.cause?.[0]?.description })
     const msg = dados?.message ?? `Erro ${resp.status} no Mercado Pago`
-    throw new ErroHttp(resp.status >= 500 ? 502 : 400, `Mercado Pago: ${msg}`, 'mp_erro')
+    throw new ErroHttp(resp.status >= 500 ? 502 : resp.status === 404 ? 404 : 400, `Mercado Pago: ${msg}`, resp.status === 404 ? 'mp_nao_encontrado' : 'mp_erro')
   }
   return dados as T
 }

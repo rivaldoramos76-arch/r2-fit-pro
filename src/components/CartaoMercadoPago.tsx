@@ -54,7 +54,7 @@ export default function CartaoMercadoPago({ publicKey, valorCentavos, email, onT
       controle = await mp.bricks().create('cardPayment', id, {
         initialization: { amount: valorCentavos / 100, payer: { email } },
         customization: {
-          visual: { style: { theme: 'dark' }, texts: { formSubmit: 'Assinar com cartão' } },
+          visual: { style: { theme: 'dark' }, texts: { formTitle: 'Cartão de crédito', formSubmit: 'Assinar com cartão' } },
           // Renovação automática exige cartão de crédito, cobrado à vista todo mês
           paymentMethods: { maxInstallments: 1, minInstallments: 1, types: { excluded: ['debit_card'] } },
         },

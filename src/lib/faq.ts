@@ -12,7 +12,7 @@ export const FAQ_COMERCIAL = [
 export const FAQ_SUPORTE = [
   { p: 'Não recebi o e-mail de confirmação', r: 'Verifique a caixa de spam e promoções. Na tela de login, tente entrar: se o e-mail ainda não estiver confirmado, aparecerá a opção de reenviar o link.' },
   { p: 'Esqueci minha senha', r: 'Na tela de login, toque em "Esqueci minha senha" e informe seu e-mail. Você receberá um link para criar uma nova senha.' },
-  { p: 'Paguei, mas o Premium não foi liberado', r: 'A liberação depende da confirmação do Mercado Pago, que pode levar alguns minutos (ou mais em pagamentos em análise). Em "Minha Assinatura", toque em "Verificar pagamento". Se persistir, abra um chamado.' },
+  { p: 'Paguei, mas o Premium não foi liberado', r: 'A liberação é automática assim que o Mercado Pago confirma: Pix e cartão em instantes, boleto em até 3 dias úteis. Se demorar, feche e abra o app de novo, que ele confere o pagamento sozinho. Se persistir, abra um chamado.' },
   { p: 'Como cancelo minha assinatura?', r: 'Acesse Menu → Minha Assinatura → Cancelar assinatura. Você mantém o acesso até o fim do período pago. Em até 7 dias da contratação, é possível pedir o reembolso integral.' },
   { p: 'Como troco o cartão de cobrança?', r: 'Em "Minha Assinatura", toque em "Trocar cartão" e informe o novo cartão. As próximas cobranças serão feitas nele.' },
   { p: 'Como exporto ou excluo meus dados?', r: 'Em Menu → Configurações → Privacidade e dados, você pode baixar uma cópia dos seus dados ou excluir a conta definitivamente.' },
