@@ -12,13 +12,23 @@ import { REFEICOES, grupoRefeicao, hojeLocal } from '../lib/diario'
 import type { Refeicao } from '../lib/diario'
 import { AnelCalorias, BarraMacro, fmt } from '../components/nutricao/Graficos'
 import InstalarApp from '../components/InstalarApp'
+import CartaoAgua from '../components/progresso/CartaoAgua'
+import GraficoPeso from '../components/progresso/GraficoPeso'
+import { exerciciosDoDia, historicoPeso } from '../lib/progresso'
+import type { Exercicio } from '../lib/progresso'
+import { resumoPeso } from '../lib/exercicios'
+import type { PontoPeso } from '../lib/exercicios'
+import { somarDias } from '../lib/diario'
+import { Flame, Scale } from 'lucide-react'
 
 const ICONE_REFEICAO: Record<Refeicao, string> = { 'Café da manhã': '☕', Almoço: '🍽️', Jantar: '🌙', Lanches: '🍎' }
 
 export default function DashboardPage() {
   const { user } = useAuth()
   const { premium, carregando: carregandoAcesso } = useAcesso()
-  const { meta, carregando: carregandoMeta } = useMeta(user?.id)
+  const { meta, carregando: carregandoMeta, recarregar: recarregarMeta } = useMeta(user?.id)
+  const [exercicios, setExercicios] = useState<Exercicio[]>([])
+  const [pesos, setPesos] = useState<PontoPeso[]>([])
   const [lastDieta, setLastDieta] = useState<Dieta | null>(null)
   const [lastTreino, setLastTreino] = useState<Treino | null>(null)
   const [registros, setRegistros] = useState<RegistroAlimento[]>([])
@@ -37,11 +47,15 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) return
     const load = async () => {
-      const [{ data: dietas }, { data: treinos }, regs] = await Promise.all([
+      const [{ data: dietas }, { data: treinos }, regs, exs, ps] = await Promise.all([
         supabase.from('dietas').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1),
         supabase.from('treinos').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1),
         registrosDoDia(user.id, hojeLocal()),
+        exerciciosDoDia(user.id, hojeLocal()).catch(() => [] as Exercicio[]),
+        historicoPeso(user.id, somarDias(hojeLocal(), -30)).catch(() => [] as PontoPeso[]),
       ])
+      setExercicios(exs)
+      setPesos(ps)
       setLastDieta(dietas?.[0] ?? null)
       setLastTreino(treinos?.[0] ?? null)
       setRegistros(regs)
@@ -59,6 +73,9 @@ export default function DashboardPage() {
   }
 
   const totais = somarTotais(registros)
+  const queimado = exercicios.reduce((s, e) => s + e.calorias, 0)
+  const somar = !!meta?.somar_exercicio
+  const resumo = resumoPeso(pesos, meta?.meta_peso_kg)
   const hoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
@@ -83,13 +100,13 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-bold text-zinc-50">Calorias</h2>
-            <p className="text-xs text-zinc-500">Restante = Meta − Alimentos</p>
+            <p className="text-xs text-zinc-500">Restante = Meta − Alimentos{somar ? ' + Exercício' : ''}</p>
           </div>
           {meta && <Link to="/meta" aria-label="Editar meta" className="p-2 -mr-2 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"><Pencil className="w-4 h-4" /></Link>}
         </div>
         {meta ? (
           <div className="mt-4 flex items-center gap-5">
-            <AnelCalorias meta={meta.calorias} consumido={totais.calorias} tamanho={152} />
+            <AnelCalorias meta={meta.calorias + (somar ? queimado : 0)} consumido={totais.calorias} tamanho={152} />
             <dl className="flex-1 flex flex-col gap-3 min-w-0">
               <div className="flex items-center gap-2.5">
                 <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0"><Target className="w-4 h-4 text-zinc-300" /></span>
@@ -99,6 +116,10 @@ export default function DashboardPage() {
                 <span className="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center shrink-0 text-base" aria-hidden>🍴</span>
                 <div><dt className="text-xs text-zinc-500">Alimentos</dt><dd className="font-bold tabular-nums text-zinc-100">{fmt(totais.calorias)}</dd></div>
               </div>
+              <Link to="/calorias#exercicio" className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0"><Flame className="w-4 h-4 text-orange-400" /></span>
+                <div><dt className="text-xs text-zinc-500">Exercício</dt><dd className="font-bold tabular-nums text-zinc-100">{fmt(queimado)}</dd></div>
+              </Link>
             </dl>
           </div>
         ) : (
@@ -119,6 +140,8 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
+
+      {user && <div className="animate-fade-up" style={{ animationDelay: '90ms' }}><CartaoAgua userId={user.id} data={hojeLocal()} meta={meta} onMetaMudou={recarregarMeta} /></div>}
 
       {/* Refeições de hoje */}
       <section aria-label="Refeições de hoje" className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden animate-fade-up" style={{ animationDelay: '120ms' }}>
@@ -147,6 +170,18 @@ export default function DashboardPage() {
           })}
         </ul>
       </section>
+
+      {/* Peso */}
+      <Link to="/peso" aria-label="Peso" className="flex items-center gap-4 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-3xl p-5 animate-fade-up transition" style={{ animationDelay: '150ms' }}>
+        <span className="w-10 h-10 rounded-xl bg-green-500/15 flex items-center justify-center shrink-0"><Scale className="w-5 h-5 text-green-400" /></span>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-zinc-50">Peso</p>
+          {resumo
+            ? <p className="text-sm text-zinc-400 tabular-nums">{resumo.atual.toLocaleString('pt-BR')} kg{resumo.variacao !== 0 && pesos.length > 1 ? ` · ${resumo.variacao > 0 ? '+' : ''}${resumo.variacao.toLocaleString('pt-BR')} kg em 30 dias` : ''}</p>
+            : <p className="text-sm text-green-400">Registre seu peso →</p>}
+        </div>
+        {pesos.length > 1 ? <GraficoPeso pontos={pesos} mini /> : <ChevronRight className="w-5 h-5 text-zinc-600" />}
+      </Link>
 
       {/* Treino e dieta */}
       <div className="grid grid-cols-2 gap-3 animate-fade-up" style={{ animationDelay: '180ms' }}>

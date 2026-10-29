@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { taxaBasal, gastoDiario, calcularMeta, distribuirMacros, idadeEm, caloriasDosMacros, CALORIAS_MINIMAS, ajustarPorCalorias, ajustarPorMacro, percentuais } from '../src/lib/metas'
+import { ATIVIDADES, caloriasExercicio, metaAguaSugerida, resumoPeso, restanteDia } from '../src/lib/exercicios'
 import { carregarTaco, buscarBase, medidasDe, paraAlimento } from '../src/lib/alimentosBase'
 import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade } from '../src/lib/diario'
 
@@ -143,6 +144,30 @@ await t('busca na TACO: resultados mais comuns primeiro e medidas caseiras', asy
   const suco = { id: 'x', nome: 'Suco de laranja integral', detalhe: 'Produto', fonte: 'off' as const, kcal: 45, proteina: 0.7, carboidrato: 10, gordura: 0, porcaoG: 200 }
   assert.deepEqual(medidasDe(suco).map(x => x.rotulo), ['porção do rótulo', 'ml'])
   assert.equal(paraAlimento(suco, medidasDe(suco)[0]).quantidade, '1 porção do rótulo (200 ml)')
+})
+
+await t('exercício: calorias pelo MET, peso padrão e meta de água', () => {
+  assert.equal(caloriasExercicio(9.8, 80, 30), 392) // corrida 10 km/h, 80 kg, 30 min
+  assert.equal(caloriasExercicio(3.5, 70, 60), 245) // musculação, 1 h
+  assert.equal(caloriasExercicio(3.5, null, 60), 245, 'sem peso usa 70 kg')
+  assert.equal(caloriasExercicio(5, 80, -10), 0)
+  assert.ok(ATIVIDADES.length >= 25 && new Set(ATIVIDADES.map(a => a.id)).size === ATIVIDADES.length)
+  assert.equal(metaAguaSugerida(80), 2800)
+  assert.equal(metaAguaSugerida(30), 1500)
+  assert.equal(metaAguaSugerida(150), 4000)
+  assert.equal(metaAguaSugerida(null), 2000)
+})
+
+await t('peso: resumo do período e restante do dia com ou sem exercício', () => {
+  const r = resumoPeso([
+    { data: '2026-10-01', peso_kg: 85 }, { data: '2026-10-20', peso_kg: 83.4 },
+    { data: '2026-10-27', peso_kg: 82.6 }, { data: '2026-10-10', peso_kg: 84.1 },
+  ], 78)!
+  assert.equal(r.atual, 82.6); assert.equal(r.variacao, -2.4); assert.equal(r.variacaoSemana, -0.8)
+  assert.equal(r.minimo, 82.6); assert.equal(r.maximo, 85); assert.equal(r.faltaMeta, 4.6)
+  assert.equal(resumoPeso([]), null)
+  assert.equal(restanteDia(2200, 1500, 400, false), 700, 'exercício não muda a meta por padrão')
+  assert.equal(restanteDia(2200, 1500, 400, true), 1100)
 })
 
 console.log(`\n${ok} testes de metas e diário passaram`)

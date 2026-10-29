@@ -21,6 +21,8 @@ const CONFIG = [
 const hojeISO = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
 const registro = (refeicao, nome, quantidade, calorias, i) => ({ id: 'f' + i, user_id: UID, data: hojeISO, refeicao, nome, quantidade, calorias, proteina_g: 10, carboidrato_g: 20, gordura_g: 5, observacao: null, origem: 'texto', created_at: `${hojeISO}T0${i}:00:00Z` })
 const REGISTROS = [registro('Café da manhã', 'Pão francês', '1 unidade', 135, 1), registro('Lanche da tarde', 'Banana prata', '1 unidade', 89, 2)]
+const isoDiasAtras = n => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const PESOS = [{ id: 'p1', data: isoDiasAtras(20), peso_kg: 84.1 }, { id: 'p2', data: isoDiasAtras(10), peso_kg: 83.4 }, { id: 'p3', data: isoDiasAtras(2), peso_kg: 82.6 }]
 const META = { user_id: UID, sexo: 'masculino', nascimento: '1990-05-10', altura_cm: 178, peso_kg: 82, atividade: 'moderado', objetivo: 'perder', ritmo_kg_semana: 0.5, calorias: 2280, proteina_g: 164, carboidrato_g: 233, gordura_g: 76, personalizada: false, somar_exercicio: false }
 const DIETA = { id: 'd1', user_id: UID, nome: 'Plano Cutting', objetivo: 'Perda de gordura', calorias_dia: 600, created_at: '2026-10-20T00:00:00Z',
   plano: { nome: 'Plano Cutting', objetivo: 'Perda de gordura', calorias_dia: 600, macros: { proteina_g: 150, carboidrato_g: 180, gordura_g: 60 }, dicas: ['Beba água'],
@@ -73,6 +75,20 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? perfil : [perfil])
     }
     if (p === '/rest/v1/user_settings') return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? { notificacoes: {}, audio: { volume: 0.8, mudo: false } } : [])
+    if (nutricao && ['/rest/v1/registros_agua', '/rest/v1/registros_peso', '/rest/v1/exercicios_registro'].includes(p)) {
+      const metodo = rota.request().method()
+      const tabela = p.split('/').pop()
+      if (metodo !== 'GET') {
+        const corpo = rota.request().postDataJSON()
+        gravacoes.push({ tabela, metodo, corpo })
+        return json(tabela === 'registros_agua' ? { id: 'a' + gravacoes.length, data: hojeISO, created_at: new Date().toISOString(), ...corpo } : [])
+      }
+      if (tabela === 'registros_peso') {
+        const lista = url.searchParams.get('order') === 'data.desc' ? [...PESOS].reverse() : PESOS
+        return json(url.searchParams.get('limit') === '1' ? lista.slice(0, 1) : lista)
+      }
+      return json([])
+    }
     if (nutricao && ['/rest/v1/food_logs', '/rest/v1/metas_nutricionais', '/rest/v1/alimentos_favoritos'].includes(p)) {
       const metodo = rota.request().method()
       if (metodo !== 'GET') { gravacoes.push({ tabela: p.split('/').pop(), metodo, corpo: rota.request().postDataJSON() }); return json(p.endsWith('favoritos') ? { id: 'fav1', ...rota.request().postDataJSON() } : []) }
@@ -107,7 +123,9 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       : { status: 0 }) }))
   await ctx.route('**/api/ai', r => {
     const corpo = JSON.stringify(r.request().postDataJSON())
-    const resposta = corpo.includes('tabelas nutricionais')
+    const resposta = corpo.includes('educador físico')
+      ? { nome: 'Corrida 5 km', duracao_min: 30, calorias: 390 }
+      : corpo.includes('tabelas nutricionais')
       ? { nome: 'Barra de cereal', kcal: 400, proteina: 6, carboidrato: 70, gordura: 10, porcao_rotulo: 'unidade (25 g)', porcao_g: 25 }
       : { nome: 'Açaí na tigela com granola', kcal: 140, proteina: 2, carboidrato: 24, gordura: 4, porcao_rotulo: 'tigela', porcao_g: 300 }
     gravacoes.push({ tabela: 'api_ai', corpo: corpo.slice(0, 200) })
@@ -216,7 +234,7 @@ await t('usuário sem assinatura: paywall nos recursos Premium e CTA no início'
 await t('usuário sem assinatura acessa conta, menu, assinatura e pagamentos', async () => {
   const { ctx, page } = await contexto(browser, { logado: true })
   await page.goto(BASE + '/menu')
-  for (const item of ['Início', 'Meus Treinos', 'Dieta', 'Diário alimentar', 'Meta diária', 'Perfil', 'Configurações', 'Minha Assinatura', 'Pagamentos e Faturas', 'Ajuda e Suporte', 'Termos de Uso', 'Política de Privacidade', 'Sobre o aplicativo']) {
+  for (const item of ['Início', 'Meus Treinos', 'Dieta', 'Diário alimentar', 'Meta diária', 'Peso', 'Perfil', 'Configurações', 'Minha Assinatura', 'Pagamentos e Faturas', 'Ajuda e Suporte', 'Termos de Uso', 'Política de Privacidade', 'Sobre o aplicativo']) {
     await page.getByRole('main').getByRole('link', { name: item, exact: true }).waitFor()
   }
   await page.getByRole('button', { name: 'Sair da conta' }).waitFor()
@@ -439,6 +457,76 @@ await t('código de barras: produto encontrado e produto novo lido pela foto do 
   await folha.getByText('Barra de cereal de banana').first().waitFor()
   const rot = page.gravacoes.find(x => x.tabela === 'alimentos_base' && x.corpo.fonte === 'rotulo')
   assert.equal(rot?.corpo?.codigo_barras, '7899999999999'); assert.equal(rot?.corpo?.porcao_g, 25)
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('água: copos e garrafa somam no dia e dá para desfazer', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/dashboard')
+  const agua = page.getByRole('region', { name: 'Água' })
+  await agua.getByText(/de 2.850 ml/).waitFor() // 35 ml × 82 kg, arredondado a 50 ml
+  await agua.getByRole('button', { name: /Copo/ }).click()
+  await agua.getByRole('button', { name: /Garrafa/ }).click()
+  await agua.getByText('750').waitFor()
+  await page.screenshot({ path: `${SHOTS}/agua.png` })
+  await agua.getByRole('button', { name: 'Desfazer' }).click()
+  await agua.getByText('250').first().waitFor()
+  for (let i = 0; i < 20 && !page.gravacoes.some(x => x.tabela === 'registros_agua' && x.metodo === 'DELETE'); i++) await page.waitForTimeout(100)
+  const ml = page.gravacoes.filter(x => x.tabela === 'registros_agua' && x.metodo === 'POST').map(x => x.corpo.ml)
+  assert.deepEqual(ml, [250, 500])
+  assert.ok(page.gravacoes.some(x => x.tabela === 'registros_agua' && x.metodo === 'DELETE'), 'desfazer apagou o último')
+  // Início também mostra exercício e peso
+  await page.getByRole('link', { name: 'Peso' }).getByText(/82,6 kg/).waitFor()
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('exercício: escolher na lista calcula pelo peso; descrever usa a IA', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/calorias')
+  await page.getByRole('button', { name: 'Adicionar exercício' }).click()
+  const folha = page.getByRole('dialog')
+  await folha.getByPlaceholder('Buscar atividade').fill('corrida mod')
+  await folha.getByRole('button', { name: /Corrida moderada/ }).click()
+  await folha.getByText('405').waitFor() // 9,8 MET × 82,6 kg × 0,5 h
+  await folha.getByRole('button', { name: '45 min' }).click()
+  await folha.getByText('607').waitFor()
+  await page.screenshot({ path: `${SHOTS}/exercicio.png` })
+  await folha.getByRole('button', { name: 'Adicionar exercício' }).click()
+  await folha.waitFor({ state: 'detached' })
+  const ex = page.gravacoes.find(x => x.tabela === 'exercicios_registro')
+  assert.equal(ex?.corpo?.nome, 'Corrida moderada (10 km/h)'); assert.equal(ex?.corpo?.duracao_min, 45); assert.equal(ex?.corpo?.calorias, 607); assert.equal(ex?.corpo?.origem, 'lista')
+  await page.getByRole('button', { name: 'Adicionar exercício' }).click()
+  await folha.getByRole('tab', { name: /Descrever/ }).click()
+  await folha.getByLabel('O que você fez?').fill('corri 5 km em 30 minutos')
+  await folha.getByRole('button', { name: /Calcular com IA/ }).click()
+  await folha.getByLabel('Calorias (kcal)').waitFor()
+  assert.equal(await folha.getByLabel('Calorias (kcal)').inputValue(), '390')
+  await folha.getByRole('button', { name: 'Adicionar exercício' }).click()
+  await folha.waitFor({ state: 'detached' })
+  assert.ok(page.gravacoes.some(x => x.tabela === 'exercicios_registro' && x.corpo.origem === 'ia' && x.corpo.calorias === 390))
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('peso: gráfico, registro do dia e meta de peso', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/peso')
+  await page.getByRole('img', { name: /Peso de 84,1 kg .* a 82,6 kg/ }).waitFor()
+  await page.getByText('-1,5 kg').first().waitFor() // no período (84,1 → 82,6)
+  await page.getByLabel('Peso de hoje (kg)').fill('82,1')
+  await page.getByRole('button', { name: 'Registrar' }).click()
+  await page.getByText('Peso registrado.').waitFor()
+  const reg = page.gravacoes.find(x => x.tabela === 'registros_peso')
+  assert.equal(reg?.corpo?.peso_kg, 82.1); assert.equal(reg?.corpo?.data, hojeISO)
+  await page.getByRole('button', { name: 'Definir' }).click()
+  await page.getByLabel('Peso desejado (kg)').fill('78')
+  await page.getByRole('button', { name: 'Salvar' }).click()
+  await page.waitForTimeout(300)
+  const meta = page.gravacoes.find(x => x.tabela === 'metas_nutricionais' && x.metodo === 'PATCH')
+  assert.equal(meta?.corpo?.meta_peso_kg, 78)
+  await page.screenshot({ path: `${SHOTS}/peso.png`, fullPage: true })
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })

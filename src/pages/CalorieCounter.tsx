@@ -10,12 +10,19 @@ import type { RegistroAlimento } from '../lib/nutricao'
 import { Spinner } from '../components/UI'
 import { fmt } from '../components/nutricao/Graficos'
 import AdicionarAlimento, { EditarRegistro } from '../components/nutricao/AdicionarAlimento'
+import Exercicios from '../components/progresso/Exercicios'
+import CartaoAgua from '../components/progresso/CartaoAgua'
+import { ultimoPeso } from '../lib/progresso'
+import { restanteDia } from '../lib/exercicios'
 
 const ICONE_REFEICAO: Record<Refeicao, string> = { 'Café da manhã': '☕', Almoço: '🍽️', Jantar: '🌙', Lanches: '🍎' }
 
 export default function CalorieCounter() {
   const { user } = useAuth()
-  const { meta } = useMeta(user?.id)
+  const { meta, recarregar: recarregarMeta } = useMeta(user?.id)
+  const [exercicioKcal, setExercicioKcal] = useState(0)
+  const [peso, setPeso] = useState<number | null>(null)
+  useEffect(() => { if (user) ultimoPeso(user.id).then(setPeso).catch(() => {}) }, [user])
   const [data, setData] = useState(hojeLocal)
   const [itens, setItens] = useState<RegistroAlimento[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -31,6 +38,12 @@ export default function CalorieCounter() {
     setCarregando(false)
   }, [user, data])
   useEffect(() => { setCarregando(true); carregar() }, [carregar])
+  // Atalho do início (/calorias#exercicio): rola até a seção depois de carregar
+  useEffect(() => {
+    if (carregando || !window.location.hash) return
+    const t = setTimeout(() => document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400)
+    return () => clearTimeout(t)
+  }, [carregando])
 
   const [editando, setEditando] = useState<RegistroAlimento | null>(null)
   const remover = async (id: string) => {
@@ -41,7 +54,8 @@ export default function CalorieCounter() {
   }
 
   const totais = somarTotais(itens)
-  const restante = meta ? meta.calorias - totais.calorias : null
+  const somar = !!meta?.somar_exercicio
+  const restante = meta ? restanteDia(meta.calorias, totais.calorias, exercicioKcal, somar) : null
 
   return (
     <div className="flex flex-col gap-4" translate="no">
@@ -64,6 +78,10 @@ export default function CalorieCounter() {
               <div><p className="text-lg font-bold tabular-nums text-zinc-100">{fmt(meta.calorias)}</p><p className="text-[11px] text-zinc-500">Meta</p></div>
               <span className="text-zinc-600 pb-4">−</span>
               <div><p className="text-lg font-bold tabular-nums text-zinc-100">{fmt(totais.calorias)}</p><p className="text-[11px] text-zinc-500">Alimentos</p></div>
+              {somar && <>
+                <span className="text-zinc-600 pb-4">+</span>
+                <div><p className="text-lg font-bold tabular-nums text-orange-300">{fmt(exercicioKcal)}</p><p className="text-[11px] text-zinc-500">Exercício</p></div>
+              </>}
               <span className="text-zinc-600 pb-4">=</span>
               <div><p className={`text-lg font-bold tabular-nums ${restante! < 0 ? 'text-amber-400' : 'text-green-400'}`}>{fmt(restante!)}</p><p className="text-[11px] text-zinc-500">Restante</p></div>
             </div>
@@ -117,6 +135,13 @@ export default function CalorieCounter() {
             </section>
           )
         })
+      )}
+
+      {user && (
+        <div className="flex flex-col gap-4 animate-fade-up" style={{ animationDelay: '360ms' }}>
+          <Exercicios userId={user.id} data={data} pesoKg={peso ?? meta?.peso_kg ?? null} somarExercicio={somar} onMudou={setExercicioKcal} />
+          <CartaoAgua key={data} userId={user.id} data={data} meta={meta} onMetaMudou={recarregarMeta} />
+        </div>
       )}
 
       {editando && (

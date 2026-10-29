@@ -106,14 +106,16 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 11. `20261030120000_metas_favoritos.sql` — meta diária (`metas_nutricionais`) e alimentos favoritos (`alimentos_favoritos`), com RLS; favoritar exige Premium.
 12. `20261030130000_editar_alimentos_admin.sql` — edição de alimentos já registrados no diário (Premium) e `admin_gerenciar_acesso` (liberar cortesia, estender, encerrar, registrar pagamento manual e corrigir status de pagamento; tudo auditado).
 13. `20261030150000_alimentos_base.sql` — banco compartilhado de alimentos (estimados pela IA, produtos do código de barras/Open Food Facts e tabelas nutricionais fotografadas), gravado só pela função `salvar_alimento_base` (Premium, sem duplicar, limite de 60 por pessoa por dia).
+14. `20261030160000_agua_peso_exercicio.sql` — água (`registros_agua`), peso (`registros_peso`, um por dia) e exercício (`exercicios_registro`), com RLS (criar exige Premium) e metas de água e de peso em `metas_nutricionais`.
 
 ## Testes
-- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails (14) + meta diária, diário e busca (12).
+- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails (14) + meta diária, diário, busca, exercício e peso (14).
 - `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
 - `tests/sql/nutricao.test.sql` — 17 verificações de RLS da meta diária e dos favoritos (resultado esperado: `TESTES_OK (17)`).
 - `tests/sql/admin_acesso.test.sql` — 16 verificações das ações do administrador e da edição no diário (resultado esperado: `TESTES_OK (16)`).
 - `tests/sql/alimentos_base.test.sql` — 11 verificações do banco compartilhado de alimentos (resultado esperado: `TESTES_OK (11)`).
-- `tests/e2e/ui.test.mjs` — 29 testes de interface (Playwright, celular e desktop) com API simulada.
+- `tests/sql/progresso.test.sql` — 11 verificações de água, peso e exercício (resultado esperado: `TESTES_OK (11)`).
+- `tests/e2e/ui.test.mjs` — 32 testes de interface (Playwright, celular e desktop) com API simulada.
 
 ## Monitoramento e recuperação
 - Painel `/admin`: webhooks com erro, e-mails não enviados, falhas de cobrança, auditoria.

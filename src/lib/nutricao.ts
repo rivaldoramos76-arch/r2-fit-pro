@@ -19,6 +19,8 @@ export interface MetaSalva {
   gordura_g: number
   personalizada: boolean
   somar_exercicio: boolean
+  meta_agua_ml?: number | null
+  meta_peso_kg?: number | null
 }
 
 export interface RegistroAlimento extends Alimento {
@@ -44,7 +46,7 @@ export function useMeta(userId: string | undefined) {
   const recarregar = useCallback(async () => {
     if (!userId) return
     const { data } = await supabase.from('metas_nutricionais').select('*').eq('user_id', userId).maybeSingle()
-    setMeta(data ? { ...(data as MetaSalva), altura_cm: num(data.altura_cm), peso_kg: num(data.peso_kg), ritmo_kg_semana: num(data.ritmo_kg_semana) } : null)
+    setMeta(data ? { ...(data as MetaSalva), altura_cm: num(data.altura_cm), peso_kg: num(data.peso_kg), ritmo_kg_semana: num(data.ritmo_kg_semana), meta_peso_kg: data.meta_peso_kg == null ? null : num(data.meta_peso_kg) } : null)
     setCarregando(false)
   }, [userId])
   useEffect(() => { recarregar() }, [recarregar])
