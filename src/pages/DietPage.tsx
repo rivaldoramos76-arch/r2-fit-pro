@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { gerarDieta } from '../lib/openai'
 import type { DietaFormData } from '../lib/openai'
 import type { Dieta } from '../types'
 import { Button, Input, Select, Textarea, Card, Badge, Spinner, EmptyState, SectionHeader } from '../components/UI'
-import CalorieCounter from './CalorieCounter'
 
 function DietMenu({ onSelect }: { onSelect: (v: 'planos' | 'contador') => void }) {
   return (
@@ -39,7 +38,7 @@ function DietMenu({ onSelect }: { onSelect: (v: 'planos' | 'contador') => void }
             </svg>
           </span>
           <span>
-            <span className="block font-bold text-lg text-zinc-100 leading-tight">Contador de Calorias</span>
+            <span className="block font-bold text-lg text-zinc-100 leading-tight">Diário alimentar</span>
             <span className="block text-sm text-zinc-400 mt-1 leading-snug">Registra por foto ou texto, IA estima nutrientes</span>
           </span>
         </button>
@@ -233,6 +232,6 @@ export default function DietPage() {
   const [view, setView] = useState<'menu' | 'planos' | 'contador'>('menu')
   if (id) return <DietDetail id={id} />
   if (view === 'planos') return <DietList onBack={() => setView('menu')} />
-  if (view === 'contador') return <CalorieCounter onBack={() => setView('menu')} />
+  if (view === 'contador') return <Navigate to="/calorias" />
   return <DietMenu onSelect={setView} />
 }

@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { Home, Dumbbell, Salad, Flame, Menu as MenuIcon } from 'lucide-react'
+import { Home, Dumbbell, Salad, BookOpen, Menu as MenuIcon } from 'lucide-react'
 import { useAcesso } from '../context/AcessoContext'
 import { diasRestantes } from '../lib/formatos'
 import { Logo } from './Logo'
@@ -10,7 +10,7 @@ const navItems = [
   { href: '/dashboard', label: 'Início', icon: Home },
   { href: '/treino', label: 'Treinos', icon: Dumbbell },
   { href: '/dieta', label: 'Dieta', icon: Salad },
-  { href: '/calorias', label: 'Calorias', icon: Flame },
+  { href: '/calorias', label: 'Diário', icon: BookOpen },
   { href: '/menu', label: 'Menu', icon: MenuIcon },
 ]
 

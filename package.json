@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "voz": "node scripts/gen-voice.mjs",
-    "test": "npx --yes tsx tests/logica.test.ts && npx --yes tsx tests/comercial.test.ts"
+    "test": "npx --yes tsx tests/logica.test.ts && npx --yes tsx tests/comercial.test.ts && npx --yes tsx tests/metas.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",

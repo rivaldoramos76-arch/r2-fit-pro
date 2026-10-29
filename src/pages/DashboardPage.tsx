@@ -1,16 +1,26 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Plus, Target, Dumbbell, Salad, ChevronRight, Pencil } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import type { Dieta, Treino } from '../types'
-import { Card, Badge, Spinner } from '../components/UI'
+import { Spinner } from '../components/UI'
 import { useAcesso } from '../context/AcessoContext'
+import { useMeta, registrosDoDia, somarTotais } from '../lib/nutricao'
+import type { RegistroAlimento } from '../lib/nutricao'
+import { REFEICOES, grupoRefeicao, hojeLocal } from '../lib/diario'
+import type { Refeicao } from '../lib/diario'
+import { AnelCalorias, BarraMacro, fmt } from '../components/nutricao/Graficos'
+
+const ICONE_REFEICAO: Record<Refeicao, string> = { 'Café da manhã': '☕', Almoço: '🍽️', Jantar: '🌙', Lanches: '🍎' }
 
 export default function DashboardPage() {
   const { user } = useAuth()
   const { premium, carregando: carregandoAcesso } = useAcesso()
+  const { meta, carregando: carregandoMeta } = useMeta(user?.id)
   const [lastDieta, setLastDieta] = useState<Dieta | null>(null)
   const [lastTreino, setLastTreino] = useState<Treino | null>(null)
+  const [registros, setRegistros] = useState<RegistroAlimento[]>([])
   const [loading, setLoading] = useState(true)
 
   const greeting = () => {
@@ -20,23 +30,26 @@ export default function DashboardPage() {
     return 'Boa noite'
   }
 
-  const nomeUsuario = user?.user_metadata?.nome ?? user?.email?.split('@')[0] ?? 'Atleta'
+  const primeiroNome = (user?.user_metadata?.nome ?? user?.email?.split('@')[0] ?? 'Atleta').split(' ')[0]
+  const nomeUsuario = primeiroNome.charAt(0).toUpperCase() + primeiroNome.slice(1)
 
   useEffect(() => {
     if (!user) return
     const load = async () => {
-      const [{ data: dietas }, { data: treinos }] = await Promise.all([
+      const [{ data: dietas }, { data: treinos }, regs] = await Promise.all([
         supabase.from('dietas').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1),
         supabase.from('treinos').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1),
+        registrosDoDia(user.id, hojeLocal()),
       ])
       setLastDieta(dietas?.[0] ?? null)
       setLastTreino(treinos?.[0] ?? null)
+      setRegistros(regs)
       setLoading(false)
     }
     load()
   }, [user])
 
-  if (loading) {
+  if (loading || carregandoMeta) {
     return (
       <div className="flex items-center justify-center h-48">
         <Spinner size="lg" />
@@ -44,130 +57,106 @@ export default function DashboardPage() {
     )
   }
 
+  const totais = somarTotais(registros)
+  const hoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Greeting */}
-      <div>
-        <p className="text-zinc-500 text-sm">{greeting()},</p>
-        <h1 className="text-2xl font-bold text-zinc-100 mt-0.5 capitalize">{nomeUsuario} 👋</h1>
+    <div className="flex flex-col gap-4">
+      <div className="animate-fade-up">
+        <p className="text-zinc-500 text-sm first-letter:uppercase">{hoje}</p>
+        <h1 className="text-2xl font-bold text-zinc-50 mt-0.5">{greeting()}, {nomeUsuario}</h1>
       </div>
 
       {!carregandoAcesso && !premium && (
-        <Link to="/assinatura" className="block bg-gradient-to-br from-green-500/20 to-zinc-900 border border-green-500/30 rounded-2xl p-4">
+        <Link to="/assinatura" className="block bg-gradient-to-br from-green-500/20 to-zinc-900 border border-green-500/30 rounded-2xl p-4 animate-fade-up">
           <p className="font-semibold">Ative o R2 Fit Pro Premium</p>
           <p className="text-sm text-zinc-400 mt-1">Libere treinos com IA, contador com áudio, dietas personalizadas e contador de calorias.</p>
           <span className="inline-block mt-3 text-sm font-semibold text-green-400">Ver planos →</span>
         </Link>
       )}
 
-      {/* Quick actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link to="/dieta" className="block">
-          <div className="bg-gradient-to-br from-green-500/20 to-green-600/5 border border-green-500/20 rounded-2xl p-4 hover:border-green-500/40 transition-all active:scale-[0.98]">
-            <div className="w-9 h-9 bg-green-500/20 rounded-xl flex items-center justify-center mb-3">
-              <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-            </div>
-            <p className="text-sm font-semibold text-zinc-100">Nova Dieta</p>
-            <p className="text-xs text-zinc-500 mt-0.5">Gerada por IA</p>
+      {/* Calorias do dia */}
+      <section aria-label="Calorias de hoje" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 animate-fade-up" style={{ animationDelay: '60ms' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-zinc-50">Calorias</h2>
+            <p className="text-xs text-zinc-500">Restante = Meta − Alimentos</p>
           </div>
-        </Link>
-
-        <Link to="/treino" className="block">
-          <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/5 border border-blue-500/20 rounded-2xl p-4 hover:border-blue-500/40 transition-all active:scale-[0.98]">
-            <div className="w-9 h-9 bg-blue-500/20 rounded-xl flex items-center justify-center mb-3">
-              <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-            </div>
-            <p className="text-sm font-semibold text-zinc-100">Novo Treino</p>
-            <p className="text-xs text-zinc-500 mt-0.5">Gerado por IA</p>
+          {meta && <Link to="/meta" aria-label="Editar meta" className="p-2 -mr-2 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"><Pencil className="w-4 h-4" /></Link>}
+        </div>
+        {meta ? (
+          <div className="mt-4 flex items-center gap-5">
+            <AnelCalorias meta={meta.calorias} consumido={totais.calorias} tamanho={152} />
+            <dl className="flex-1 flex flex-col gap-3 min-w-0">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0"><Target className="w-4 h-4 text-zinc-300" /></span>
+                <div><dt className="text-xs text-zinc-500">Meta</dt><dd className="font-bold tabular-nums text-zinc-100">{fmt(meta.calorias)}</dd></div>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center shrink-0 text-base" aria-hidden>🍴</span>
+                <div><dt className="text-xs text-zinc-500">Alimentos</dt><dd className="font-bold tabular-nums text-zinc-100">{fmt(totais.calorias)}</dd></div>
+              </div>
+            </dl>
           </div>
+        ) : (
+          <div className="mt-4 rounded-2xl bg-gradient-to-br from-green-500/15 to-transparent border border-green-500/20 p-4">
+            <p className="font-semibold text-zinc-100">Defina sua meta diária</p>
+            <p className="text-sm text-zinc-400 mt-1">Em 1 minuto calculamos suas calorias e macros pelo seu objetivo.</p>
+            <Link to="/meta" className="mt-3 inline-flex items-center gap-2 rounded-xl bg-green-500 hover:bg-green-400 text-zinc-950 font-semibold text-sm px-4 py-2.5 transition active:scale-95">
+              <Target className="w-4 h-4" />Calcular minha meta
+            </Link>
+            {totais.calorias > 0 && <p className="text-xs text-zinc-500 mt-3">Hoje você registrou {fmt(totais.calorias)} kcal.</p>}
+          </div>
+        )}
+        {meta && (
+          <div className="mt-5 pt-4 border-t border-zinc-800 flex gap-4">
+            <BarraMacro rotulo="Carbo" atual={totais.carboidrato_g} meta={meta.carboidrato_g} cor="carboidrato" />
+            <BarraMacro rotulo="Proteína" atual={totais.proteina_g} meta={meta.proteina_g} cor="proteina" />
+            <BarraMacro rotulo="Gordura" atual={totais.gordura_g} meta={meta.gordura_g} cor="gordura" />
+          </div>
+        )}
+      </section>
+
+      {/* Refeições de hoje */}
+      <section aria-label="Refeições de hoje" className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden animate-fade-up" style={{ animationDelay: '120ms' }}>
+        <div className="flex items-center justify-between px-5 pt-4 pb-2">
+          <h2 className="font-bold text-zinc-50">Refeições de hoje</h2>
+          <Link to="/calorias" className="text-xs font-semibold text-green-400 hover:text-green-300">Ver diário →</Link>
+        </div>
+        <ul className="divide-y divide-zinc-800/70">
+          {REFEICOES.map(r => {
+            const itens = registros.filter(i => grupoRefeicao(i.refeicao) === r)
+            const kcal = itens.reduce((s, i) => s + i.calorias, 0)
+            return (
+              <li key={r} className="flex items-center gap-3 px-5 py-3">
+                <span className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center text-lg shrink-0" aria-hidden>{ICONE_REFEICAO[r]}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-zinc-100">{r}</p>
+                  <p className="text-xs text-zinc-500 truncate">{itens.length ? itens.map(i => i.nome).join(', ') : 'Nada registrado'}</p>
+                </div>
+                {kcal > 0 && <span className="text-sm font-semibold tabular-nums text-zinc-300">{fmt(kcal)}</span>}
+                <Link to={`/calorias?adicionar=${encodeURIComponent(r)}`} aria-label={`Adicionar em ${r}`}
+                  className="w-9 h-9 rounded-full bg-green-500/15 text-green-400 hover:bg-green-500/25 flex items-center justify-center shrink-0 transition active:scale-90">
+                  <Plus className="w-5 h-5" />
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+
+      {/* Treino e dieta */}
+      <div className="grid grid-cols-2 gap-3 animate-fade-up" style={{ animationDelay: '180ms' }}>
+        <Link to={lastTreino ? `/treino/${lastTreino.id}` : '/treino'} className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl p-4 transition active:scale-[0.98]">
+          <span className="w-9 h-9 rounded-xl bg-green-500/15 flex items-center justify-center"><Dumbbell className="w-5 h-5 text-green-400" /></span>
+          <p className="text-sm font-semibold text-zinc-100 mt-3 truncate">{lastTreino ? lastTreino.nome : 'Criar treino'}</p>
+          <p className="text-xs text-zinc-500 mt-0.5 flex items-center">{lastTreino ? 'Seu treino' : 'Gerado por IA'}<ChevronRight className="w-3.5 h-3.5" /></p>
         </Link>
-      </div>
-
-      {/* Last diet */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">Última Dieta</h2>
-          <Link to="/dieta" className="text-xs text-green-400 hover:text-green-300">Ver todas →</Link>
-        </div>
-        {lastDieta ? (
-          <Link to={`/dieta/${lastDieta.id}`}>
-            <Card className="hover:border-zinc-700 transition-all">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-zinc-100 truncate">{lastDieta.nome}</p>
-                  <p className="text-xs text-zinc-500 mt-1">{new Date(lastDieta.created_at).toLocaleDateString('pt-BR')}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-lg font-bold text-green-400">{lastDieta.calorias_dia}</p>
-                  <p className="text-xs text-zinc-500">kcal/dia</p>
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Badge variant="green">{lastDieta.objetivo}</Badge>
-                <Badge variant="zinc">{lastDieta.plano?.refeicoes?.length ?? 0} refeições</Badge>
-              </div>
-            </Card>
-          </Link>
-        ) : (
-          <Card>
-            <p className="text-zinc-500 text-sm text-center py-4">
-              Nenhuma dieta criada ainda.{' '}
-              <Link to="/dieta" className="text-green-400 hover:underline">Criar agora →</Link>
-            </p>
-          </Card>
-        )}
-      </div>
-
-      {/* Last workout */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">Último Treino</h2>
-          <Link to="/treino" className="text-xs text-green-400 hover:text-green-300">Ver todos →</Link>
-        </div>
-        {lastTreino ? (
-          <Link to={`/treino/${lastTreino.id}`}>
-            <Card className="hover:border-zinc-700 transition-all">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-zinc-100 truncate">{lastTreino.nome}</p>
-                  <p className="text-xs text-zinc-500 mt-1">{new Date(lastTreino.created_at).toLocaleDateString('pt-BR')}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-lg font-bold text-blue-400">{lastTreino.frequencia_semanal}x</p>
-                  <p className="text-xs text-zinc-500">por semana</p>
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Badge variant="blue">{lastTreino.objetivo}</Badge>
-                <Badge variant="zinc">{lastTreino.nivel}</Badge>
-                <Badge variant="zinc">{lastTreino.plano?.dias?.length ?? 0} dias</Badge>
-              </div>
-            </Card>
-          </Link>
-        ) : (
-          <Card>
-            <p className="text-zinc-500 text-sm text-center py-4">
-              Nenhum treino criado ainda.{' '}
-              <Link to="/treino" className="text-green-400 hover:underline">Criar agora →</Link>
-            </p>
-          </Card>
-        )}
-      </div>
-
-      {/* Tips */}
-      <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-lg">💡</span>
-          <p className="text-sm font-semibold text-zinc-300">Dica do dia</p>
-        </div>
-        <p className="text-sm text-zinc-500 leading-relaxed">
-          A consistência é mais importante que a perfeição. Treinar 3 vezes por semana todo mês
-          é melhor do que treinar todos os dias por uma semana.
-        </p>
+        <Link to={lastDieta ? `/dieta/${lastDieta.id}` : '/dieta'} className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl p-4 transition active:scale-[0.98]">
+          <span className="w-9 h-9 rounded-xl bg-green-500/15 flex items-center justify-center"><Salad className="w-5 h-5 text-green-400" /></span>
+          <p className="text-sm font-semibold text-zinc-100 mt-3 truncate">{lastDieta ? lastDieta.nome : 'Criar dieta'}</p>
+          <p className="text-xs text-zinc-500 mt-0.5 flex items-center">{lastDieta ? 'Seu plano alimentar' : 'Gerada por IA'}<ChevronRight className="w-3.5 h-3.5" /></p>
+        </Link>
       </div>
     </div>
   )
