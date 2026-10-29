@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const semAnimacao = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 /** Número que sobe até o valor (efeito de contagem). */
 export function useContagem(valor: number, duracao = 900) {
   const [atual, setAtual] = useState(semAnimacao() ? valor : 0)
+  const ultimo = useRef(semAnimacao() ? valor : 0)
   useEffect(() => {
-    if (semAnimacao()) { setAtual(valor); return }
+    if (semAnimacao() || !Number.isFinite(valor)) { setAtual(valor); ultimo.current = valor; return }
     let raf = 0
     const inicio = performance.now()
-    const de = 0
+    const de = ultimo.current
+    ultimo.current = valor
     const passo = (t: number) => {
       const p = Math.min(1, (t - inicio) / duracao)
       const suave = 1 - Math.pow(1 - p, 3)

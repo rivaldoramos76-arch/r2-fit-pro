@@ -101,3 +101,11 @@ export function somarTotais(itens: Alimento[]) {
     carboidrato_g: t.carboidrato_g + i.carboidrato_g, gordura_g: t.gordura_g + i.gordura_g,
   }), { calorias: 0, proteina_g: 0, carboidrato_g: 0, gordura_g: 0 })
 }
+
+export async function atualizarRegistro(id: string, a: Alimento & { refeicao: string }) {
+  const { error } = await supabase.from('food_logs').update({
+    nome: a.nome, quantidade: a.quantidade, calorias: Math.round(a.calorias), proteina_g: a.proteina_g,
+    carboidrato_g: a.carboidrato_g, gordura_g: a.gordura_g, refeicao: a.refeicao,
+  }).eq('id', id)
+  if (error) throw new Error(error.message)
+}

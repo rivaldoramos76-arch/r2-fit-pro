@@ -22,6 +22,11 @@ const hojeISO = (() => { const d = new Date(); return `${d.getFullYear()}-${Stri
 const registro = (refeicao, nome, quantidade, calorias, i) => ({ id: 'f' + i, user_id: UID, data: hojeISO, refeicao, nome, quantidade, calorias, proteina_g: 10, carboidrato_g: 20, gordura_g: 5, observacao: null, origem: 'texto', created_at: `${hojeISO}T0${i}:00:00Z` })
 const REGISTROS = [registro('Café da manhã', 'Pão francês', '1 unidade', 135, 1), registro('Lanche da tarde', 'Banana prata', '1 unidade', 89, 2)]
 const META = { user_id: UID, sexo: 'masculino', nascimento: '1990-05-10', altura_cm: 178, peso_kg: 82, atividade: 'moderado', objetivo: 'perder', ritmo_kg_semana: 0.5, calorias: 2280, proteina_g: 164, carboidrato_g: 233, gordura_g: 76, personalizada: false, somar_exercicio: false }
+const DIETA = { id: 'd1', user_id: UID, nome: 'Plano Cutting', objetivo: 'Perda de gordura', calorias_dia: 600, created_at: '2026-10-20T00:00:00Z',
+  plano: { nome: 'Plano Cutting', objetivo: 'Perda de gordura', calorias_dia: 600, macros: { proteina_g: 150, carboidrato_g: 180, gordura_g: 60 }, dicas: ['Beba água'],
+    refeicoes: [{ nome: 'Café da manhã', horario: '07:00', calorias: 300, alimentos: [{ nome: 'Ovos mexidos', quantidade: '3 ovos', calorias: 210 }, { nome: 'Pão integral', quantidade: '1 fatia', calorias: 90 }] },
+      { nome: 'Almoço', horario: '12:30', calorias: 300, alimentos: [{ nome: 'Frango grelhado', quantidade: '150 g', calorias: 300 }] }] } }
+const CLIENTE = { id: '99999999-2222-4333-8444-555555555555', nome: 'Maria Cliente', email: 'maria@teste.com', criado_em: '2026-10-25T10:00:00Z', ultimo_login: '2026-10-29T10:00:00Z', email_confirmado: true, estado: 'sem_assinatura', admin: false, total: 1 }
 
 let ok = 0
 const erros = []
@@ -46,6 +51,8 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
     if (p === '/rest/v1/rpc/meu_acesso') return acessoFalha ? json({ message: 'erro' }, 500) : json({ estado, premium, admin, teste_ate: testeAte })
     if (p === '/rest/v1/rpc/admin_metricas') return admin ? json({ usuarios_total: 3, usuarios_30d: 2, assinantes_ativos: 1, mrr_centavos: 1990, recebido_mes_centavos: 1990, recebido_total_centavos: 3980, pendente_centavos: 0, estornado_centavos: 0, projetado_proximo_mes_centavos: 1990, falhas_30d: 1, webhooks_erro_7d: 0, emails_pendentes: 2, tickets_abertos: 1, privacidade_abertas: 0, assinaturas_por_status: { ativa: 1 } }) : json({ message: 'Acesso negado' }, 400)
     if (p === '/rest/v1/app_config') return json(CONFIG)
+    if (p === '/rest/v1/rpc/admin_usuarios') return admin ? json([CLIENTE]) : json({ message: 'Acesso negado' }, 400)
+    if (p === '/rest/v1/rpc/admin_gerenciar_acesso') { gravacoes.push({ tabela: 'admin_gerenciar_acesso', corpo: rota.request().postDataJSON() }); return json({ estado: 'ativa', acesso_ate: '2099-12-31T23:59:59Z' }) }
     if (p === '/rest/v1/profiles') {
       const perfil = { id: UID, nome: 'Cliente Teste', email: usuario.email, telefone: null, data_nascimento: null, avatar_url: null, created_at: '2026-10-01T00:00:00Z', versao_termos: '2026-10-22', aceite_termos_em: '2026-10-01T00:00:00Z', marketing_opt_in: false }
       return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? perfil : [perfil])
@@ -57,6 +64,11 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       if (p.endsWith('food_logs')) return json(REGISTROS)
       if (p.endsWith('metas_nutricionais')) return json(nutricao === 'sem_meta' ? [] : [META])
       return json([])
+    }
+    if (nutricao && p === '/rest/v1/dietas') {
+      const objeto = rota.request().headers()['accept']?.includes('vnd.pgrst.object')
+      if (rota.request().method() !== 'GET') { const corpo = rota.request().postDataJSON(); gravacoes.push({ tabela: 'dietas', metodo: rota.request().method(), corpo }); return json({ ...DIETA, ...corpo }) }
+      return json(objeto ? DIETA : [DIETA])
     }
     if (p.startsWith('/rest/v1/')) return json([])
     if (p.startsWith('/functions/v1/r2-api/billing')) {
@@ -270,10 +282,100 @@ await t('início mostra o anel de calorias com meta, macros e refeições do dia
   assert.ok(page.gravacoes.some(g => g.tabela === 'alimentos_favoritos' && g.metodo === 'POST'), 'favoritou')
   await folha.getByText('Pão francês').click()
   await folha.getByRole('button', { name: 'Mais' }).click()
-  await folha.getByText('1,5').waitFor()
-  await folha.getByText('203').waitFor() // 135 × 1,5
+  assert.equal(await folha.getByLabel('Quantidade').inputValue(), '2')
+  await folha.getByText('2 unidades').first().waitFor()
+  await folha.getByText('270').waitFor() // 135 × 2
+  await folha.getByLabel('Quantidade').fill('3')
+  await folha.getByText('405').waitFor()
   await page.screenshot({ path: `${SHOTS}/porcoes.png` })
   assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('meta personalizada: calorias e macros acompanham um ao outro', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/meta')
+  await page.getByRole('heading', { name: 'Sua meta diária' }).waitFor()
+  await page.getByRole('button', { name: 'Ajustar valores' }).click()
+  const cal = page.getByLabel('Calorias (kcal)')
+  const prot = page.getByLabel('Proteína (g)')
+  const antes = Number(await cal.inputValue())
+  const protAntes = Number(await prot.inputValue())
+  await prot.fill(String(protAntes + 25))
+  assert.equal(Number(await cal.inputValue()), antes + 100, 'calorias sobem 4 kcal por grama de proteína')
+  await cal.fill('3000')
+  const p = Number(await prot.inputValue()), c = Number(await page.getByLabel('Carboidrato (g)').inputValue()), g = Number(await page.getByLabel('Gordura (g)').inputValue())
+  assert.ok(Math.abs(p * 4 + c * 4 + g * 9 - 3000) <= 15, `macros acompanham as calorias (${p}/${c}/${g})`)
+  await page.screenshot({ path: `${SHOTS}/meta-manual.png` })
+  await page.getByRole('button', { name: 'Salvar minha meta' }).click()
+  await page.waitForURL(/\/dashboard/)
+  const salvo = page.gravacoes.find(x => x.tabela === 'metas_nutricionais')
+  assert.equal(salvo?.corpo?.calorias, 3000); assert.equal(salvo?.corpo?.personalizada, true)
+  assert.ok(Math.abs(salvo.corpo.proteina_g * 4 + salvo.corpo.carboidrato_g * 4 + salvo.corpo.gordura_g * 9 - 3000) <= 15)
+  await ctx.close()
+})
+
+await t('diário: editar alimento já salvo e ajustar item da IA', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/calorias')
+  await page.getByRole('button', { name: 'Editar Pão francês' }).click()
+  const folha = page.getByRole('dialog')
+  await folha.getByRole('heading', { name: 'Editar alimento' }).waitFor()
+  await folha.getByLabel('Quantidade').fill('2')
+  await folha.getByText('270').waitFor()
+  await folha.getByRole('button', { name: 'Jantar' }).click()
+  await page.screenshot({ path: `${SHOTS}/editar-registro.png` })
+  await folha.getByRole('button', { name: 'Salvar alterações' }).click()
+  await folha.waitFor({ state: 'detached' })
+  const upd = page.gravacoes.find(x => x.tabela === 'food_logs' && x.metodo === 'PATCH')
+  assert.equal(upd?.corpo?.calorias, 270); assert.equal(upd?.corpo?.quantidade, '2 unidades'); assert.equal(upd?.corpo?.refeicao, 'Jantar')
+  // Busca sem resultado leva para o cálculo com IA com o texto já preenchido
+  await page.getByRole('button', { name: 'Adicionar alimento' }).first().click()
+  await page.getByPlaceholder('Buscar nos recentes').fill('tapioca')
+  await page.getByRole('button', { name: /Calcular "tapioca" com IA/ }).click()
+  assert.equal(await page.getByLabel('O que você comeu?').inputValue(), 'tapioca')
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('dieta: editar alimentos e salvar recalcula as calorias', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/dieta/d1')
+  await page.getByRole('heading', { name: 'Plano Cutting' }).waitFor()
+  await page.getByText('Ajustar com IA').waitFor()
+  await page.getByRole('button', { name: 'Editar' }).click()
+  await page.getByRole('heading', { name: 'Editar plano' }).waitFor()
+  await page.getByLabel('Calorias').first().fill('250')
+  await page.getByText('640 kcal').waitFor()
+  await page.screenshot({ path: `${SHOTS}/dieta-editar.png`, fullPage: true })
+  await page.getByRole('button', { name: 'Salvar plano' }).click()
+  await page.getByText('Plano atualizado.').waitFor()
+  const salvo = page.gravacoes.find(x => x.tabela === 'dietas')
+  assert.equal(salvo?.corpo?.calorias_dia, 640)
+  assert.equal(salvo?.corpo?.plano?.refeicoes?.[0]?.calorias, 340)
+  await ctx.close()
+})
+
+await t('perfil mostra o e-mail do cadastro e a data de nascimento da meta', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/perfil')
+  assert.equal(await page.getByLabel('E-mail', { exact: true }).inputValue(), 'cliente@teste.com')
+  await page.waitForTimeout(400)
+  assert.equal(await page.getByLabel('Data de nascimento (opcional)').inputValue(), '1990-05-10')
+  assert.equal(await page.getByLabel('Novo e-mail').count(), 0, 'troca de e-mail só aparece ao pedir')
+  await ctx.close()
+})
+
+await t('início mostra o lembrete para instalar com passo a passo', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/dashboard')
+  const card = page.getByRole('region', { name: 'Instalar o app' })
+  await card.getByText('Instale o app no celular').waitFor()
+  await card.getByRole('button', { name: /Como instalar/ }).click()
+  await card.getByText('Adicionar à Tela de Início').waitFor()
+  await card.getByRole('tab', { name: 'Android' }).click()
+  await card.getByText('Instalar app').waitFor()
+  await page.screenshot({ path: `${SHOTS}/instalar.png` })
   await ctx.close()
 })
 
@@ -324,6 +426,15 @@ for (const [nomeDisp, viewport] of [['celular', { width: 390, height: 844 }], ['
     await page.getByRole('button', { name: 'Plano e empresa' }).click()
     await page.getByLabel('Preço mensal (R$)').waitFor()
     assert.equal(await page.getByLabel('Preço mensal (R$)').inputValue(), '19,90')
+    await page.getByRole('button', { name: 'Usuários' }).click()
+    await page.getByRole('button', { name: 'Gerenciar' }).click()
+    const ficha = page.getByRole('dialog', { name: /Cliente maria@teste.com/ })
+    await ficha.getByRole('button', { name: 'Liberar acesso' }).click()
+    await ficha.getByRole('button', { name: 'Liberar acesso' }).last().click()
+    await ficha.getByText(/Acesso até/).waitFor()
+    const acao = page.gravacoes.find(x => x.tabela === 'admin_gerenciar_acesso')
+    assert.equal(acao?.corpo?.p_acao, 'cortesia'); assert.equal(acao?.corpo?.p_user, CLIENTE.id)
+    await page.screenshot({ path: `${SHOTS}/admin-cliente-${nomeDisp}.png` })
     assert.deepEqual(page.consoleErros, [])
     await ctx.close()
   })

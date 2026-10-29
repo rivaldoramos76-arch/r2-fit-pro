@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { X, Search, Star, Plus, Check, Clock, Sparkles, Camera, Minus, ChevronLeft } from 'lucide-react'
+import { X, Search, Star, Plus, Check, Clock, Sparkles, Camera, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react'
 import { estimarAlimentoTexto, analisarImagemAlimento } from '../../lib/foodAI'
 import type { FoodEstimate } from '../../lib/foodAI'
-import { REFEICOES, chaveAlimento, escalarAlimento } from '../../lib/diario'
+import { REFEICOES, chaveAlimento, grupoRefeicao } from '../../lib/diario'
 import type { Alimento, Refeicao } from '../../lib/diario'
-import { alimentosRecentes, listarFavoritos, favoritar, desfavoritar, registrarAlimentos } from '../../lib/nutricao'
-import type { Favorito } from '../../lib/nutricao'
+import { alimentosRecentes, listarFavoritos, favoritar, desfavoritar, registrarAlimentos, atualizarRegistro } from '../../lib/nutricao'
+import type { Favorito, RegistroAlimento } from '../../lib/nutricao'
 import { Button, Spinner, Textarea } from '../UI'
 import { fmt } from './Graficos'
+import EditorAlimento from './EditorAlimento'
 
 type Aba = 'recentes' | 'favoritos' | 'texto' | 'foto'
 const ABAS: { id: Aba; rotulo: string; icone: typeof Clock }[] = [
@@ -17,7 +18,6 @@ const ABAS: { id: Aba; rotulo: string; icone: typeof Clock }[] = [
   { id: 'texto', rotulo: 'Digitar', icone: Sparkles },
   { id: 'foto', rotulo: 'Foto', icone: Camera },
 ]
-const PORCOES = [0.5, 1, 1.5, 2, 2.5, 3]
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const macros = (a: Alimento) => `P ${fmt(a.proteina_g)}g · C ${fmt(a.carboidrato_g)}g · G ${fmt(a.gordura_g)}g`
@@ -65,7 +65,8 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
   const [favoritos, setFavoritos] = useState<Favorito[] | null>(null)
   const [busca, setBusca] = useState('')
   const [detalhe, setDetalhe] = useState<Alimento | null>(null)
-  const [porcoes, setPorcoes] = useState(1)
+  const [editado, setEditado] = useState<Alimento | null>(null)
+  const [textoIA, setTextoIA] = useState('')
   const [adicionados, setAdicionados] = useState<Set<string>>(new Set())
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
@@ -118,36 +119,18 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
     : <h2 className="text-lg font-bold text-zinc-50">Adicionar alimento</h2>
 
   if (detalhe) {
-    const escalado = escalarAlimento(detalhe, porcoes)
-    const i = PORCOES.indexOf(porcoes)
+    const final = editado ?? detalhe
     return (
       <Folha titulo={titulo} onClose={onClose}
-        rodape={<Button size="lg" className="w-full" loading={salvando} onClick={async () => { await adicionar([escalado], 'recente', false); setDetalhe(null); setPorcoes(1) }}>Adicionar a {refeicao}</Button>}>
+        rodape={<Button size="lg" className="w-full" loading={salvando} onClick={async () => { await adicionar([final], aba === 'favoritos' ? 'favorito' : 'recente', false); setDetalhe(null) }}>Adicionar a {refeicao}</Button>}>
         <div className="flex items-start gap-2 animate-fade-up">
           <div className="flex-1 min-w-0">
-            <p className="text-xl font-bold text-zinc-50">{detalhe.nome}</p>
-            <p className="text-sm text-zinc-400 mt-0.5">{detalhe.quantidade || '1 porção'}</p>
+            <p className="text-xl font-bold text-zinc-50">{final.nome}</p>
+            <p className="text-sm text-zinc-400 mt-0.5">{final.quantidade || '1 porção'}</p>
           </div>
-          <Estrela ativa={favPorChave.has(chaveAlimento(detalhe))} onClick={() => alternarFavorito(detalhe)} />
+          <Estrela ativa={favPorChave.has(chaveAlimento(final))} onClick={() => alternarFavorito(final)} />
         </div>
-        <div className="mt-5 flex items-center justify-between bg-zinc-800/60 rounded-2xl p-2">
-          <button onClick={() => i > 0 && setPorcoes(PORCOES[i - 1])} disabled={i <= 0} aria-label="Menos"
-            className="w-11 h-11 rounded-xl bg-zinc-900 flex items-center justify-center disabled:opacity-30 active:scale-95 transition"><Minus className="w-5 h-5" /></button>
-          <div className="text-center">
-            <p className="text-2xl font-bold tabular-nums">{String(porcoes).replace('.', ',')}</p>
-            <p className="text-xs text-zinc-400">{porcoes === 1 ? 'porção' : 'porções'}</p>
-          </div>
-          <button onClick={() => i < PORCOES.length - 1 && setPorcoes(PORCOES[i + 1])} disabled={i >= PORCOES.length - 1} aria-label="Mais"
-            className="w-11 h-11 rounded-xl bg-zinc-900 flex items-center justify-center disabled:opacity-30 active:scale-95 transition"><Plus className="w-5 h-5" /></button>
-        </div>
-        <div className="mt-4 grid grid-cols-4 gap-2 text-center">
-          {[['Calorias', fmt(escalado.calorias), 'text-green-400'], ['Carbo', fmt(escalado.carboidrato_g) + 'g', 'text-lime-400'], ['Proteína', fmt(escalado.proteina_g) + 'g', 'text-emerald-400'], ['Gordura', fmt(escalado.gordura_g) + 'g', 'text-amber-400']].map(([r, v, c]) => (
-            <div key={r} className="bg-zinc-800/40 rounded-xl py-3">
-              <p className={`text-base font-bold tabular-nums ${c}`}>{v}</p>
-              <p className="text-[11px] text-zinc-400 mt-0.5">{r}</p>
-            </div>
-          ))}
-        </div>
+        <div className="mt-4"><EditorAlimento key={chaveAlimento(detalhe)} original={detalhe} onChange={setEditado} /></div>
         <SeletorRefeicao valor={refeicao} onChange={setRefeicao} />
         {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
       </Folha>
@@ -175,11 +158,13 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
             <input value={busca} onChange={e => setBusca(e.target.value)} placeholder={aba === 'recentes' ? 'Buscar nos recentes' : 'Buscar nos favoritos'}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-xl pl-9 pr-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
           </label>
+          {filtrada && filtrada.length > 0 && <p className="text-xs text-zinc-500 mt-2 px-1">Toque no alimento para mudar a quantidade · <span className="text-green-400">+</span> adiciona direto</p>}
           {filtrada === null ? <div className="flex justify-center py-10"><Spinner /></div>
             : filtrada.length === 0 ? (
-              <div className="text-center py-10 px-4">
+              <div className="text-center py-8 px-4">
                 <p className="text-zinc-300 font-semibold">{busca ? 'Nada encontrado' : aba === 'recentes' ? 'Nenhum alimento recente' : 'Nenhum favorito ainda'}</p>
-                <p className="text-sm text-zinc-500 mt-1">{aba === 'recentes' ? 'Use "Digitar" ou "Foto" para registrar; eles aparecem aqui depois.' : 'Toque na estrela de um alimento para guardar aqui.'}</p>
+                <p className="text-sm text-zinc-500 mt-1">{busca ? 'A IA calcula qualquer alimento com a quantidade que você informar.' : aba === 'recentes' ? 'Use "Digitar" ou "Foto" para registrar; eles aparecem aqui depois.' : 'Toque na estrela de um alimento para guardar aqui.'}</p>
+                {busca.trim() && <Button className="mt-4" onClick={() => { setTextoIA(busca.trim()); setAba('texto') }}><Sparkles className="w-4 h-4" />Calcular "{busca.trim()}" com IA</Button>}
               </div>
             ) : (
               <ul className="mt-3 flex flex-col gap-2">
@@ -189,9 +174,9 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
                   return (
                     <li key={k} className="animate-fade-up" style={{ animationDelay: `${Math.min(idx, 10) * 30}ms` }}>
                       <div className="flex items-center gap-1 bg-zinc-800/40 hover:bg-zinc-800/80 border border-zinc-800 rounded-2xl pr-1.5 transition">
-                        <button type="button" onClick={() => { setDetalhe(a); setPorcoes(1) }} className="flex-1 min-w-0 text-left pl-3.5 py-2">
+                        <button type="button" onClick={() => { setDetalhe(a); setEditado(null) }} className="flex-1 min-w-0 text-left pl-3.5 py-2">
                           <span className="block text-sm font-semibold text-zinc-100 truncate">{a.nome}</span>
-                          <span className="block text-xs text-zinc-500 truncate">{fmt(a.calorias)} kcal · {a.quantidade || '1 porção'}</span>
+                          <span className="flex items-center gap-1 text-xs text-zinc-500 min-w-0"><span className="truncate">{fmt(a.calorias)} kcal · {a.quantidade || '1 porção'}</span><ChevronRight className="w-3.5 h-3.5 shrink-0" /></span>
                         </button>
                         <Estrela ativa={favPorChave.has(k)} onClick={() => alternarFavorito(a)} />
                         <button type="button" aria-label={`Adicionar ${a.nome}`} disabled={salvando}
@@ -203,12 +188,17 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
                     </li>
                   )
                 })}
+                {busca.trim() && (
+                  <li><button type="button" onClick={() => { setTextoIA(busca.trim()); setAba('texto') }}
+                    className="w-full flex items-center gap-2 justify-center rounded-2xl border border-dashed border-zinc-700 py-3 text-sm font-semibold text-green-400 hover:border-green-500/50">
+                    <Sparkles className="w-4 h-4" />Não achou? Calcular "{busca.trim()}" com IA</button></li>
+                )}
               </ul>
             )}
         </div>
       )}
 
-      {aba === 'texto' && <AbaTexto salvando={salvando} favPorChave={favPorChave} alternarFavorito={alternarFavorito} onSalvar={itens => adicionar(itens, 'texto', true)} />}
+      {aba === 'texto' && <AbaTexto inicial={textoIA} salvando={salvando} favPorChave={favPorChave} alternarFavorito={alternarFavorito} onSalvar={itens => adicionar(itens, 'texto', true)} />}
       {aba === 'foto' && <AbaFoto salvando={salvando} onSalvar={itens => adicionar(itens, 'foto', true)} />}
       {erro && <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-xl p-3"><p className="text-red-400 text-sm">{erro}</p></div>}
     </Folha>
@@ -228,8 +218,11 @@ function SeletorRefeicao({ valor, onChange }: { valor: Refeicao; onChange: (r: R
   )
 }
 
-function Estimativa({ itens, favPorChave, alternarFavorito }: { itens: FoodEstimate[]; favPorChave?: Map<string, Favorito>; alternarFavorito?: (a: Alimento) => void }) {
+function Estimativa({ itens, onEditar, favPorChave, alternarFavorito }: {
+  itens: FoodEstimate[]; onEditar: (i: number, a: Alimento | null) => void; favPorChave?: Map<string, Favorito>; alternarFavorito?: (a: Alimento) => void
+}) {
   const total = itens.reduce((s, i) => s + i.calorias, 0)
+  const [editando, setEditando] = useState<number | null>(null)
   return (
     <div className="mt-4 bg-green-500/5 border border-green-500/20 rounded-2xl p-3.5 animate-fade-up">
       <div className="flex items-center justify-between">
@@ -238,12 +231,24 @@ function Estimativa({ itens, favPorChave, alternarFavorito }: { itens: FoodEstim
       </div>
       <ul className="mt-2 flex flex-col divide-y divide-zinc-800/70">
         {itens.map((a, i) => (
-          <li key={i} className="py-2 flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="flex justify-between gap-2 text-sm"><span className="text-zinc-100 truncate">{a.nome}</span><span className="text-zinc-300 shrink-0">{fmt(a.calorias)} kcal</span></div>
-              <p className="text-xs text-zinc-500">{a.quantidade} · {macros(a)}</p>
+          <li key={i} className="py-2">
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setEditando(editando === i ? null : i)} className="flex-1 min-w-0 text-left">
+                <span className="flex justify-between gap-2 text-sm"><span className="text-zinc-100 truncate">{a.nome}</span><span className="text-zinc-300 shrink-0">{fmt(a.calorias)} kcal</span></span>
+                <span className="block text-xs text-zinc-500">{a.quantidade} · {macros(a)}</span>
+              </button>
+              <button type="button" onClick={() => setEditando(editando === i ? null : i)} aria-label={`Editar ${a.nome}`} className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 shrink-0"><Pencil className="w-4 h-4" /></button>
+              {favPorChave && alternarFavorito && <Estrela ativa={favPorChave.has(chaveAlimento(a))} onClick={() => alternarFavorito(a)} />}
             </div>
-            {favPorChave && alternarFavorito && <Estrela ativa={favPorChave.has(chaveAlimento(a))} onClick={() => alternarFavorito(a)} />}
+            {editando === i && (
+              <div className="mt-3 pb-1 animate-fade-up">
+                <EditorAlimento original={(a as ItemEstimado).original ?? a} onChange={novo => onEditar(i, novo)} />
+                <div className="flex gap-2 mt-3">
+                  <button type="button" onClick={() => { onEditar(i, null); setEditando(null) }} className="flex-1 rounded-xl border border-zinc-800 py-2 text-sm text-red-400">Remover item</button>
+                  <button type="button" onClick={() => setEditando(null)} className="flex-1 rounded-xl bg-zinc-800 py-2 text-sm font-semibold">Pronto</button>
+                </div>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -251,10 +256,15 @@ function Estimativa({ itens, favPorChave, alternarFavorito }: { itens: FoodEstim
   )
 }
 
-function AbaTexto({ salvando, onSalvar, favPorChave, alternarFavorito }: {
-  salvando: boolean; onSalvar: (i: FoodEstimate[]) => void; favPorChave: Map<string, Favorito>; alternarFavorito: (a: Alimento) => void
+/** Item da IA editado pela pessoa; guarda o valor original para recalcular a partir dele. */
+type ItemEstimado = FoodEstimate & { original?: Alimento }
+const editarLista = (set: (f: (p: ItemEstimado[]) => ItemEstimado[]) => void) => (i: number, a: Alimento | null) =>
+  set(p => (a ? p.map((x, j) => (j === i ? { ...x, ...a, original: x.original ?? x } : x)) : p.filter((_, j) => j !== i)))
+
+function AbaTexto({ inicial, salvando, onSalvar, favPorChave, alternarFavorito }: {
+  inicial: string; salvando: boolean; onSalvar: (i: FoodEstimate[]) => void; favPorChave: Map<string, Favorito>; alternarFavorito: (a: Alimento) => void
 }) {
-  const [descricao, setDescricao] = useState('')
+  const [descricao, setDescricao] = useState(inicial)
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')
   const [preview, setPreview] = useState<FoodEstimate[]>([])
@@ -271,8 +281,8 @@ function AbaTexto({ salvando, onSalvar, favPorChave, alternarFavorito }: {
     <div className="mt-4">
       <Textarea label="O que você comeu?" placeholder="Ex.: 150 g de arroz, 1 concha de feijão e 1 filé de frango" rows={3}
         value={descricao} onChange={e => { setDescricao(e.target.value); setPreview([]) }} />
-      <p className="text-xs text-zinc-500 mt-1.5">Escreva a porção (gramas, colheres, unidades) e a IA calcula.</p>
-      {preview.length > 0 && <Estimativa itens={preview} favPorChave={favPorChave} alternarFavorito={alternarFavorito} />}
+      <p className="text-xs text-zinc-500 mt-1.5">Escreva a porção (gramas, colheres, unidades) e a IA calcula. Depois você pode ajustar cada item.</p>
+      {preview.length > 0 && <Estimativa itens={preview} onEditar={editarLista(setPreview)} favPorChave={favPorChave} alternarFavorito={alternarFavorito} />}
       {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
       <div className="mt-4">
         {preview.length === 0
@@ -328,7 +338,7 @@ function AbaFoto({ salvando, onSalvar }: { salvando: boolean; onSalvar: (i: Food
             <img src={img} alt="Prato" className="w-full rounded-2xl" />
             <button onClick={() => { setImg(null); setPreview([]) }} aria-label="Remover foto" className="absolute top-2 right-2 bg-zinc-950/70 text-zinc-100 rounded-full p-1.5"><X className="w-4 h-4" /></button>
           </div>}
-      {preview.length > 0 && <Estimativa itens={preview} />}
+      {preview.length > 0 && <Estimativa itens={preview} onEditar={editarLista(setPreview)} />}
       {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
       {img && (
         <div className="mt-4">
@@ -338,5 +348,39 @@ function AbaFoto({ salvando, onSalvar }: { salvando: boolean; onSalvar: (i: Food
         </div>
       )}
     </div>
+  )
+}
+
+/** Edição de um alimento já registrado no diário. */
+export function EditarRegistro({ registro, onClose, onSalvo, onRemover }: {
+  registro: RegistroAlimento; onClose: () => void; onSalvo: () => void; onRemover: () => void
+}) {
+  const [refeicao, setRefeicao] = useState<Refeicao>(grupoRefeicao(registro.refeicao))
+  const [editado, setEditado] = useState<Alimento>(registro)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+  const salvar = async () => {
+    setErro(''); setSalvando(true)
+    try {
+      // Mantém o nome antigo da refeição (ex.: "Lanche da tarde") se a pessoa não mudou de grupo
+      const r = grupoRefeicao(registro.refeicao) === refeicao && registro.refeicao ? registro.refeicao : refeicao
+      await atualizarRegistro(registro.id, { ...editado, refeicao: r })
+      onSalvo(); onClose()
+    } catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível salvar'); setSalvando(false) }
+  }
+  return (
+    <Folha titulo={<h2 className="text-lg font-bold text-zinc-50">Editar alimento</h2>} onClose={onClose}
+      rodape={<div className="flex gap-2">
+        <Button variant="secondary" className="flex-1" onClick={onRemover}><Trash2 className="w-4 h-4" />Remover</Button>
+        <Button className="flex-[2]" loading={salvando} onClick={salvar}>Salvar alterações</Button>
+      </div>}>
+      <div className="animate-fade-up">
+        <p className="text-xl font-bold text-zinc-50">{editado.nome}</p>
+        <p className="text-sm text-zinc-400 mt-0.5">{editado.quantidade || '1 porção'}</p>
+      </div>
+      <div className="mt-4"><EditorAlimento original={registro} onChange={setEditado} /></div>
+      <SeletorRefeicao valor={refeicao} onChange={setRefeicao} />
+      {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
+    </Folha>
   )
 }

@@ -104,12 +104,14 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 9. `20261029180000_teste_gratis.sql` — teste grátis no cadastro, estado `teste`, limite de IA no teste, `meu_acesso.teste_ate`.
 10. `20261029180100_teste_gratis_lembretes_config.sql` — lembretes do fim do teste, métricas e configuração (`teste_dias`, `teste_limite_ia`).
 11. `20261030120000_metas_favoritos.sql` — meta diária (`metas_nutricionais`) e alimentos favoritos (`alimentos_favoritos`), com RLS; favoritar exige Premium.
+12. `20261030130000_editar_alimentos_admin.sql` — edição de alimentos já registrados no diário (Premium) e `admin_gerenciar_acesso` (liberar cortesia, estender, encerrar, registrar pagamento manual e corrigir status de pagamento; tudo auditado).
 
 ## Testes
-- `npm test` — lógica de treinos (14) + lógica comercial/Mercado Pago/e-mails (14) + meta diária e diário (9).
+- `npm test` — lógica de treinos (14) + lógica comercial/Mercado Pago/e-mails (14) + meta diária e diário (11).
 - `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
 - `tests/sql/nutricao.test.sql` — 17 verificações de RLS da meta diária e dos favoritos (resultado esperado: `TESTES_OK (17)`).
-- `tests/e2e/ui.test.mjs` — 19 testes de interface (Playwright, celular e desktop) com API simulada.
+- `tests/sql/admin_acesso.test.sql` — 16 verificações das ações do administrador e da edição no diário (resultado esperado: `TESTES_OK (16)`).
+- `tests/e2e/ui.test.mjs` — 24 testes de interface (Playwright, celular e desktop) com API simulada.
 
 ## Monitoramento e recuperação
 - Painel `/admin`: webhooks com erro, e-mails não enviados, falhas de cobrança, auditoria.

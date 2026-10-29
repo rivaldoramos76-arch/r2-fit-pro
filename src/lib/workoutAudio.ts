@@ -191,6 +191,12 @@ export class TreinoPlayer {
   private timer: ReturnType<typeof setInterval> | null = null
   private volume = 1
   private mudo = false
+  // Relógio de parede: se o sistema pausar o áudio (tela bloqueada, ligação),
+  // ao voltar o treino continua do ponto em que deveria estar, sem "congelar".
+  private baseParede = 0
+  private pausaPedida = false
+  /** O áudio foi pausado pelo sistema, não pela pessoa. */
+  interrompido = false
 
   constructor(cfg: ConfigCrono, clips: Record<ClipKey, Float32Array> | null, ouv: Ouvintes) {
     this.ouv = ouv
@@ -205,39 +211,76 @@ export class TreinoPlayer {
       a.setAttribute('playsinline', '')
       a.addEventListener('timeupdate', () => this.verificar())
       a.addEventListener('ended', () => this.verificar(true))
+      a.addEventListener('pause', () => {
+        if (!this.pausaPedida && !a.ended && !this.parado) this.interrompido = true
+        this.pausaPedida = false
+      })
+      a.addEventListener('playing', () => { this.interrompido = false })
       this.audio = a
     }
   }
 
   /** Deve ser chamado dentro do gesto do usuário (toque em "Iniciar"). */
   iniciar(): Promise<void> {
-    if (this.audio) return this.audio.play()
-    this.t0 = performance.now()
+    // Safari 16.4+: sessão de reprodução, para o áudio seguir com a tela bloqueada e no modo silencioso
+    const sessao = (navigator as Navigator & { audioSession?: { type: string } }).audioSession
+    if (sessao) { try { sessao.type = 'playback' } catch { /* não suportado */ } }
+    if (this.audio) return this.tocarDe(0)
+    this.t0 = Date.now()
     this.timer = setInterval(() => this.tickVoz(), 80)
     this.tickVoz()
     return Promise.resolve()
   }
 
   tempo(): number {
-    if (this.audio) return this.audio.ended ? this.crono.total : this.audio.currentTime
+    if (this.audio) {
+      if (this.audio.ended) return this.crono.total
+      // Enquanto o sistema segura o áudio, a tela mostra o tempo real do treino
+      return this.interrompido ? Math.min(this.crono.total, this.posicaoEsperada()) : this.audio.currentTime
+    }
     if (!this.t0) return 0
-    const agora = this.pausadoEm ?? performance.now()
+    const agora = this.pausadoEm ?? Date.now()
     return (agora - this.t0 - this.acumuladoPausa) / 1000
   }
 
   get pausado(): boolean {
-    return this.audio ? this.audio.paused && !this.audio.ended : this.pausadoEm !== null
+    return this.audio ? this.audio.paused && !this.audio.ended && !this.interrompido : this.pausadoEm !== null
   }
 
   pausar() {
-    if (this.audio) { this.audio.pause(); return }
-    if (this.pausadoEm === null) { this.pausadoEm = performance.now(); window.speechSynthesis?.pause() }
+    if (this.audio) { this.pausaPedida = !this.audio.paused; this.interrompido = false; this.audio.pause(); return }
+    if (this.pausadoEm === null) { this.pausadoEm = Date.now(); window.speechSynthesis?.pause() }
+  }
+
+  /** Posição em que o treino deveria estar pelo relógio (só faz sentido após interrupção do sistema). */
+  private posicaoEsperada(): number {
+    return Math.max(0, (Date.now() - this.baseParede) / 1000)
+  }
+
+  private tocarDe(seg: number): Promise<void> {
+    const a = this.audio!
+    if (Math.abs(a.currentTime - seg) > 0.25) a.currentTime = seg
+    this.baseParede = Date.now() - seg * 1000
+    return a.play()
+  }
+
+  /** Depois de uma interrupção do sistema, pula para onde o treino deveria estar e volta a tocar. */
+  recuperar(): Promise<void> {
+    if (!this.audio || !this.interrompido || this.parado) return Promise.resolve()
+    const pos = this.posicaoEsperada()
+    if (pos >= this.crono.total) {
+      this.interrompido = false
+      this.audio.currentTime = this.crono.total
+      this.verificar(true)
+      return Promise.resolve()
+    }
+    return this.tocarDe(pos)
   }
 
   retomar(): Promise<void> {
-    if (this.audio) return this.audio.play()
+    if (this.audio) return this.interrompido ? this.recuperar() : this.tocarDe(this.audio.currentTime)
     if (this.pausadoEm !== null) {
-      this.acumuladoPausa += performance.now() - this.pausadoEm
+      this.acumuladoPausa += Date.now() - this.pausadoEm
       this.pausadoEm = null
       window.speechSynthesis?.resume()
     }

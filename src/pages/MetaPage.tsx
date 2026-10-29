@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Check, AlertTriangle, Pencil } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
-import { ATIVIDADES, OBJETIVOS, RITMOS, calcularMeta, idadeEm, caloriasDosMacros } from '../lib/metas'
+import { ATIVIDADES, OBJETIVOS, RITMOS, calcularMeta, idadeEm, ajustarPorCalorias, ajustarPorMacro, percentuais } from '../lib/metas'
 import type { Atividade, Objetivo, Sexo } from '../lib/metas'
 import { useMeta, salvarMeta } from '../lib/nutricao'
 import { Button, Input, Spinner } from '../components/UI'
@@ -29,6 +29,8 @@ function Opcao({ ativa, onClick, titulo, descricao, icone }: { ativa: boolean; o
 }
 
 const numero = (s: string) => Number(s.replace(',', '.'))
+/** Calorias e gramas são inteiros: ignora pontos, vírgulas e espaços ("2.300" = 2300). */
+const inteiro = (s: string) => (s.replace(/\D/g, '') === '' ? NaN : Number(s.replace(/\D/g, '')))
 
 export default function MetaPage() {
   const { user } = useAuth()
@@ -70,7 +72,7 @@ export default function MetaPage() {
     : null, [dadosValidos, sexo, idade, alturaN, pesoN, atividade, objetivo, ritmo])
 
   const final = manual
-    ? { calorias: Math.round(numero(manual.calorias)), proteina_g: Math.round(numero(manual.proteina_g)), carboidrato_g: Math.round(numero(manual.carboidrato_g)), gordura_g: Math.round(numero(manual.gordura_g)) }
+    ? { calorias: inteiro(manual.calorias), proteina_g: inteiro(manual.proteina_g), carboidrato_g: inteiro(manual.carboidrato_g), gordura_g: inteiro(manual.gordura_g) }
     : calculada
   const manualValido = !manual || (final!.calorias >= 800 && final!.calorias <= 6000 && [final!.proteina_g, final!.carboidrato_g, final!.gordura_g].every(v => Number.isFinite(v) && v >= 0))
 
@@ -86,6 +88,8 @@ export default function MetaPage() {
         user_id: user.id, sexo: sexo!, nascimento, altura_cm: alturaN, peso_kg: pesoN, atividade, objetivo,
         ritmo_kg_semana: temRitmo ? ritmo : 0, ...final, personalizada: !!manual, somar_exercicio: somarExercicio,
       })
+      // Leva a data de nascimento para o perfil, se ainda não estiver lá
+      await supabase.from('profiles').update({ data_nascimento: nascimento }).eq('id', user.id).is('data_nascimento', null)
       navigate('/dashboard')
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível salvar')
@@ -156,7 +160,7 @@ export default function MetaPage() {
 
         {passo === 4 && final && (
           <Resultado final={final} gasto={calculada?.gasto ?? 0} abaixoDoMinimo={!manual && !!calculada?.abaixoDoMinimo}
-            manual={manual} setManual={setManual} calculada={calculada}
+            manual={manual} setManual={setManual}
             somarExercicio={somarExercicio} setSomarExercicio={setSomarExercicio} refazer={() => { setManual(null); setPasso(0) }} />
         )}
         {erro && <p className="text-sm text-red-400">{erro}</p>}
@@ -173,13 +177,31 @@ export default function MetaPage() {
 
 type Valores = { calorias: number; proteina_g: number; carboidrato_g: number; gordura_g: number }
 
-function Resultado({ final, gasto, abaixoDoMinimo, manual, setManual, calculada, somarExercicio, setSomarExercicio, refazer }: {
+function Resultado({ final, gasto, abaixoDoMinimo, manual, setManual, somarExercicio, setSomarExercicio, refazer }: {
   final: Valores; gasto: number; abaixoDoMinimo: boolean
-  manual: null | Record<keyof Valores, string>; setManual: (m: null | Record<keyof Valores, string>) => void; calculada: Valores | null
+  manual: null | Record<keyof Valores, string>; setManual: (m: null | Record<keyof Valores, string>) => void
   somarExercicio: boolean; setSomarExercicio: (v: boolean) => void; refazer: () => void
 }) {
   const kcal = useContagem(final.calorias, 1100)
-  const somaMacros = caloriasDosMacros(final)
+  const pct = percentuais(final)
+  // Proporção de referência: mudar as calorias redistribui os macros a partir dela
+  // (evita perder a proporção enquanto a pessoa digita número por número)
+  const base = useRef<Omit<Valores, 'calorias'>>(final)
+  const texto = (v: Valores) => ({ calorias: String(v.calorias), proteina_g: String(v.proteina_g), carboidrato_g: String(v.carboidrato_g), gordura_g: String(v.gordura_g) })
+  const mudarCalorias = (t: string) => {
+    const n = inteiro(t)
+    if (!manual) return
+    if (!(n > 0)) { setManual({ ...manual, calorias: t }); return }
+    setManual({ ...texto(ajustarPorCalorias(base.current, n)), calorias: t })
+  }
+  const mudarMacro = (k: Exclude<keyof Valores, 'calorias'>, t: string) => {
+    if (!manual) return
+    const n = inteiro(t)
+    const atual = { calorias: inteiro(manual.calorias) || 0, proteina_g: inteiro(manual.proteina_g) || 0, carboidrato_g: inteiro(manual.carboidrato_g) || 0, gordura_g: inteiro(manual.gordura_g) || 0 }
+    const novo = ajustarPorMacro(atual, k, n >= 0 ? n : 0)
+    base.current = { proteina_g: novo.proteina_g, carboidrato_g: novo.carboidrato_g, gordura_g: novo.gordura_g }
+    setManual({ ...texto(novo), [k]: t })
+  }
   const macros: [keyof Valores, string, string][] = [['carboidrato_g', 'Carboidrato', 'text-lime-400'], ['proteina_g', 'Proteína', 'text-emerald-400'], ['gordura_g', 'Gordura', 'text-amber-400']]
   return (
     <>
@@ -192,7 +214,7 @@ function Resultado({ final, gasto, abaixoDoMinimo, manual, setManual, calculada,
           {macros.map(([k, r, c]) => (
             <div key={k} className="bg-zinc-950/50 rounded-2xl py-3">
               <p className={`text-xl font-bold tabular-nums ${c}`}>{fmt(final[k])}g</p>
-              <p className="text-[11px] text-zinc-400 mt-0.5">{r}</p>
+              <p className="text-[11px] text-zinc-400 mt-0.5">{r} · {pct[k as Exclude<keyof Valores, 'calorias'>]}%</p>
             </div>
           ))}
         </div>
@@ -207,17 +229,17 @@ function Resultado({ final, gasto, abaixoDoMinimo, manual, setManual, calculada,
 
       {manual ? (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-3 animate-fade-up">
-          <Input label="Calorias (kcal)" inputMode="numeric" value={manual.calorias} onChange={e => setManual({ ...manual, calorias: e.target.value })}
+          <Input label="Calorias (kcal)" inputMode="numeric" value={manual.calorias} onChange={e => mudarCalorias(e.target.value)}
             error={!(final.calorias >= 800 && final.calorias <= 6000) ? 'Entre 800 e 6.000 kcal' : undefined} />
           <div className="grid grid-cols-3 gap-2">
-            {macros.map(([k, r]) => <Input key={k} label={`${r} (g)`} inputMode="numeric" value={manual[k]} onChange={e => setManual({ ...manual, [k]: e.target.value })} />)}
+            {macros.map(([k, r]) => <Input key={k} label={`${r} (g)`} inputMode="numeric" value={manual[k]} onChange={e => mudarMacro(k as Exclude<keyof Valores, 'calorias'>, e.target.value)} />)}
           </div>
-          {Math.abs(somaMacros - final.calorias) > 50 && <p className="text-xs text-zinc-400">Os macros somam {fmt(somaMacros)} kcal.</p>}
+          <p className="text-xs text-zinc-500">Mudou as calorias? Os macros acompanham na mesma proporção. Mudou um macro? As calorias são recalculadas.</p>
           <button type="button" onClick={() => setManual(null)} className="text-sm text-green-400 self-start">Voltar ao cálculo automático</button>
         </div>
       ) : (
         <div className="flex gap-2">
-          <button type="button" onClick={() => calculada && setManual({ calorias: String(final.calorias), proteina_g: String(final.proteina_g), carboidrato_g: String(final.carboidrato_g), gordura_g: String(final.gordura_g) })}
+          <button type="button" onClick={() => { base.current = final; setManual(texto(final)) }}
             className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 py-3 text-sm font-semibold text-zinc-200 hover:border-zinc-600"><Pencil className="w-4 h-4" />Ajustar valores</button>
           <button type="button" onClick={refazer} className="flex-1 rounded-xl border border-zinc-800 bg-zinc-900 py-3 text-sm font-semibold text-zinc-200 hover:border-zinc-600">Refazer cálculo</button>
         </div>

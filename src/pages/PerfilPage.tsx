@@ -17,6 +17,7 @@ export default function PerfilPage() {
   const [nascimento, setNascimento] = useState('')
   const [fotoUrl, setFotoUrl] = useState<string | null>(null)
   const [novoEmail, setNovoEmail] = useState('')
+  const [trocandoEmail, setTrocandoEmail] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [enviandoFoto, setEnviandoFoto] = useState(false)
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
@@ -28,7 +29,12 @@ export default function PerfilPage() {
       .eq('id', user.id).single().then(async ({ data }) => {
         if (!data) return
         setPerfil(data as Perfil)
-        setNome(data.nome ?? ''); setTelefone(data.telefone ?? ''); setNascimento(data.data_nascimento ?? '')
+        setNome(data.nome ?? user.user_metadata?.nome ?? ''); setTelefone(data.telefone ?? ''); setNascimento(data.data_nascimento ?? '')
+        // Data de nascimento informada na meta diária vale para o perfil também
+        if (!data.data_nascimento) {
+          const { data: meta } = await supabase.from('metas_nutricionais').select('nascimento').eq('user_id', user.id).maybeSingle()
+          if (meta?.nascimento) setNascimento(meta.nascimento)
+        }
         if (data.avatar_url) {
           // Bucket privado: URL temporária assinada
           const { data: s } = await supabase.storage.from('avatars').createSignedUrl(data.avatar_url, 3600)
@@ -75,7 +81,7 @@ export default function PerfilPage() {
     if (!validarEmail(novoEmail)) { setMsg({ tipo: 'erro', texto: 'Informe um e-mail válido.' }); return }
     const { error } = await supabase.auth.updateUser({ email: novoEmail.trim() }, { emailRedirectTo: `${window.location.origin}/perfil` })
     setMsg(error ? { tipo: 'erro', texto: traduzirErroAuth(error.message) } : { tipo: 'ok', texto: 'Enviamos links de confirmação para o e-mail atual e o novo. A troca vale após a confirmação.' })
-    if (!error) setNovoEmail('')
+    if (!error) { setNovoEmail(''); setTrocandoEmail(false) }
   }
 
   if (!perfil) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
@@ -98,17 +104,29 @@ export default function PerfilPage() {
         <form onSubmit={salvar} className="flex flex-col gap-4" noValidate>
           <Input label="Nome" value={nome} onChange={e => setNome(e.target.value)} maxLength={120} autoComplete="name" />
           <Input label="Telefone (opcional)" value={telefone} onChange={e => setTelefone(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="(11) 99999-9999" />
+          <Input label="E-mail" value={perfil.email ?? user?.email ?? ''} readOnly disabled hint="Para trocar, use “Alterar e-mail” abaixo." />
           <Input label="Data de nascimento (opcional)" type="date" value={nascimento} onChange={e => setNascimento(e.target.value)} />
           <Button type="submit" loading={salvando}>Salvar alterações</Button>
         </form>
       </Card>
 
       <Card>
-        <h2 className="font-semibold mb-3">Alterar e-mail</h2>
-        <div className="flex flex-col gap-3">
-          <Input label="Novo e-mail" type="email" value={novoEmail} onChange={e => setNovoEmail(e.target.value)} autoComplete="email" />
-          <Button variant="secondary" onClick={trocarEmail}>Solicitar troca</Button>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="font-semibold">Alterar e-mail</h2>
+            <p className="text-sm text-zinc-500 truncate">Atual: {perfil.email ?? user?.email}</p>
+          </div>
+          {!trocandoEmail && <Button variant="secondary" size="sm" onClick={() => setTrocandoEmail(true)}>Alterar</Button>}
         </div>
+        {trocandoEmail && (
+          <div className="flex flex-col gap-3 mt-3">
+            <Input label="Novo e-mail" type="email" value={novoEmail} onChange={e => setNovoEmail(e.target.value)} autoComplete="email" autoFocus />
+            <div className="flex gap-2">
+              <Button variant="ghost" className="flex-1" onClick={() => { setTrocandoEmail(false); setNovoEmail('') }}>Cancelar</Button>
+              <Button variant="secondary" className="flex-1" onClick={trocarEmail}>Solicitar troca</Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card>

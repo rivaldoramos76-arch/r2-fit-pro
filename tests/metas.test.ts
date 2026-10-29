@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { taxaBasal, gastoDiario, calcularMeta, distribuirMacros, idadeEm, caloriasDosMacros, CALORIAS_MINIMAS } from '../src/lib/metas'
-import { grupoRefeicao, escalarAlimento, recentesUnicos } from '../src/lib/diario'
+import { taxaBasal, gastoDiario, calcularMeta, distribuirMacros, idadeEm, caloriasDosMacros, CALORIAS_MINIMAS, ajustarPorCalorias, ajustarPorMacro, percentuais } from '../src/lib/metas'
+import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade } from '../src/lib/diario'
 
 let ok = 0
 const t = async (n: string, f: () => void | Promise<void>) => { await f(); ok++; console.log('✓', n) }
@@ -47,6 +47,21 @@ await t('distribuição de macros respeita as calorias', () => {
   assert.equal(m.carboidrato_g, 262)
 })
 
+await t('meta manual: calorias e macros acompanham um ao outro', () => {
+  const base = { proteina_g: 150, carboidrato_g: 200, gordura_g: 60 } // 1940 kcal
+  const mais = ajustarPorMacro({ ...base, calorias: 1940 }, 'proteina_g', 175)
+  assert.equal(mais.calorias, 2040) // +25 g × 4
+  assert.equal(mais.carboidrato_g, 200)
+  assert.equal(ajustarPorMacro({ ...base, calorias: 1940 }, 'gordura_g', 50).calorias, 1850)
+  const dobro = ajustarPorCalorias(base, 3880)
+  assert.deepEqual([dobro.proteina_g, dobro.carboidrato_g, dobro.gordura_g], [300, 400, 120])
+  assert.ok(Math.abs(caloriasDosMacros(ajustarPorCalorias(base, 2500)) - 2500) <= 10)
+  const vazio = ajustarPorCalorias({ proteina_g: 0, carboidrato_g: 0, gordura_g: 0 }, 2000)
+  assert.ok(Math.abs(caloriasDosMacros(vazio) - 2000) <= 10)
+  const p = percentuais(base)
+  assert.equal(p.proteina_g + p.carboidrato_g + p.gordura_g, 100)
+})
+
 await t('idade completa a partir do nascimento', () => {
   const hoje = new Date(2026, 9, 29)
   assert.equal(idadeEm('1990-10-29', hoje), 36)
@@ -77,6 +92,27 @@ await t('recentes: sem repetidos e mais novos primeiro', () => {
     { nome: 'Ovo', quantidade: '1 un', calorias: 70, proteina_g: 6, carboidrato_g: 0, gordura_g: 5, created_at: '2026-10-27T12:00:00Z' },
   ])
   assert.deepEqual(r.map(x => x.nome), ['Arroz', 'Ovo'])
+})
+
+await t('quantidade editável: 4 ovos → 2 ovos, 150 g → 200 g', () => {
+  assert.deepEqual(lerQuantidade('4 ovos'), { valor: 4, unidade: 'ovos' })
+  assert.deepEqual(lerQuantidade('150g'), { valor: 150, unidade: 'g' })
+  assert.deepEqual(lerQuantidade('1,5 xícara'), { valor: 1.5, unidade: 'xícara' })
+  assert.deepEqual(lerQuantidade('1/2 copo'), { valor: 0.5, unidade: 'copo' })
+  assert.deepEqual(lerQuantidade('½ maçã'), { valor: 0.5, unidade: 'maçã' })
+  assert.equal(lerQuantidade('uma porção'), null)
+  const ovos = { nome: 'Ovo cozido', quantidade: '4 ovos', calorias: 312, proteina_g: 25, carboidrato_g: 2.4, gordura_g: 21 }
+  const dois = ajustarQuantidade(ovos, 2)
+  assert.equal(dois.quantidade, '2 ovos'); assert.equal(dois.calorias, 156); assert.equal(dois.proteina_g, 12.5)
+  assert.equal(ajustarQuantidade(ovos, 1).quantidade, '1 ovo')
+  const arroz = { nome: 'Arroz', quantidade: '150 g', calorias: 195, proteina_g: 4, carboidrato_g: 42, gordura_g: 0.4 }
+  assert.equal(ajustarQuantidade(arroz, 200).quantidade, '200 g'); assert.equal(ajustarQuantidade(arroz, 200).calorias, 260)
+  assert.equal(ajustarQuantidade({ ...arroz, quantidade: '1 colher' }, 3).quantidade, '3 colheres')
+  assert.equal(ajustarQuantidade({ ...arroz, quantidade: '2 colheres' }, 1).quantidade, '1 colher')
+  assert.equal(ajustarQuantidade({ ...arroz, quantidade: '1 unidade (50 g)' }, 2).quantidade, '2 unidades (50 g)')
+  assert.equal(passoQuantidade({ valor: 150, unidade: 'g' }), 10)
+  assert.equal(passoQuantidade({ valor: 4, unidade: 'ovos' }), 1)
+  assert.equal(passoQuantidade({ valor: 0.5, unidade: 'copo' }), 0.5)
 })
 
 console.log(`\n${ok} testes de metas e diário passaram`)

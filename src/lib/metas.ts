@@ -97,3 +97,28 @@ export function idadeEm(nascimento: string, hoje = new Date()): number {
 
 /** Calorias dos macros (4/4/9 kcal por grama). */
 export const caloriasDosMacros = (m: Omit<Meta, 'calorias'>) => m.proteina_g * 4 + m.carboidrato_g * 4 + m.gordura_g * 9
+
+type Macros = Omit<Meta, 'calorias'>
+
+/** Meta manual: mudar as calorias redistribui os macros mantendo a proporção de cada um. */
+export function ajustarPorCalorias(atual: Macros, calorias: number): Meta {
+  const base = caloriasDosMacros(atual)
+  if (base <= 0) {
+    // sem referência: 30% proteína, 40% carboidrato, 30% gordura
+    return { calorias, proteina_g: Math.round((calorias * 0.3) / 4), carboidrato_g: Math.round((calorias * 0.4) / 4), gordura_g: Math.round((calorias * 0.3) / 9) }
+  }
+  const f = calorias / base
+  return { calorias, proteina_g: Math.round(atual.proteina_g * f), carboidrato_g: Math.round(atual.carboidrato_g * f), gordura_g: Math.round(atual.gordura_g * f) }
+}
+
+/** Meta manual: mudar um macro soma/subtrai a diferença nas calorias (4/4/9 kcal por grama). */
+export function ajustarPorMacro(atual: Meta, chave: keyof Macros, gramas: number): Meta {
+  const kcalPorGrama = chave === 'gordura_g' ? 9 : 4
+  return { ...atual, [chave]: gramas, calorias: Math.max(0, Math.round(atual.calorias + (gramas - atual[chave]) * kcalPorGrama)) }
+}
+
+/** Percentual das calorias vindo de cada macro. */
+export function percentuais(m: Macros) {
+  const total = caloriasDosMacros(m) || 1
+  return { proteina_g: Math.round((m.proteina_g * 4 * 100) / total), carboidrato_g: Math.round((m.carboidrato_g * 4 * 100) / total), gordura_g: Math.round((m.gordura_g * 9 * 100) / total) }
+}

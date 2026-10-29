@@ -82,6 +82,40 @@ Retorne APENAS JSON válido neste formato exato:
   return JSON.parse(content) as PlanoAlimentar
 }
 
+/** Soma as calorias dos alimentos em cada refeição e no dia (após edição manual ou pela IA). */
+export function recalcularDieta(plano: PlanoAlimentar): PlanoAlimentar {
+  const refeicoes = (plano.refeicoes ?? []).map(r => ({
+    ...r,
+    alimentos: r.alimentos ?? [],
+    calorias: Math.round((r.alimentos ?? []).reduce((s, a) => s + (Number(a.calorias) || 0), 0)),
+  }))
+  return { ...plano, refeicoes, calorias_dia: refeicoes.reduce((s, r) => s + r.calorias, 0) }
+}
+
+/** Ajusta um plano existente conforme o pedido da pessoa (ex.: "troque o frango por peixe"). */
+export async function ajustarDieta(plano: PlanoAlimentar, pedido: string): Promise<PlanoAlimentar> {
+  const prompt = `Você é um nutricionista. Ajuste o plano alimentar abaixo conforme o pedido do cliente.
+Mantenha o mesmo formato JSON, altere só o necessário, recalcule calorias e macros e responda em português do Brasil.
+
+Pedido do cliente: ${pedido}
+
+Plano atual:
+${JSON.stringify(plano)}
+
+Retorne APENAS o JSON do plano completo atualizado.`
+  const response = await chatCompletion({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: prompt }],
+    response_format: { type: 'json_object' },
+    temperature: 0.4,
+  })
+  const content = response.choices[0]?.message?.content
+  if (!content) throw new Error('Resposta vazia da IA')
+  const novo = JSON.parse(content) as PlanoAlimentar
+  if (!Array.isArray(novo.refeicoes) || novo.refeicoes.length === 0) throw new Error('A IA não conseguiu ajustar o plano. Tente descrever de outro jeito.')
+  return recalcularDieta({ ...plano, ...novo, macros: novo.macros ?? plano.macros, dicas: novo.dicas ?? plano.dicas })
+}
+
 // --- Geração de Treino ---
 
 export type { PlanoTreino } from './treinoModel'

@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
-import { gerarDieta } from '../lib/openai'
-import type { DietaFormData } from '../lib/openai'
+import { gerarDieta, ajustarDieta, recalcularDieta } from '../lib/openai'
+import type { DietaFormData, PlanoAlimentar } from '../lib/openai'
+import EditorDieta from '../components/dieta/EditorDieta'
+import { Pencil, Sparkles } from 'lucide-react'
 import type { Dieta } from '../types'
 import { Button, Input, Select, Textarea, Card, Badge, Spinner, EmptyState, SectionHeader } from '../components/UI'
 
@@ -170,12 +172,61 @@ function DietDetail({ id }: { id: string }) {
   const navigate = useNavigate()
   const [dieta, setDieta] = useState<Dieta | null>(null)
   const [loading, setLoading] = useState(true)
+  const [rascunho, setRascunho] = useState<{ nome: string; plano: PlanoAlimentar } | null>(null)
+  const [pedidoIA, setPedidoIA] = useState('')
+  const [ajustando, setAjustando] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [aviso, setAviso] = useState('')
   useEffect(() => {
     supabase.from('dietas').select('*').eq('id', id).single().then(({ data }) => { setDieta(data); setLoading(false) })
   }, [id])
   if (loading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
   if (!dieta) return <div className="text-center py-16 text-zinc-500">Dieta não encontrada</div>
   const plano = dieta.plano ?? {}
+
+  const gravar = async (nome: string, novo: PlanoAlimentar) => {
+    const final = { ...novo, nome: nome.trim() || dieta.nome }
+    const { data, error } = await supabase.from('dietas')
+      .update({ nome: final.nome, calorias_dia: final.calorias_dia, objetivo: final.objetivo || dieta.objetivo, plano: final })
+      .eq('id', dieta.id).select().single()
+    if (error) throw new Error(error.message)
+    setDieta(data as Dieta)
+  }
+  const salvarEdicao = async () => {
+    if (!rascunho) return
+    setErro(''); setSalvando(true)
+    try { await gravar(rascunho.nome, rascunho.plano); setRascunho(null); setAviso('Plano atualizado.') }
+    catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível salvar') }
+    finally { setSalvando(false) }
+  }
+  const ajustarComIA = async () => {
+    if (!pedidoIA.trim()) return
+    setErro(''); setAviso(''); setAjustando(true)
+    try {
+      const novo = await ajustarDieta(plano as PlanoAlimentar, pedidoIA.trim())
+      await gravar(novo.nome || dieta.nome, novo)
+      setPedidoIA(''); setAviso('Pronto! A IA ajustou seu plano.')
+    } catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível ajustar') }
+    finally { setAjustando(false) }
+  }
+
+  if (rascunho) {
+    return (
+      <div className="flex flex-col gap-4" translate="no">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setRascunho(null)} className="text-zinc-400 p-1.5 -ml-1.5 rounded-lg hover:bg-zinc-800" aria-label="Cancelar edição">←</button>
+          <div className="flex-1 min-w-0"><h1 className="text-xl font-bold text-zinc-100">Editar plano</h1><p className="text-sm text-zinc-500">Toque numa refeição para mudar alimentos e quantidades</p></div>
+        </div>
+        <EditorDieta plano={rascunho.plano} onChange={p => setRascunho(r => r && { ...r, plano: p })} nome={rascunho.nome} onNome={n => setRascunho(r => r && { ...r, nome: n })} />
+        {erro && <p className="text-sm text-red-400">{erro}</p>}
+        <div className="sticky bottom-24 flex gap-2 bg-zinc-950/90 backdrop-blur py-2">
+          <Button variant="secondary" className="flex-1" onClick={() => setRascunho(null)}>Cancelar</Button>
+          <Button className="flex-[2]" loading={salvando} onClick={salvarEdicao}>Salvar plano</Button>
+        </div>
+      </div>
+    )
+  }
   const del = async () => {
     if (!confirm('Excluir este plano?')) return
     await supabase.from('dietas').delete().eq('id', id)
@@ -189,8 +240,11 @@ function DietDetail({ id }: { id: string }) {
           <h1 className="text-xl font-bold text-zinc-100 truncate">{dieta.nome}</h1>
           <p className="text-sm text-zinc-500">{new Date(dieta.created_at).toLocaleDateString('pt-BR', { dateStyle: 'long' })}</p>
         </div>
-        <button onClick={del} className="text-red-500/60 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10">🗑</button>
+        <button onClick={() => { setAviso(''); setRascunho({ nome: dieta.nome, plano: recalcularDieta({ ...(plano as PlanoAlimentar), refeicoes: plano.refeicoes ?? [] }) }) }}
+          className="flex items-center gap-1.5 text-sm font-semibold text-green-400 px-3 py-1.5 rounded-lg border border-green-500/30 hover:bg-green-500/10"><Pencil className="w-4 h-4" />Editar</button>
+        <button onClick={del} aria-label="Excluir plano" className="text-red-500/60 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10">🗑</button>
       </div>
+      {aviso && <p role="status" className="text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">{aviso}</p>}
       <Card className="bg-gradient-to-br from-green-500/10 to-transparent border-green-500/20">
         <div className="grid grid-cols-2 gap-4">
           <div><p className="text-xs text-zinc-500">Calorias/dia</p><p className="text-3xl font-bold text-green-400">{plano.calorias_dia}</p><p className="text-xs text-zinc-500">kcal</p></div>
@@ -201,6 +255,13 @@ function DietDetail({ id }: { id: string }) {
           </>}</div>
         </div>
         <div className="mt-3 pt-3 border-t border-green-500/15"><Badge variant="green">{plano.objetivo}</Badge></div>
+      </Card>
+      <Card>
+        <p className="font-semibold text-zinc-100 flex items-center gap-2"><Sparkles className="w-4 h-4 text-green-400" />Ajustar com IA</p>
+        <p className="text-xs text-zinc-500 mt-1">Ex.: “troque o frango do almoço por peixe”, “sem lactose”, “diminua para 1.800 kcal”.</p>
+        <Textarea value={pedidoIA} onChange={e => setPedidoIA(e.target.value)} rows={2} placeholder="O que você quer mudar?" className="mt-3" aria-label="Pedido de ajuste para a IA" />
+        {erro && <p className="text-sm text-red-400 mt-2">{erro}</p>}
+        <Button className="w-full mt-3" loading={ajustando} disabled={!pedidoIA.trim()} onClick={ajustarComIA}><Sparkles className="w-4 h-4" />Ajustar plano</Button>
       </Card>
       <div>
         <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Refeições ({plano.refeicoes?.length ?? 0})</h2>

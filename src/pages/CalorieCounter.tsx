@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Plus, Trash2, Target } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Trash2, Target, Pencil } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { REFEICOES, grupoRefeicao, hojeLocal, somarDias, rotuloDia } from '../lib/diario'
@@ -9,7 +9,7 @@ import { useMeta, registrosDoDia, somarTotais } from '../lib/nutricao'
 import type { RegistroAlimento } from '../lib/nutricao'
 import { Spinner } from '../components/UI'
 import { fmt } from '../components/nutricao/Graficos'
-import AdicionarAlimento from '../components/nutricao/AdicionarAlimento'
+import AdicionarAlimento, { EditarRegistro } from '../components/nutricao/AdicionarAlimento'
 
 const ICONE_REFEICAO: Record<Refeicao, string> = { 'Café da manhã': '☕', Almoço: '🍽️', Jantar: '🌙', Lanches: '🍎' }
 
@@ -32,9 +32,11 @@ export default function CalorieCounter() {
   }, [user, data])
   useEffect(() => { setCarregando(true); carregar() }, [carregar])
 
+  const [editando, setEditando] = useState<RegistroAlimento | null>(null)
   const remover = async (id: string) => {
     if (!confirm('Remover este alimento?')) return
     setItens(p => p.filter(i => i.id !== id))
+    setEditando(null)
     await supabase.from('food_logs').delete().eq('id', id)
   }
 
@@ -95,11 +97,14 @@ export default function CalorieCounter() {
               {daRefeicao.length > 0 && (
                 <ul className="divide-y divide-zinc-800/70 border-t border-zinc-800/70">
                   {daRefeicao.map(it => (
-                    <li key={it.id} className="group flex items-center gap-2 pl-4 pr-2 py-2.5">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-zinc-100 truncate">{it.nome}</p>
-                        <p className="text-xs text-zinc-500 truncate">{it.quantidade || '1 porção'} · P {fmt(it.proteina_g)} · C {fmt(it.carboidrato_g)} · G {fmt(it.gordura_g)}</p>
-                      </div>
+                    <li key={it.id} className="group flex items-center gap-2 pr-2">
+                      <button type="button" onClick={() => setEditando(it)} aria-label={`Editar ${it.nome}`} className="flex-1 min-w-0 flex items-center gap-2 pl-4 py-2.5 text-left hover:bg-zinc-800/40 transition">
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm text-zinc-100 truncate">{it.nome}</span>
+                          <span className="block text-xs text-zinc-500 truncate">{it.quantidade || '1 porção'} · P {fmt(it.proteina_g)} · C {fmt(it.carboidrato_g)} · G {fmt(it.gordura_g)}</span>
+                        </span>
+                        <Pencil className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                      </button>
                       <span className="text-sm font-semibold tabular-nums text-zinc-200">{fmt(it.calorias)}</span>
                       <button onClick={() => remover(it.id)} aria-label={`Remover ${it.nome}`} className="p-2 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-zinc-800 transition"><Trash2 className="w-4 h-4" /></button>
                     </li>
@@ -114,6 +119,9 @@ export default function CalorieCounter() {
         })
       )}
 
+      {editando && (
+        <EditarRegistro registro={editando} onClose={() => setEditando(null)} onSalvo={carregar} onRemover={() => remover(editando.id)} />
+      )}
       {user && adicionarEm && (
         <AdicionarAlimento userId={user.id} data={data} refeicaoInicial={adicionarEm} onClose={() => setAdicionarEm(null)} onSalvo={carregar} />
       )}

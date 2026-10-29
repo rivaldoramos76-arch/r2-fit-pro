@@ -51,6 +51,8 @@ export default function WorkoutTimerPage() {
   const [treinoCompleto, setTreinoCompleto] = useState(false)
   const [erroAudio, setErroAudio] = useState('')
   const playerRef = useRef<TreinoPlayer | null>(null)
+  const [precisaToque, setPrecisaToque] = useState(false)
+  const recuperando = useRef(false)
 
   // Volume e modo silencioso padrão definidos em Configurações
   useEffect(() => {
@@ -103,6 +105,11 @@ export default function WorkoutTimerPage() {
     const tick = () => {
       const p = playerRef.current
       if (!p) return
+      // O sistema pausou o áudio (tela bloqueada, ligação): ao voltar, segue do ponto certo
+      if (p.interrompido && document.visibilityState === 'visible' && !recuperando.current) {
+        recuperando.current = true
+        p.recuperar().then(() => setPrecisaToque(false)).catch(() => setPrecisaToque(true)).finally(() => { recuperando.current = false })
+      }
       setT(p.tempo())
       setPausado(p.pausado)
       p.verificar()
@@ -144,7 +151,7 @@ export default function WorkoutTimerPage() {
       setTela('rodando')
       pedirWakeLock()
       if ('mediaSession' in navigator) {
-        navigator.mediaSession.setActionHandler('play', () => { p.retomar(); setPausado(false) })
+        navigator.mediaSession.setActionHandler('play', () => { p.retomar().catch(() => setPrecisaToque(true)); setPausado(false) })
         navigator.mediaSession.setActionHandler('pause', () => { p.pausar(); setPausado(true) })
       }
     }).catch(() => {
@@ -157,7 +164,7 @@ export default function WorkoutTimerPage() {
   const alternarPausa = () => {
     const p = playerRef.current
     if (!p) return
-    if (p.pausado) { p.retomar(); pedirWakeLock() } else { p.pausar(); liberarWakeLock() }
+    if (p.pausado) { p.retomar().catch(() => setPrecisaToque(true)); pedirWakeLock() } else { p.pausar(); liberarWakeLock() }
     setPausado(!pausado)
   }
 
@@ -253,7 +260,7 @@ export default function WorkoutTimerPage() {
               <p className="text-xs text-zinc-500 mt-2 max-w-xs">
                 {vozes === 'fallback'
                   ? 'Vozes gravadas indisponíveis: usando a voz do navegador. Neste modo, mantenha a tela ligada.'
-                  : 'Pode bloquear a tela: os avisos sonoros continuam tocando.'}
+                  : 'Pode bloquear a tela: os avisos sonoros continuam tocando. Se o celular pausar o som, ao desbloquear o treino continua do ponto certo.'}
               </p>
             </div>
           )}
@@ -273,6 +280,10 @@ export default function WorkoutTimerPage() {
           )}
           {tela === 'rodando' && fase?.tipo === 'final' && (
             <div className="text-center"><p className="text-6xl">🎉</p><p className="text-green-400 font-semibold mt-3">Todas as séries finalizadas!</p></div>
+          )}
+          {precisaToque && tela === 'rodando' && (
+            <button onClick={() => playerRef.current?.recuperar().then(() => setPrecisaToque(false)).catch(() => {})}
+              className="text-sm font-semibold px-4 py-2 rounded-xl bg-green-500 text-zinc-950 animate-pulse">Toque para continuar o áudio</button>
           )}
           {pausado && tela === 'rodando' && <span className="text-xs font-bold uppercase tracking-wide px-3 py-1 rounded-full bg-yellow-500/15 text-yellow-400">Pausado</span>}
         </div>

@@ -11,6 +11,7 @@ import type { RegistroAlimento } from '../lib/nutricao'
 import { REFEICOES, grupoRefeicao, hojeLocal } from '../lib/diario'
 import type { Refeicao } from '../lib/diario'
 import { AnelCalorias, BarraMacro, fmt } from '../components/nutricao/Graficos'
+import InstalarApp from '../components/InstalarApp'
 
 const ICONE_REFEICAO: Record<Refeicao, string> = { 'Café da manhã': '☕', Almoço: '🍽️', Jantar: '🌙', Lanches: '🍎' }
 
@@ -66,6 +67,8 @@ export default function DashboardPage() {
         <p className="text-zinc-500 text-sm first-letter:uppercase">{hoje}</p>
         <h1 className="text-2xl font-bold text-zinc-50 mt-0.5">{greeting()}, {nomeUsuario}</h1>
       </div>
+
+      <InstalarApp />
 
       {!carregandoAcesso && !premium && (
         <Link to="/assinatura" className="block bg-gradient-to-br from-green-500/20 to-zinc-900 border border-green-500/30 rounded-2xl p-4 animate-fade-up">
