@@ -143,7 +143,7 @@ export function aparar(s: Float32Array, sr: number, limiar = 0.012): Float32Arra
  *  1) ganho automático lento (pela média de energia, sobe no máximo `ganhoMax` vezes e só
  *     onde há voz), 2) limitador de picos com olhar à frente, que reduz o volume antes de
  *     um pico em vez de achatar a onda. O pico final fica em 0,97. */
-export function maximizar(s: Float32Array, sr: number, { alvo = 0.45, ganhoMax = 5 } = {}): Float32Array {
+export function maximizar(s: Float32Array, sr: number, { alvo = 0.55, ganhoMax = 6 } = {}): Float32Array {
   const n = s.length
   if (!n) return s
   let picoIn = 0
@@ -235,6 +235,19 @@ export function duracoes(clips: Record<ClipKey, Float32Array>): Record<ClipKey, 
   return Object.fromEntries(CLIP_KEYS.map(k => [k, clips[k].length / TAXA])) as Record<ClipKey, number>
 }
 
+/** WAV silencioso (usado para pedir ao Android que abaixe a música durante os avisos). */
+export function silencioWav(seg: number, sr = 8000): Blob {
+  const n = Math.round(seg * sr)
+  const buf = new ArrayBuffer(44 + n * 2)
+  const dv = new DataView(buf)
+  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)) }
+  w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE')
+  w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true)
+  dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true)
+  w(36, 'data'); dv.setUint32(40, n * 2, true)
+  return new Blob([buf], { type: 'audio/wav' })
+}
+
 // --- Player ---
 //
 // Três modos:
@@ -288,6 +301,15 @@ export class TreinoPlayer {
   private fontes: AudioBufferSourceNode[] = []
   private t0Ctx = 0
   private pausadoMix = false
+  // Android: durante cada aviso toca um áudio curto e silencioso (< 5 s). O Chrome pede ao
+  // sistema um "foco de áudio passageiro", e o Android abaixa a música por um instante,
+  // como no GPS. O relógio vem do próprio Web Audio (funciona em segundo plano).
+  private abaixarMusica = false
+  private duckCurto: HTMLAudioElement | null = null
+  private duckLongo: HTMLAudioElement | null = null
+  private urlsDuck: string[] = []
+  private relogio: ScriptProcessorNode | null = null
+  private proximoDuck = 0
   // modo voz
   private t0 = 0
   private pausadoEm: number | null = null
@@ -295,8 +317,10 @@ export class TreinoPlayer {
   private proximoCue = 0
   private timer: ReturnType<typeof setInterval> | null = null
 
-  constructor(cfg: ConfigCrono, clips: Record<ClipKey, Float32Array> | null, ouv: Ouvintes, modoSom: ModoSom = 'musica') {
+  constructor(cfg: ConfigCrono, clips: Record<ClipKey, Float32Array> | null, ouv: Ouvintes, modoSom: ModoSom = 'musica',
+    opcoes: { abaixarMusica?: boolean } = {}) {
     this.ouv = ouv
+    this.abaixarMusica = !!opcoes.abaixarMusica
     this.modo = !clips ? 'voz' : modoSom === 'musica' ? 'mix' : 'audio'
     this.crono = montarCronograma(cfg, clips ? duracoes(clips) : {})
     if (this.modo === 'mix') this.clips = clips
@@ -358,8 +382,43 @@ export class TreinoPlayer {
       if (this.parado) return
       if (ctx.state !== 'running' && !this.pausaPedida && !this.pausadoMix) this.interrompido = true
     })
+    if (this.abaixarMusica) this.prepararAbaixar(ctx)
     await ctx.resume()
     this.agendarDe(0)
+  }
+
+  private prepararAbaixar(ctx: Ctx) {
+    const criar = (seg: number) => {
+      const url = URL.createObjectURL(silencioWav(seg))
+      this.urlsDuck.push(url)
+      const a = new Audio(url)
+      a.preload = 'auto'
+      a.setAttribute('playsinline', '')
+      return a
+    }
+    this.duckCurto = criar(1.4)
+    this.duckLongo = criar(4.5)
+    // Batida do relógio de áudio: dispara no tempo certo mesmo com a tela bloqueada
+    const relogio = ctx.createScriptProcessor(2048, 1, 1)
+    const mudo = ctx.createGain()
+    mudo.gain.value = 0
+    relogio.connect(mudo); mudo.connect(ctx.destination)
+    relogio.onaudioprocess = () => this.marcarAbaixar()
+    this.relogio = relogio
+  }
+
+  /** Abaixa a música (Android) quando um aviso está para começar. */
+  private marcarAbaixar() {
+    if (!this.ctx || this.parado || this.pausadoMix || this.interrompido || !this.duckCurto) return
+    const t = this.ctx.currentTime - this.t0Ctx
+    const cues = this.crono.cues
+    while (this.proximoDuck < cues.length && cues[this.proximoDuck].t - 0.3 <= t) {
+      const cue = cues[this.proximoDuck++]
+      if (t > cue.t + 0.3) continue
+      const el = cue.clip === 'fim' ? this.duckLongo! : this.duckCurto
+      try { el.currentTime = 0 } catch { /* ainda carregando */ }
+      el.play().catch(() => {})
+    }
   }
 
   /** Agenda no Web Audio todos os avisos a partir da posição `pos` (s). */
@@ -369,6 +428,8 @@ export class TreinoPlayer {
     this.fontes = []
     this.t0Ctx = ctx.currentTime + 0.05 - pos
     this.baseParede = Date.now() - pos * 1000
+    this.proximoDuck = this.crono.cues.findIndex(c => c.t >= pos - 0.05)
+    if (this.proximoDuck < 0) this.proximoDuck = this.crono.cues.length
     for (const cue of this.crono.cues) {
       if (cue.t < pos - 0.05) continue
       const b = this.buffers[cue.clip]
@@ -487,6 +548,10 @@ export class TreinoPlayer {
     this.timer = null
     for (const f of this.fontes) { try { f.stop() } catch { /* já parou */ } }
     this.fontes = []
+    if (this.relogio) { this.relogio.onaudioprocess = null; this.relogio.disconnect() }
+    for (const d of [this.duckCurto, this.duckLongo]) d?.pause()
+    for (const u of this.urlsDuck) URL.revokeObjectURL(u)
+    this.urlsDuck = []
     this.ctx?.close().catch(() => {})
     this.ctx = null
     if (this.audio) { this.audio.pause(); this.audio.removeAttribute('src'); this.audio.load() }

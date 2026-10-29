@@ -81,7 +81,9 @@ export default function WorkoutTimerPage() {
   }, [user])
   const escolherModo = (m: ModoSom) => {
     setModoSom(m)
-    if (user) salvarPreferencias(user.id, { audio: { ...(prefsAudio.current ?? { volume, mudo }), modo: m } }).catch(() => {})
+    const audio = { ...(prefsAudio.current ?? { volume, mudo, abaixar_musica: true }), modo: m }
+    prefsAudio.current = audio
+    if (user) salvarPreferencias(user.id, { audio }).catch(() => {})
   }
   const wakeRef = useRef<WakeLockSentinel | null>(null)
 
@@ -165,7 +167,7 @@ export default function WorkoutTimerPage() {
     const p = new TreinoPlayer({ series: cfg.series, execSeg: cfg.exec, descansoSeg: cfg.desc }, clips, {
       onSeriesConcluidas: () => { registrar() },
       onFim: () => { setTela('concluido'); liberarWakeLock() },
-    }, modoSom)
+    }, modoSom, { abaixarMusica: sistema === 'android' && prefsAudio.current?.abaixar_musica !== false })
     p.setVolume(volume)
     p.setMudo(mudo)
     playerRef.current = p
@@ -298,7 +300,7 @@ export default function WorkoutTimerPage() {
                     {modoSom === 'musica'
                       ? sistema === 'iphone'
                         ? 'A voz toca junto com a sua música enquanto a tela estiver desbloqueada.'
-                        : 'A voz toca junto com a sua música, sem pausar. Pode trocar de app ou bloquear a tela.'
+                        : 'A voz toca junto com a sua música, que abaixa um pouco só durante os avisos. Pode trocar de app ou bloquear a tela.'
                       : 'Segue tocando com a tela bloqueada, mas o celular pausa a sua música durante o exercício.'}
                   </p>
                   {sistema === 'iphone' && modoSom === 'musica' && <AvisoIphone />}

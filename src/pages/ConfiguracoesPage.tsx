@@ -147,6 +147,7 @@ export default function ConfiguracoesPage() {
               ? 'Só os avisos curtos tocam, junto com a sua música. No iPhone, a tela fica ligada durante o exercício.'
               : 'O som segue com a tela bloqueada, mas o celular pausa a sua música durante o exercício.'}</p>
           </div>
+          <Interruptor rotulo="Abaixar a música durante os avisos" descricao="Android: a música baixa um instante quando a voz fala e volta em seguida." valor={prefs.audio.abaixar_musica} onChange={v => atualizarPrefs({ ...prefs, audio: { ...prefs.audio, abaixar_musica: v } })} />
           <Interruptor rotulo="Iniciar treinos sem som" valor={prefs.audio.mudo} onChange={v => atualizarPrefs({ ...prefs, audio: { ...prefs.audio, mudo: v } })} />
           <label className="flex items-center gap-3 py-3">
             <span className="text-sm font-medium flex-1">Volume padrão</span>
