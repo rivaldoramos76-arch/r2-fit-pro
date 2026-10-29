@@ -33,6 +33,20 @@ function Circulo({ restante, total, tipo }: { restante: number; total: number; t
   )
 }
 
+/** Limite do iPhone para sites: som misturado à música só com a tela desbloqueada. */
+function AvisoIphone() {
+  return (
+    <div role="note" className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100 leading-relaxed">
+      <p className="font-semibold text-amber-300">Só para iPhone</p>
+      <ul className="mt-1 list-disc pl-4 flex flex-col gap-0.5">
+        <li>Funciona com a <b>tela desbloqueada</b>: ela fica ligada sozinha durante o exercício.</li>
+        <li>Desligue o <b>modo silencioso</b> (chave na lateral do iPhone), senão a voz fica muda.</li>
+        <li>Se bloquear a tela, a voz para; ao desbloquear, o treino continua do ponto certo.</li>
+      </ul>
+    </div>
+  )
+}
+
 export default function WorkoutTimerPage() {
   const { treinoId, diaIndex, exId } = useParams<{ treinoId: string; diaIndex: string; exId?: string }>()
   const diaIdx = Number(diaIndex ?? 0)
@@ -283,10 +297,11 @@ export default function WorkoutTimerPage() {
                   <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
                     {modoSom === 'musica'
                       ? sistema === 'iphone'
-                        ? 'A voz toca junto com a sua música. No iPhone, a tela fica ligada durante o exercício e o modo silencioso precisa estar desligado. Se bloquear, ao voltar o treino continua do ponto certo.'
+                        ? 'A voz toca junto com a sua música enquanto a tela estiver desbloqueada.'
                         : 'A voz toca junto com a sua música, sem pausar. Pode trocar de app ou bloquear a tela.'
                       : 'Segue tocando com a tela bloqueada, mas o celular pausa a sua música durante o exercício.'}
                   </p>
+                  {sistema === 'iphone' && modoSom === 'musica' && <AvisoIphone />}
                 </div>
               )}
             </div>
@@ -307,6 +322,9 @@ export default function WorkoutTimerPage() {
           )}
           {tela === 'rodando' && fase?.tipo === 'final' && (
             <div className="text-center"><p className="text-6xl">🎉</p><p className="text-green-400 font-semibold mt-3">Todas as séries finalizadas!</p></div>
+          )}
+          {tela === 'rodando' && sistema === 'iphone' && playerRef.current?.modo === 'mix' && (
+            <p className="text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-full px-3 py-1">iPhone: mantenha a tela desbloqueada</p>
           )}
           {precisaToque && tela === 'rodando' && (
             <button onClick={() => playerRef.current?.recuperar().then(() => setPrecisaToque(false)).catch(() => {})}

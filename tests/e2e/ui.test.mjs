@@ -42,10 +42,10 @@ let ok = 0
 const erros = []
 const t = async (nome, f) => { try { await f(); ok++; console.log('✓', nome) } catch (e) { erros.push(nome); console.log('✗', nome, '\n   ', e.message.split('\n')[0]) } }
 
-async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, nutricao = false, treino = false, viewport = { width: 390, height: 844 } } = {}) {
+async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, nutricao = false, treino = false, userAgent, viewport = { width: 390, height: 844 } } = {}) {
   const chamadasBilling = []
   const gravacoes = []
-  const ctx = await browser.newContext({ viewport })
+  const ctx = await browser.newContext({ viewport, ...(userAgent ? { userAgent } : {}) })
   await ctx.addInitScript(([s, logado]) => {
     sessionStorage.setItem('r2fit:welcome-visto', '1')
     if (logado) localStorage.setItem('sb-mock-auth-token', JSON.stringify(s))
@@ -93,7 +93,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
     return json({})
   })
   if (treino) {
-    await ctx.route('**/audio/*.mp3', r => r.fulfill({ status: 200, contentType: 'audio/wav', body: tomWav() }))
+    await ctx.route('**/audio/*.wav', r => r.fulfill({ status: 200, contentType: 'audio/wav', body: tomWav() }))
     await ctx.addInitScript(() => {
       const w = window
       w.__agendados = []; w.__mediaPlays = 0
@@ -436,6 +436,23 @@ await t('contador: por cima da música toca só os avisos curtos, agendados, e r
   await page.getByRole('heading', { name: 'Exercício concluído!' }).waitFor({ timeout: 40000 })
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
+})
+
+await t('contador: aviso de tela desbloqueada aparece só no iPhone', async () => {
+  const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
+  const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36'
+  for (const [ua, deve] of [[iphone, true], [android, false]]) {
+    const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true, userAgent: ua })
+    await page.goto(BASE + '/assistente/t1/0')
+    await page.getByRole('radio', { name: /Por cima da música/ }).waitFor()
+    assert.equal(await page.getByRole('note').filter({ hasText: 'Só para iPhone' }).count(), deve ? 1 : 0, deve ? 'iPhone vê o aviso' : 'Android não vê')
+    if (deve) {
+      await page.screenshot({ path: `${SHOTS}/contador-iphone.png` })
+      await page.getByRole('radio', { name: /Tela bloqueada/ }).click()
+      assert.equal(await page.getByRole('note').count(), 0, 'aviso só no modo por cima da música')
+    }
+    await ctx.close()
+  }
 })
 
 await t('contador: modo tela bloqueada usa a faixa contínua', async () => {

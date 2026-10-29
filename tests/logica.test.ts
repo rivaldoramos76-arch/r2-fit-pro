@@ -86,15 +86,30 @@ await t('faixa WAV: tamanho e posição dos clipes', () => {
     console.log('   duração', c.total.toFixed(1)+'s', 'tamanho', (blob.size/1024).toFixed(0)+'KB')
   })
 })
-await t('voz maximizada fica bem mais alta sem estourar', () => {
-  const sr = 16000
-  // fala simulada: uma sílaba forte a cada cinco, as outras fracas
-  const s = Float32Array.from({ length: sr }, (_, i) => Math.sin(i / 3) * (Math.floor(i / 1600) % 5 === 0 ? 0.92 : 0.1))
+await t('voz maximizada fica mais alta sem distorcer', () => {
+  const sr = 24000
   const rms = (a: Float32Array) => Math.sqrt(a.reduce((x, v) => x + v * v, 0) / a.length)
-  const m = maximizar(s, sr)
-  assert.ok(rms(m) > rms(s) * 2, `mais alto (${rms(s).toFixed(3)} → ${rms(m).toFixed(3)})`)
-  assert.ok(rms(m.slice(2000, 3000)) > rms(s.slice(2000, 3000)) * 4, 'partes fracas sobem bastante')
-  assert.ok(Math.max(...m.map(Math.abs)) <= 0.97 + 1e-6, 'sem estourar')
+  // Tom constante: a saída precisa continuar um tom puro (sem distorção), só mais alto
+  const sen = Float32Array.from({ length: sr }, (_, i) => Math.sin(2 * Math.PI * 300 * i / sr) * 0.2)
+  const o = maximizar(sen, sr)
+  const a = sen.slice(sr / 2), b = o.slice(sr / 2)
+  let ab = 0, aa = 0, bb = 0
+  for (let i = 0; i < a.length; i++) { ab += a[i] * b[i]; aa += a[i] * a[i]; bb += b[i] * b[i] }
+  assert.ok(ab / Math.sqrt(aa * bb) > 0.9999, 'sem distorção')
+  assert.ok(rms(b) > rms(a) * 1.8, `mais alto (${(rms(b) / rms(a)).toFixed(2)}×)`)
+  // Picos fortes são segurados pelo limitador, sem passar do teto
+  const forte = Float32Array.from({ length: sr }, (_, i) => Math.sin(2 * Math.PI * 300 * i / sr) * (i % 6000 < 600 ? 1 : 0.15))
+  assert.ok(Math.max(...maximizar(forte, sr).map(Math.abs)) <= 0.97 + 1e-6, 'sem estourar')
+})
+
+await t('fim fraco das palavras não é cortado ("cincO", "quatrO")', () => {
+  const sr = 24000
+  const w = Float32Array.from({ length: Math.round(sr * 0.8) }, (_, i) => {
+    const t = i / sr, amp = t < 0.25 ? 0.8 : t < 0.55 ? 0.8 * Math.exp(-(t - 0.25) / 0.08) : 0
+    return Math.sin(2 * Math.PI * 200 * i / sr) * amp
+  })
+  const ap = aparar(w, sr)
+  assert.ok(ap.length / sr > 0.6, `manteve o final (${(ap.length / sr).toFixed(2)} s)`)
 })
 
 await t('chiado no fim da gravação é cortado e não é amplificado', () => {
@@ -104,7 +119,7 @@ await t('chiado no fim da gravação é cortado e não é amplificado', () => {
   const ruido = () => { semente = (semente * 16807) % 2147483647; return semente / 2147483647 * 2 - 1 }
   const s = Float32Array.from({ length: Math.round(sr * 1.2) }, (_, i) => i < sr * 0.4 ? Math.sin(i / 3) * 0.8 : ruido() * 0.025)
   const a = aparar(s, sr)
-  assert.ok(a.length < sr * 0.5, `cortou o chiado (${(a.length / sr).toFixed(2)} s)`)
+  assert.ok(a.length < sr * 0.6, `cortou o chiado (${(a.length / sr).toFixed(2)} s)`)
   assert.ok(Math.abs(a[a.length - 1]) < 0.01, 'termina em silêncio, sem estalo')
   // Mesmo se o chiado ficasse, a maximização não o aumenta
   const m = maximizar(s, sr)
@@ -114,7 +129,7 @@ await t('chiado no fim da gravação é cortado e não é amplificado', () => {
 
 await t('aparar remove silêncio inicial', () => {
   const s = new Float32Array(16000); for (let i = 8000; i < 12000; i++) s[i] = 0.3
-  const r = aparar(s, 16000); assert.ok(r.length < 6000 && Math.abs(r[200]) > 0.5)
+  const r = aparar(s, 16000); assert.ok(r.length < 7000 && Math.abs(r[600]) > 0.5)
 })
 
 await t('plano legado é normalizado sem perder exercícios', () => {

@@ -14,7 +14,7 @@ export type ClipKey = '5' | '4' | '3' | '2' | '1' | 'trabalho' | 'repouso' | 'fi
 export const CLIP_KEYS: ClipKey[] = ['5', '4', '3', '2', '1', 'trabalho', 'repouso', 'fim']
 export const CLIP_TEXTO: Record<ClipKey, string> = {
   '5': 'Cinco', '4': 'Quatro', '3': 'Três', '2': 'Dois', '1': 'Um',
-  trabalho: 'Trabalho!', repouso: 'Repouso!', fim: 'Treino concluído! Todas as séries finalizadas.',
+  trabalho: 'Trabalho!', repouso: 'Repouso!', fim: 'Exercício concluído! Todas as séries finalizadas.',
 }
 
 export type FaseTipo = 'countdown' | 'work' | 'rest_countdown' | 'rest' | 'final'
@@ -113,10 +113,10 @@ export function aparar(s: Float32Array, sr: number, limiar = 0.012): Float32Arra
   let pico = 0
   for (const v of s) pico = Math.max(pico, Math.abs(v))
   if (pico < limiar) return new Float32Array(0)
-  // Detecta a fala por janelas de 10 ms: chiado e respiração no fim da gravação ficam bem
-  // abaixo de 8% do pico e são cortados (antes, qualquer ruído acima de 1,2% ficava).
+  // Detecta a fala por janelas de 10 ms. O fim das palavras ("cincO", "quatrO") é fraco,
+  // então o corte é baixo (2,5% do pico) e sobra uma folga de 150 ms antes da saída suave.
   const jan = Math.max(1, Math.round(sr * 0.01))
-  const corte = Math.max(limiar, pico * 0.08)
+  const corte = Math.max(limiar * 0.5, pico * 0.025)
   const nj = Math.ceil(s.length / jan)
   const rmsJ = (j: number) => {
     let x = 0, n = 0
@@ -127,58 +127,73 @@ export function aparar(s: Float32Array, sr: number, limiar = 0.012): Float32Arra
   while (ja < nj && rmsJ(ja) < corte) ja++
   while (jb > ja && rmsJ(jb) < corte) jb--
   if (ja >= jb && rmsJ(ja) < corte) return new Float32Array(0)
-  const ini = Math.max(0, ja * jan - jan)
-  const fim = Math.min(s.length, (jb + 1) * jan + 4 * jan)
+  const ini = Math.max(0, ja * jan - 2 * jan)
+  const fim = Math.min(s.length, (jb + 1) * jan + 15 * jan)
   const out = s.slice(ini, fim)
-  // Entradas e saídas suaves (evitam estalos e o "rabo" de ruído)
-  const fadeIn = Math.min(out.length, Math.round(sr * 0.005)), fadeOut = Math.min(out.length, Math.round(sr * 0.04))
+  const fadeIn = Math.min(out.length, Math.round(sr * 0.005)), fadeOut = Math.min(out.length, Math.round(sr * 0.1))
   for (let i = 0; i < fadeIn; i++) out[i] *= i / fadeIn
-  for (let i = 0; i < fadeOut; i++) out[out.length - 1 - i] *= i / fadeOut
+  for (let i = 0; i < fadeOut; i++) out[out.length - 1 - i] *= Math.sin((i / fadeOut) * Math.PI / 2)
   let p = 0
   for (const v of out) p = Math.max(p, Math.abs(v))
   if (p > 0) for (let i = 0; i < out.length; i++) out[i] = (out[i] / p) * 0.92
   return out
 }
 
-/** Deixa a fala alta e uniforme para ser ouvida por cima da música: controle automático de
- *  ganho (sobe as partes baixas até um nível alvo, limitado a `ganhoMax`) seguido de um
- *  limitador suave. O pico final fica abaixo de 1, sem estourar. */
-export function maximizar(s: Float32Array, sr: number, { alvo = 0.9, ganhoMax = 12, drive = 2.2 } = {}): Float32Array {
-  if (!s.length) return s
-  const out = new Float32Array(s.length)
-  const ataque = Math.exp(-1 / (sr * 0.004))
-  const soltura = Math.exp(-1 / (sr * 0.05))
-  // Envelope com olhar à frente de 5 ms, para o ganho baixar antes de um pico chegar
-  const adiante = Math.round(sr * 0.005)
-  let env = 0
-  const envs = new Float32Array(s.length)
-  for (let i = 0; i < s.length; i++) {
-    const x = Math.abs(s[Math.min(s.length - 1, i + adiante)])
-    env = x > env ? ataque * env + (1 - ataque) * x : soltura * env + (1 - soltura) * x
-    envs[i] = env
-  }
-  const norm = Math.tanh(drive)
-  // Portão de ruído: abaixo de 6% do pico não é fala; ali o ganho cai em vez de subir,
-  // para não transformar respiração e chiado em ruído alto.
+/** Deixa a fala mais alta e uniforme para ser ouvida por cima da música, sem distorcer:
+ *  1) ganho automático lento (pela média de energia, sobe no máximo `ganhoMax` vezes e só
+ *     onde há voz), 2) limitador de picos com olhar à frente, que reduz o volume antes de
+ *     um pico em vez de achatar a onda. O pico final fica em 0,97. */
+export function maximizar(s: Float32Array, sr: number, { alvo = 0.45, ganhoMax = 5 } = {}): Float32Array {
+  const n = s.length
+  if (!n) return s
   let picoIn = 0
   for (const v of s) picoIn = Math.max(picoIn, Math.abs(v))
-  const portao = picoIn * 0.06
-  let pico = 0
-  for (let i = 0; i < s.length; i++) {
-    const abertura = Math.min(1, Math.max(0, (envs[i] - portao) / portao))
-    const g = Math.min(ganhoMax, alvo / Math.max(envs[i], 1e-4)) * abertura
-    const y = Math.tanh(drive * s[i] * g) / norm
-    out[i] = y
-    pico = Math.max(pico, Math.abs(y))
+  if (picoIn === 0) return s
+  // 1) Envelope de energia (RMS) suave, olhando 10 ms à frente
+  const adiante = Math.round(sr * 0.01)
+  const ataque = Math.exp(-1 / (sr * 0.02)), soltura = Math.exp(-1 / (sr * 0.15))
+  // Envelope rápido só para o portão de ruído: fecha logo que a voz acaba,
+  // para não aumentar o chiado/respiração logo depois da palavra
+  const ataqueR = Math.exp(-1 / (sr * 0.005)), solturaR = Math.exp(-1 / (sr * 0.03))
+  const env = new Float32Array(n), envR = new Float32Array(n)
+  let e2 = 0, r2 = 0
+  for (let i = 0; i < n; i++) {
+    const x = s[Math.min(n - 1, i + adiante)]
+    const q = x * x
+    e2 = q > e2 ? ataque * e2 + (1 - ataque) * q : soltura * e2 + (1 - soltura) * q
+    r2 = q > r2 ? ataqueR * r2 + (1 - ataqueR) * q : solturaR * r2 + (1 - solturaR) * q
+    env[i] = Math.sqrt(e2); envR[i] = Math.sqrt(r2)
   }
+  const portao = picoIn * 0.03 // abaixo disso não é voz: não amplifica
+  const y = new Float32Array(n)
+  let g = 1
+  const suav = Math.exp(-1 / (sr * 0.03))
+  for (let i = 0; i < n; i++) {
+    const abertura = Math.min(1, Math.max(0, (envR[i] - portao) / portao))
+    const alvoG = 1 + (Math.min(ganhoMax, Math.max(1, alvo / Math.max(env[i], 1e-5))) - 1) * abertura
+    g = suav * g + (1 - suav) * alvoG
+    y[i] = s[i] * g
+  }
+  // 2) Limitador com olhar à frente de 5 ms (ganho mínimo da janela, soltura de 80 ms)
+  const L = Math.max(1, Math.round(sr * 0.005))
   const teto = 0.97
-  if (pico > teto) for (let i = 0; i < out.length; i++) out[i] *= teto / pico
+  const req = new Float32Array(n)
+  for (let i = 0; i < n; i++) req[i] = Math.min(1, teto / Math.max(Math.abs(y[i]), 1e-9))
+  const out = new Float32Array(n)
+  const rel = Math.exp(-1 / (sr * 0.08))
+  let gl = 1
+  for (let i = 0; i < n; i++) {
+    let mn = 1
+    for (let k = i; k < Math.min(n, i + L); k++) if (req[k] < mn) mn = req[k]
+    gl = mn < gl ? mn : rel * gl + (1 - rel) * mn
+    out[i] = y[i] * Math.min(gl, mn)
+  }
   return out
 }
 
 // --- Carregamento das vozes ---
 
-export const TAXA = 16000
+export const TAXA = 24000
 let cacheClipes: Promise<Record<ClipKey, Float32Array> | null> | null = null
 
 function decodificar(dados: ArrayBuffer): Promise<AudioBuffer> {
@@ -197,7 +212,7 @@ export function carregarClipes(): Promise<Record<ClipKey, Float32Array> | null> 
   cacheClipes = (async () => {
     try {
       const pares = await Promise.all(CLIP_KEYS.map(async k => {
-        const r = await fetch(`/audio/${k}.mp3`)
+        const r = await fetch(`/audio/${k}.wav`)
         if (!r.ok) throw new Error(`clip ${k}: ${r.status}`)
         const ab = await decodificar(await r.arrayBuffer())
         const dados = maximizar(aparar(ab.getChannelData(0), ab.sampleRate), ab.sampleRate)
@@ -322,12 +337,12 @@ export class TreinoPlayer {
     this.ctx = ctx
     // Voz → realce de presença (nitidez sobre a música) → corte de graves → limitador → volume
     const presenca = ctx.createBiquadFilter()
-    presenca.type = 'peaking'; presenca.frequency.value = 2800; presenca.Q.value = 0.9; presenca.gain.value = 6
+    presenca.type = 'peaking'; presenca.frequency.value = 3000; presenca.Q.value = 0.8; presenca.gain.value = 3
     const graves = ctx.createBiquadFilter()
-    graves.type = 'highpass'; graves.frequency.value = 140
+    graves.type = 'highpass'; graves.frequency.value = 100
     const limitador = ctx.createDynamicsCompressor()
-    limitador.threshold.value = -10; limitador.knee.value = 2; limitador.ratio.value = 20
-    limitador.attack.value = 0.002; limitador.release.value = 0.12
+    limitador.threshold.value = -3; limitador.knee.value = 3; limitador.ratio.value = 12
+    limitador.attack.value = 0.003; limitador.release.value = 0.25
     this.ganho = ctx.createGain()
     this.entrada = presenca
     presenca.connect(graves); graves.connect(limitador); limitador.connect(this.ganho)
