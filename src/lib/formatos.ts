@@ -47,8 +47,9 @@ export function traduzirErroAuth(msg: string): string {
   if (/Email not confirmed/i.test(msg)) return 'Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada e o spam.'
   if (/already registered|already been registered/i.test(msg)) return 'Este e-mail já está cadastrado.'
   if (/rate limit|too many|security purposes/i.test(msg)) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
-  if (/Password should be|weak/i.test(msg)) return 'Senha fraca. Use pelo menos 8 caracteres com letras e números.'
+  // Antes da regra de senha fraca: "New password should be different..." também casa com /Password should be/
   if (/same.*password|different from the old/i.test(msg)) return 'A nova senha deve ser diferente da atual.'
+  if (/Password should be|weak/i.test(msg)) return 'Senha fraca. Use pelo menos 8 caracteres com letras e números.'
   if (/invalid.*email|email.*invalid/i.test(msg)) return 'E-mail inválido.'
   if (/Failed to fetch|NetworkError|network/i.test(msg)) return 'Sem conexão com o servidor. Verifique sua internet.'
   return msg

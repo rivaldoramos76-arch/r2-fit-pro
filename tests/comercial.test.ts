@@ -6,6 +6,7 @@ import {
   chaveEvento, elegivelArrependimento,
 } from '../supabase/functions/_shared/mpLogic'
 import { renderizarEmail } from '../supabase/functions/_shared/emailTemplates'
+import { traduzirErroAuth } from '../src/lib/formatos'
 
 let ok = 0
 const t = async (n: string, f: () => void | Promise<void>) => { await f(); ok++; console.log('✓', n) }
@@ -106,6 +107,13 @@ await t('e-mails transacionais renderizam e escapam conteúdo', () => {
   }
   assert.ok(renderizarEmail('assinatura_confirmada', { valor_centavos: 1990 }, 'https://s').html.includes('R$'))
   assert.throws(() => renderizarEmail('inexistente', {}, 'https://s'))
+})
+
+await t('erros do Supabase Auth são traduzidos corretamente', () => {
+  assert.equal(traduzirErroAuth('New password should be different from the old password.'), 'A nova senha deve ser diferente da atual.')
+  assert.match(traduzirErroAuth('Password should be at least 8 characters.'), /Senha fraca/)
+  assert.match(traduzirErroAuth('Password is known to be weak and easy to guess'), /Senha fraca/)
+  assert.equal(traduzirErroAuth('Invalid login credentials'), 'E-mail ou senha incorretos.')
 })
 
 console.log(`\n${ok} testes passaram`)
