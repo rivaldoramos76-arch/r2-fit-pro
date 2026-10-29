@@ -22,21 +22,22 @@ let ok = 0
 const erros = []
 const t = async (nome, f) => { try { await f(); ok++; console.log('✓', nome) } catch (e) { erros.push(nome); console.log('✗', nome, '\n   ', e.message.split('\n')[0]) } }
 
-async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, viewport = { width: 390, height: 844 } } = {}) {
+async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, viewport = { width: 390, height: 844 } } = {}) {
   const chamadasBilling = []
   const ctx = await browser.newContext({ viewport })
   await ctx.addInitScript(([s, logado]) => {
     sessionStorage.setItem('r2fit:welcome-visto', '1')
     if (logado) localStorage.setItem('sb-mock-auth-token', JSON.stringify(s))
   }, [sessao, logado])
-  const premium = ['ativa', 'tolerancia', 'cancelada_vigente', 'admin'].includes(estado)
+  const premium = ['ativa', 'tolerancia', 'cancelada_vigente', 'admin', 'teste'].includes(estado)
+  const testeAte = estado === 'teste' ? new Date(Date.now() + 5 * 86400000 - 3600000).toISOString() : null
   await ctx.route('https://mock.supabase.co/**', async rota => {
     const url = new URL(rota.request().url())
     const p = url.pathname
     const json = (corpo, status = 200) => rota.fulfill({ status, contentType: 'application/json', body: JSON.stringify(corpo) })
     if (p.startsWith('/auth/v1/user')) return json(usuario)
     if (p.startsWith('/auth/v1/token')) return json(sessao)
-    if (p === '/rest/v1/rpc/meu_acesso') return acessoFalha ? json({ message: 'erro' }, 500) : json({ estado, premium, admin })
+    if (p === '/rest/v1/rpc/meu_acesso') return acessoFalha ? json({ message: 'erro' }, 500) : json({ estado, premium, admin, teste_ate: testeAte })
     if (p === '/rest/v1/rpc/admin_metricas') return admin ? json({ usuarios_total: 3, usuarios_30d: 2, assinantes_ativos: 1, mrr_centavos: 1990, recebido_mes_centavos: 1990, recebido_total_centavos: 3980, pendente_centavos: 0, estornado_centavos: 0, projetado_proximo_mes_centavos: 1990, falhas_30d: 1, webhooks_erro_7d: 0, emails_pendentes: 2, tickets_abertos: 1, privacidade_abertas: 0, assinaturas_por_status: { ativa: 1 } }) : json({ message: 'Acesso negado' }, 400)
     if (p === '/rest/v1/app_config') return json(CONFIG)
     if (p === '/rest/v1/profiles') {
@@ -49,7 +50,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       const corpo = rota.request().postDataJSON() ?? {}
       chamadasBilling.push(corpo)
       if (!pagamentos) return json({ pagamentos_configurados: false, modo_teste: false })
-      if (corpo.acao === 'checkout_avulso') return json({ url: BASE + '/assinatura/retorno?status=approved&payment_id=123' })
+      if (corpo.acao === 'checkout_avulso') return checkoutFalha ? json({ erro: 'Mercado Pago: pagamento indisponível' }, 400) : json({ url: BASE + '/assinatura/retorno?status=approved&payment_id=123' })
       if (corpo.acao === 'sincronizar') return json({ estado: 'ativa' })
       return json({ pagamentos_configurados: true, modo_teste: false, public_key: null })
     }
@@ -203,6 +204,33 @@ await t('assinatura: escolhe plano e forma de pagamento (cartão, Pix/boleto, an
   await page.getByText('Acesso Premium liberado!').waitFor()
   assert.ok(page.chamadasBilling.some(c => c.acao === 'checkout_avulso' && c.periodo === 'anual'), 'pediu o checkout anual')
   assert.ok(page.chamadasBilling.some(c => c.acao === 'sincronizar' && c.payment_id === '123'), 'confirmou o pagamento devolvido pelo Mercado Pago')
+  await ctx.close()
+})
+
+await t('erro no pagamento aparece em destaque no meio da tela', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, pagamentos: true, checkoutFalha: true })
+  await page.goto(BASE + '/assinatura')
+  await page.getByRole('radio', { name: /Pix, boleto/ }).click()
+  await page.getByRole('button', { name: /Pagar R\$\s19,90 — 1 mês/ }).click()
+  const popup = page.getByRole('alertdialog', { name: 'Pagamento não concluído' })
+  await popup.waitFor()
+  await popup.getByText('pagamento indisponível').waitFor()
+  assert.ok(await popup.isVisible(), 'popup visível sem rolar a tela')
+  await page.screenshot({ path: `${SHOTS}/popup-erro.png` })
+  await popup.getByRole('button', { name: 'Entendi' }).click()
+  assert.equal(await page.getByRole('alertdialog').count(), 0)
+  await ctx.close()
+})
+
+await t('conta nova em teste grátis vê os dias restantes e o botão de assinar', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'teste' })
+  await page.goto(BASE + '/menu')
+  await page.getByText(/Teste grátis: faltam 5 dias/).waitFor()
+  await page.getByRole('link', { name: /Assinar o Premium.*termina em 5 dias/ }).waitFor()
+  await page.getByRole('main').getByText('Teste grátis', { exact: true }).waitFor()
+  await page.screenshot({ path: `${SHOTS}/menu-teste.png`, fullPage: true })
+  await page.goto(BASE + '/treino')
+  assert.equal(await page.getByText('Recurso Premium').count(), 0, 'teste grátis libera os recursos')
   await ctx.close()
 })
 

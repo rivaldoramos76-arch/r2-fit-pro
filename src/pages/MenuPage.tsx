@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useAcesso } from '../context/AcessoContext'
 import { Badge } from '../components/UI'
-import { brl, ROTULO_ESTADO } from '../lib/formatos'
+import { brl, diasRestantes, ROTULO_ESTADO } from '../lib/formatos'
 import { useConfig } from '../lib/config'
 
 type Item = { href: string; label: string; icon: LucideIcon }
@@ -33,11 +33,12 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
 
 export default function MenuPage() {
   const { user, signOut } = useAuth()
-  const { estado, admin } = useAcesso()
+  const { estado, admin, testeAte } = useAcesso()
   const navigate = useNavigate()
   const { config } = useConfig()
   const rotulo = ROTULO_ESTADO[estado]
-  const semAcesso = ['sem_assinatura', 'expirada', 'pagamento_pendente'].includes(estado)
+  const semAcesso = ['sem_assinatura', 'expirada', 'pagamento_pendente', 'teste'].includes(estado)
+  const diasTeste = diasRestantes(testeAte)
   const plano = config?.plano
 
   const sair = async () => {
@@ -59,7 +60,9 @@ export default function MenuPage() {
               <span className="block font-bold">{estado === 'pagamento_pendente' ? 'Concluir assinatura' : estado === 'expirada' ? 'Assinar novamente' : 'Assinar o Premium'}</span>
               {plano && (
                 <span className="block text-xs font-medium text-zinc-900/80">
-                  {brl(plano.preco_centavos)}/mês{plano.preco_anual_centavos ? ` ou ${brl(plano.preco_anual_centavos)}/ano` : ''} · Pix, cartão ou boleto
+                  {estado === 'teste'
+                    ? `Seu teste grátis ${diasTeste <= 1 ? 'termina hoje' : `termina em ${diasTeste} dias`} · a partir de ${brl(plano.preco_centavos)}/mês`
+                    : `${brl(plano.preco_centavos)}/mês${plano.preco_anual_centavos ? ` ou ${brl(plano.preco_anual_centavos)}/ano` : ''} · Pix, cartão ou boleto`}
                 </span>
               )}
             </span>

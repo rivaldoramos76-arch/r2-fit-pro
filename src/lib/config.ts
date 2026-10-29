@@ -10,6 +10,9 @@ export interface ConfigPlano {
   /** Preço do plano anual (12 meses, pagamento único). Ausente ou nulo: plano anual não é oferecido. */
   preco_anual_centavos?: number | null
   parcelas_max_anual?: number
+  /** Dias de teste grátis para contas novas (0 = desligado) e limite diário de IA durante o teste. */
+  teste_dias?: number
+  teste_limite_ia?: number
   moeda: 'BRL'
   intervalo: 'mensal'
   tolerancia_dias: number

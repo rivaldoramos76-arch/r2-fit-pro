@@ -6,10 +6,13 @@ DECLARE
   a UUID := gen_random_uuid();
   b UUID := gen_random_uuid();
   c UUID := gen_random_uuid();
+  d UUID := gen_random_uuid();
   n INT := 0;
-  v TEXT; j JSONB; cnt INT; fim1 TIMESTAMPTZ; fim2 TIMESTAMPTZ; sub UUID; ok BOOLEAN;
+  v TEXT; j JSONB; cnt INT; fim1 TIMESTAMPTZ; fim2 TIMESTAMPTZ; sub UUID; ok BOOLEAN; i INT;
 BEGIN
   -- ── Preparação (como postgres) ──────────────────────────────────────────
+  -- Contas de teste sem teste grátis (o teste grátis é verificado separadamente com o usuário D)
+  UPDATE public.app_config SET valor = valor || '{"teste_dias": 0}' WHERE chave = 'plano';
   INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at)
   VALUES (a, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'teste-a-'||a||'@exemplo.invalid', 'x', NOW(), '{"nome":"Teste A","versao_termos":"2026-10-22"}', NOW(), NOW()),
          (b, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'teste-b-'||b||'@exemplo.invalid', 'x', NOW(), '{"nome":"Teste B"}', NOW(), NOW()),
@@ -225,6 +228,38 @@ BEGIN
   PERFORM public.billing_registrar_assinatura(jsonb_build_object('provider_subscription_id', 'RX-'||c, 'user_id', c, 'provider_status', 'authorized'));
   PERFORM public.billing_registrar_assinatura(jsonb_build_object('provider_subscription_id', 'RX-'||c, 'provider_status', 'cancelled'));
   IF public.estado_acesso(c) <> 'sem_assinatura' THEN RAISE EXCEPTION 'FALHA 69: cartão recusado aparece como %', public.estado_acesso(c); END IF; n := n + 1;
+
+  -- ── Teste grátis de 7 dias para conta nova ──────────────────────────────
+  UPDATE public.app_config SET valor = valor || '{"teste_dias": 7, "teste_limite_ia": 15}' WHERE chave = 'plano';
+  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at)
+  VALUES (d, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'teste-d-'||d||'@exemplo.invalid', 'x', NOW(), '{"nome":"Teste D"}', NOW(), NOW());
+  IF public.estado_acesso(d) <> 'teste' OR NOT public.tem_premium(d) THEN RAISE EXCEPTION 'FALHA 70: conta nova sem teste grátis (%)', public.estado_acesso(d); END IF; n := n + 1;
+  SELECT periodo_atual_fim INTO fim1 FROM public.subscriptions WHERE user_id = d AND modalidade = 'teste';
+  IF fim1 < NOW() + INTERVAL '6 days 23 hours' OR fim1 > NOW() + INTERVAL '7 days 1 hour' THEN RAISE EXCEPTION 'FALHA 71: duração do teste (%)', fim1; END IF; n := n + 1;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', d, 'role', 'authenticated')::TEXT, TRUE);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  IF (public.meu_acesso() ->> 'teste_ate') IS NULL THEN RAISE EXCEPTION 'FALHA 72: meu_acesso sem fim do teste'; END IF; n := n + 1;
+  INSERT INTO public.treinos (user_id, nome, objetivo, nivel, frequencia_semanal, plano) VALUES (d, 'Treino no teste', 'x', 'Iniciante', 3, '{}');
+  FOR i IN 1..15 LOOP j := public.registrar_uso_ia(80); END LOOP;
+  IF NOT (j ->> 'permitido')::BOOLEAN THEN RAISE EXCEPTION 'FALHA 73: IA bloqueada antes do limite do teste'; END IF; n := n + 1;
+  j := public.registrar_uso_ia(80);
+  IF (j ->> 'permitido')::BOOLEAN OR j ->> 'motivo' <> 'limite_teste' THEN RAISE EXCEPTION 'FALHA 74: limite de IA do teste não aplicado (%)', j; END IF; n := n + 1;
+  EXECUTE 'RESET ROLE';
+  PERFORM set_config('request.jwt.claims', '', TRUE);
+  UPDATE public.subscriptions SET periodo_atual_fim = NOW() + INTERVAL '1 day' WHERE user_id = d AND modalidade = 'teste';
+  PERFORM public.billing_enfileirar_lembretes(); PERFORM public.billing_enfileirar_lembretes();
+  SELECT count(*) INTO cnt FROM public.email_outbox WHERE user_id = d AND modelo = 'teste_lembrete';
+  IF cnt <> 1 THEN RAISE EXCEPTION 'FALHA 75: lembrete do fim do teste (%)', cnt; END IF; n := n + 1;
+  UPDATE public.subscriptions SET periodo_atual_fim = NOW() - INTERVAL '1 hour' WHERE user_id = d AND modalidade = 'teste';
+  IF public.estado_acesso(d) <> 'sem_assinatura' OR public.tem_premium(d) THEN RAISE EXCEPTION 'FALHA 76: teste encerrado ainda libera acesso (%)', public.estado_acesso(d); END IF; n := n + 1;
+  PERFORM public.billing_enfileirar_lembretes();
+  SELECT count(*) INTO cnt FROM public.email_outbox WHERE user_id = d AND modelo = 'teste_encerrado';
+  IF cnt <> 1 THEN RAISE EXCEPTION 'FALHA 77: aviso de teste encerrado (%)', cnt; END IF; n := n + 1;
+  j := public.billing_registrar_pagamento(jsonb_build_object('provider_payment_id', 'TD-'||d, 'user_id', d, 'status', 'aprovado', 'valor_centavos', 1990, 'avulso', TRUE, 'meses', 1, 'pago_em', NOW()));
+  IF public.estado_acesso(d) <> 'ativa' OR (SELECT modalidade FROM public.payments p JOIN public.subscriptions s ON s.id = p.subscription_id WHERE p.provider_payment_id = 'TD-'||d) <> 'avulso' THEN
+    RAISE EXCEPTION 'FALHA 78: compra depois do teste'; END IF; n := n + 1;
+  SELECT count(*) INTO cnt FROM public.subscriptions WHERE user_id IN (a, b, c) AND modalidade = 'teste';
+  IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 79: teste grátis criado com o recurso desligado'; END IF; n := n + 1;
 
   -- ── Administrador ───────────────────────────────────────────────────────
   PERFORM public.provisionar_admin('teste-c-'||c||'@exemplo.invalid', 'teste');

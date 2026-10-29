@@ -100,7 +100,7 @@ await t('direito de arrependimento: 7 dias da contratação', () => {
 })
 
 await t('e-mails transacionais renderizam e escapam conteúdo', () => {
-  for (const m of ['assinatura_confirmada', 'pagamento_aprovado', 'falha_cobranca', 'assinatura_cancelada', 'pagamento_estornado', 'aviso', 'renovacao_lembrete', 'acesso_expirado']) {
+  for (const m of ['assinatura_confirmada', 'pagamento_aprovado', 'falha_cobranca', 'assinatura_cancelada', 'pagamento_estornado', 'aviso', 'renovacao_lembrete', 'acesso_expirado', 'teste_lembrete', 'teste_encerrado']) {
     const r = renderizarEmail(m, { nome: '<script>x</script>', valor_centavos: 1990, acesso_ate: '2026-11-22T00:00:00Z' }, 'https://r2-fit-pro.vercel.app')
     assert.ok(r.assunto.length > 5, m)
     assert.ok(!r.html.includes('<script>x'), 'conteúdo deve ser escapado: ' + m)

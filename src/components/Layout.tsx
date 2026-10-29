@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Home, Dumbbell, Salad, Flame, Menu as MenuIcon } from 'lucide-react'
 import { useAcesso } from '../context/AcessoContext'
+import { diasRestantes } from '../lib/formatos'
 import { Logo } from './Logo'
 import AvisosGlobais from './AvisosGlobais'
 
@@ -15,7 +16,17 @@ const navItems = [
 
 /** Aviso fixo quando a assinatura exige atenção do usuário. */
 function AvisoAssinatura() {
-  const { estado } = useAcesso()
+  const { estado, testeAte } = useAcesso()
+  if (estado === 'teste') {
+    const dias = diasRestantes(testeAte)
+    return (
+      <Link to="/assinatura" className="block bg-green-500/10 border-b border-green-500/20 text-green-300 text-xs sm:text-sm">
+        <div className="max-w-lg mx-auto px-4 py-2">
+          Teste grátis: {dias <= 1 ? 'termina hoje' : `faltam ${dias} dias`}. <span className="underline font-semibold">Assinar agora</span>
+        </div>
+      </Link>
+    )
+  }
   const avisos: Partial<Record<typeof estado, string>> = {
     tolerancia: 'Não conseguimos renovar sua assinatura. Regularize para não perder o acesso.',
     pagamento_pendente: 'Seu pagamento está pendente. Os recursos Premium serão liberados após a confirmação.',

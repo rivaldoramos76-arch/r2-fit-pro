@@ -53,6 +53,12 @@ criado exclusivamente por `billing_registrar_pagamento` com pagamento aprovado c
 - **Rotina automática (pg_cron)**: `r2-lembretes-diarios` (09:07 de Brasília) enfileira o lembrete 3 dias antes do vencimento e o aviso de acesso vencido das compras avulsas; `r2-fila-emails` (de hora em hora, :17) envia a fila. A função `billing_rotina` chama `/r2-api/cron/emails` com um token de uso único gravado em `cron_tokens` (sem segredo compartilhado). Para pausar: `select cron.unschedule('r2-fila-emails');`.
 - Reembolso de compra avulsa: em até 7 dias, botão "Desistir e pedir reembolso" em Minha Assinatura (mesma rota `cancelar`, com reembolso).
 
+### 1c. Teste grátis (desde 29/10/2026)
+- Toda conta **criada a partir de 29/10/2026** ganha `teste_dias` (7) dias de Premium, sem cartão, uma única vez: o cadastro (`handle_new_user`) cria uma linha em `subscriptions` com `modalidade = 'teste'`. Contas anteriores não recebem.
+- Durante o teste o estado é `teste` (libera tudo), o limite diário de IA é `teste_limite_ia` (15) e o app mostra "Teste grátis: faltam X dias" com botão de assinar. Ao fim, o acesso cai para "Sem assinatura" (sem tolerância) e nada é cobrado.
+- E-mails automáticos: 2 dias antes (`teste_lembrete`) e no fim (`teste_encerrado`), pela rotina diária.
+- Para desligar: `/admin` → Plano e empresa → "Teste grátis (dias)" = 0. Testes e cortesias não entram em assinantes nem na receita do painel.
+
 ### 2. E-mails
 **Concluído em 28/10/2026.** Domínio `r2fitpro.com.br` verificado no Resend (região São Paulo); secrets `RESEND_API_KEY`, `EMAIL_FROM` (`R2 Fit Pro <nao-responda@r2fitpro.com.br>`) e `SITE_URL` configurados na Edge Function; SMTP personalizado do Supabase Auth apontando para o Resend; modelos de `docs/emails/*.html` aplicados em *Confirm signup* e *Reset password*. Testado: e-mail transacional e recuperação de senha chegaram na caixa de entrada do Gmail.
 - SMTP do Auth: `smtp.resend.com:465`, usuário `resend`, senha = API key própria (`supabase-auth-smtp`), remetente `nao-responda@r2fitpro.com.br`.
@@ -95,11 +101,13 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 6. `20261029160100_lembretes_metricas_config.sql` — lembretes de renovação, métricas sem cortesias e preço anual.
 7. `20261029160200_rotina_emails.sql` — `cron_tokens`, `billing_rotina` e agendamentos do pg_cron.
 8. `20261029170000_estado_ignora_checkout_recusado.sql` — assinatura cancelada que nunca foi paga (cartão recusado) não deixa o cliente como "expirado".
+9. `20261029180000_teste_gratis.sql` — teste grátis no cadastro, estado `teste`, limite de IA no teste, `meu_acesso.teste_ate`.
+10. `20261029180100_teste_gratis_lembretes_config.sql` — lembretes do fim do teste, métricas e configuração (`teste_dias`, `teste_limite_ia`).
 
 ## Testes
 - `npm test` — lógica de treinos (14) + lógica comercial/Mercado Pago/e-mails (14).
-- `tests/sql/rls_billing.test.sql` — 69 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (69)`).
-- `tests/e2e/ui.test.mjs` — 15 testes de interface (Playwright, celular e desktop) com API simulada.
+- `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
+- `tests/e2e/ui.test.mjs` — 17 testes de interface (Playwright, celular e desktop) com API simulada.
 
 ## Monitoramento e recuperação
 - Painel `/admin`: webhooks com erro, e-mails não enviados, falhas de cobrança, auditoria.

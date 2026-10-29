@@ -136,7 +136,7 @@ export async function handleBilling(req: Request): Promise<Response> {
 
     if (acao === 'cancelar') {
       const { data: sub } = await admin.from('subscriptions')
-        .select('*').eq('user_id', user.id).in('status', ['ativa', 'inadimplente', 'pendente']).neq('modalidade', 'cortesia')
+        .select('*').eq('user_id', user.id).in('status', ['ativa', 'inadimplente', 'pendente']).not('modalidade', 'in', '(cortesia,teste)')
         .order('created_at', { ascending: false }).limit(1).maybeSingle()
       if (!sub) throw new ErroHttp(404, 'Nenhuma assinatura ativa para cancelar.')
       const { data: cfg } = await admin.from('app_config').select('valor').eq('chave', 'plano').single()

@@ -56,6 +56,16 @@ export function renderizarEmail(modelo: string, d: Dados, site: string): { assun
         assunto: 'Seu acesso R2 Fit Pro Premium venceu',
         html: layout('Seu acesso venceu', `${ola}<p>Seu período Premium terminou${data(d.acesso_ate) ? ` em <b>${data(d.acesso_ate)}</b>` : ''}. Seus treinos, dietas e registros continuam salvos na sua conta.</p><p>Renove quando quiser com <b>Pix, boleto ou cartão</b> e volte a usar todos os recursos na hora.</p>`, site, 'Renovar acesso', `${site}/assinatura`),
       }
+    case 'teste_lembrete':
+      return {
+        assunto: 'Seu teste grátis do R2 Fit Pro termina em breve',
+        html: layout('Seu teste grátis está acabando', `${ola}<p>Seu teste grátis do R2 Fit Pro Premium vai até <b>${data(d.acesso_ate) ?? 'os próximos dias'}</b>.</p><p>Para continuar com treinos e dietas por IA, contador de calorias e todos os recursos, assine agora: dá para pagar com <b>Pix, boleto ou cartão</b>, no plano mensal ou anual. Seus dados continuam salvos de qualquer forma.</p>`, site, 'Assinar o Premium', `${site}/assinatura`),
+      }
+    case 'teste_encerrado':
+      return {
+        assunto: 'Seu teste grátis do R2 Fit Pro terminou',
+        html: layout('Seu teste grátis terminou', `${ola}<p>Seu período de teste grátis acabou e <b>nada foi cobrado</b>. Seus treinos, dietas e registros continuam salvos na sua conta.</p><p>Assine quando quiser para voltar a usar todos os recursos na hora, com <b>Pix, boleto ou cartão</b>.</p>`, site, 'Assinar o Premium', `${site}/assinatura`),
+      }
     case 'falha_cobranca':
       return {
         assunto: d.primeira_cobranca ? 'Não conseguimos concluir seu pagamento' : 'Falha na renovação da sua assinatura',

@@ -17,8 +17,11 @@ const RECURSOS = [
 export default function LandingPage() {
   const { user } = useAuth()
   const { config, erro } = useConfig()
-  const cta = user ? '/assinatura' : '/auth?modo=cadastro&next=/assinatura'
   const plano = config?.plano
+  const diasTeste = plano?.teste_dias ?? 0
+  // Visitante com teste grátis ativo começa a usar o app logo depois do cadastro
+  const cta = user ? '/assinatura' : diasTeste > 0 ? '/auth?modo=cadastro&next=/dashboard' : '/auth?modo=cadastro&next=/assinatura'
+  const textoCta = !user && diasTeste > 0 ? `Começar grátis por ${diasTeste} dias` : 'Assinar agora'
 
   return (
     <PublicLayout>
@@ -35,10 +38,13 @@ export default function LandingPage() {
         </p>
         <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
           <Link to={cta} className="bg-green-500 hover:bg-green-400 text-zinc-950 font-semibold px-6 py-3.5 rounded-xl">
-            {plano ? `Assinar por ${brl(plano.preco_centavos)}/mês` : 'Assinar agora'}
+            {!user && diasTeste > 0 ? textoCta : plano ? `Assinar por ${brl(plano.preco_centavos)}/mês` : 'Assinar agora'}
           </Link>
           {!user && <Link to="/auth" className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 font-semibold px-6 py-3.5 rounded-xl">Já tenho conta</Link>}
         </div>
+        {!user && diasTeste > 0 && plano && (
+          <p className="text-xs text-zinc-500 mt-3">Sem cartão de crédito. Depois do teste, a partir de {brl(plano.preco_centavos)}/mês.</p>
+        )}
       </section>
 
       {/* Recursos */}
@@ -74,7 +80,7 @@ export default function LandingPage() {
                 ))}
               </ul>
               {plano.vendas_ativas ? (
-                <Link to={cta} className="mt-7 block text-center bg-green-500 hover:bg-green-400 text-zinc-950 font-semibold px-6 py-3.5 rounded-xl">Assinar agora</Link>
+                <Link to={cta} className="mt-7 block text-center bg-green-500 hover:bg-green-400 text-zinc-950 font-semibold px-6 py-3.5 rounded-xl">{textoCta}</Link>
               ) : (
                 <p className="mt-7 text-center text-sm text-yellow-300">Novas assinaturas temporariamente indisponíveis.</p>
               )}

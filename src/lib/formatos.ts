@@ -9,7 +9,7 @@ export const dataHoraBR = (iso: string | null | undefined) =>
 
 export type EstadoAcesso =
   | 'visitante' | 'sem_assinatura' | 'pagamento_pendente' | 'ativa' | 'tolerancia'
-  | 'cancelada_vigente' | 'expirada' | 'admin'
+  | 'cancelada_vigente' | 'expirada' | 'admin' | 'teste'
 
 export const ROTULO_ESTADO: Record<EstadoAcesso, { texto: string; cor: 'green' | 'yellow' | 'red' | 'zinc' | 'blue' }> = {
   visitante: { texto: 'Visitante', cor: 'zinc' },
@@ -20,6 +20,7 @@ export const ROTULO_ESTADO: Record<EstadoAcesso, { texto: string; cor: 'green' |
   cancelada_vigente: { texto: 'Cancelada — acesso até o fim do período', cor: 'blue' },
   expirada: { texto: 'Assinatura expirada', cor: 'red' },
   admin: { texto: 'Administrador', cor: 'blue' },
+  teste: { texto: 'Teste grátis', cor: 'blue' },
 }
 
 export const ROTULO_PAGAMENTO: Record<string, { texto: string; cor: 'green' | 'yellow' | 'red' | 'zinc' | 'blue' }> = {
@@ -53,4 +54,11 @@ export function traduzirErroAuth(msg: string): string {
   if (/invalid.*email|email.*invalid/i.test(msg)) return 'E-mail inválido.'
   if (/Failed to fetch|NetworkError|network/i.test(msg)) return 'Sem conexão com o servidor. Verifique sua internet.'
   return msg
+}
+
+/** Dias restantes (arredondados para cima) até uma data; 0 se já passou. */
+export function diasRestantes(iso: string | null | undefined): number {
+  if (!iso) return 0
+  const ms = Date.parse(iso) - Date.now()
+  return ms > 0 ? Math.ceil(ms / 86400000) : 0
 }

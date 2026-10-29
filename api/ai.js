@@ -58,6 +58,7 @@ export async function POST(request) {
   }
   if (!uso?.permitido) {
     if (uso?.motivo === 'sem_premium') return resposta(402, { erro: 'Recurso disponível para assinantes Premium.', codigo: 'sem_premium' })
+    if (uso?.motivo === 'limite_teste') return resposta(429, { erro: 'Você atingiu o limite diário de uso da IA do teste grátis. Assine o Premium para usar mais, ou tente de novo amanhã.', codigo: 'limite_teste' })
     if (uso?.motivo === 'limite_diario') return resposta(429, { erro: 'Limite diário de uso da IA atingido. Tente novamente amanhã.', codigo: 'limite_diario' })
     return resposta(401, { erro: 'Faça login para usar a IA.' })
   }

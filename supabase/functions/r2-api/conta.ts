@@ -21,7 +21,7 @@ export async function handleConta(req: Request): Promise<Response> {
 
     // Interrompe cobranças futuras antes de excluir
     const { data: subs } = await admin.from('subscriptions').select('id, provider_subscription_id, status')
-      .eq('user_id', user.id).in('status', ['ativa', 'inadimplente', 'pendente'])
+      .eq('user_id', user.id).in('status', ['ativa', 'inadimplente', 'pendente']).neq('modalidade', 'teste')
     for (const s of subs ?? []) {
       if (s.provider_subscription_id) {
         if (!mpConfigurado()) throw new ErroHttp(409, 'Não foi possível cancelar sua assinatura agora. Fale com o suporte.')

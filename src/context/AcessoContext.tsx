@@ -11,6 +11,8 @@ interface Acesso {
   estado: EstadoAcesso
   premium: boolean
   admin: boolean
+  /** Fim do teste grátis, quando o estado é 'teste'. */
+  testeAte: string | null
   carregando: boolean
   erro: boolean
   recarregar: () => Promise<void>
@@ -23,6 +25,7 @@ export function AcessoProvider({ children }: { children: ReactNode }) {
   const [estado, setEstado] = useState<EstadoAcesso>('visitante')
   const [premium, setPremium] = useState(false)
   const [admin, setAdmin] = useState(false)
+  const [testeAte, setTesteAte] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState(false)
   // Usuário para o qual o estado atual foi calculado (evita usar dados de outra sessão)
@@ -30,7 +33,7 @@ export function AcessoProvider({ children }: { children: ReactNode }) {
 
   const recarregar = useCallback(async () => {
     if (!user) {
-      setEstado('visitante'); setPremium(false); setAdmin(false); setCarregando(false); setErro(false)
+      setEstado('visitante'); setPremium(false); setAdmin(false); setTesteAte(null); setCarregando(false); setErro(false)
       setCarregadoPara(null)
       return
     }
@@ -38,8 +41,8 @@ export function AcessoProvider({ children }: { children: ReactNode }) {
     if (error || !data) {
       setErro(true)
     } else {
-      const d = data as { estado: EstadoAcesso; premium: boolean; admin: boolean }
-      setEstado(d.estado); setPremium(d.premium); setAdmin(d.admin); setErro(false)
+      const d = data as { estado: EstadoAcesso; premium: boolean; admin: boolean; teste_ate?: string | null }
+      setEstado(d.estado); setPremium(d.premium); setAdmin(d.admin); setTesteAte(d.teste_ate ?? null); setErro(false)
     }
     setCarregadoPara(user.id)
     setCarregando(false)
@@ -71,7 +74,7 @@ export function AcessoProvider({ children }: { children: ReactNode }) {
 
   return (
     <AcessoContext.Provider value={{
-      estado, premium, admin, erro, recarregar,
+      estado, premium, admin, testeAte, erro, recarregar,
       carregando: carregando || carregadoPara !== (user?.id ?? null),
     }}>
       {children}

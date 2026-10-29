@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CreditCard, QrCode } from 'lucide-react'
+import { CheckCircle2, CreditCard, QrCode, XCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useAcesso } from '../context/AcessoContext'
@@ -20,12 +20,44 @@ interface Assinatura {
   proxima_cobranca: string | null
   cancelada_em: string | null
   created_at: string
-  modalidade: 'recorrente' | 'avulso' | 'cortesia'
+  modalidade: 'recorrente' | 'avulso' | 'cortesia' | 'teste'
   meses_periodo: number
 }
 
 type Periodo = 'mensal' | 'anual'
 type Forma = 'cartao' | 'avulso'
+
+/** Aviso em destaque no meio da tela: erros e confirmações de pagamento não passam despercebidos. */
+function Popup({ tipo, texto, onFechar, acaoExtra }: {
+  tipo: 'erro' | 'ok'; texto: string; onFechar: () => void
+  acaoExtra?: { rotulo: string; onClick: () => void }
+}) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onFechar() }
+    document.addEventListener('keydown', esc)
+    return () => document.removeEventListener('keydown', esc)
+  }, [onFechar])
+  const erro = tipo === 'erro'
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 px-5" onClick={onFechar}>
+      <div role={erro ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby="popup-titulo" aria-describedby="popup-texto"
+        onClick={e => e.stopPropagation()}
+        className={`w-full max-w-sm rounded-2xl border bg-zinc-900 p-5 shadow-2xl ${erro ? 'border-red-500/40' : 'border-green-500/40'}`}>
+        <div className="flex items-center gap-3">
+          {erro ? <XCircle className="w-8 h-8 text-red-400 shrink-0" /> : <CheckCircle2 className="w-8 h-8 text-green-400 shrink-0" />}
+          <h2 id="popup-titulo" className="text-lg font-bold">{erro ? 'Pagamento não concluído' : 'Tudo certo'}</h2>
+        </div>
+        <p id="popup-texto" className="mt-3 text-sm text-zinc-300 leading-relaxed">{texto}</p>
+        <div className="mt-5 flex flex-col gap-2">
+          {acaoExtra && <Button onClick={acaoExtra.onClick} className="w-full">{acaoExtra.rotulo}</Button>}
+          <Button autoFocus variant={acaoExtra ? 'secondary' : 'primary'} onClick={onFechar} className="w-full">
+            {erro ? (acaoExtra ? 'Tentar de novo' : 'Entendi') : 'Ok'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function Linha({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
   return (
@@ -49,6 +81,8 @@ export default function AssinaturaPage() {
   const [publicKey, setPublicKey] = useState<string | null>(null)
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
+  // Quando o cartão é recusado, o aviso oferece pagar por Pix, boleto ou outros
+  const [sugerirOutraForma, setSugerirOutraForma] = useState(false)
   const [confirmarCancelamento, setConfirmarCancelamento] = useState(false)
   const [pedirReembolso, setPedirReembolso] = useState(false)
   const [pagamentosConfigurados, setPagamentosConfigurados] = useState<boolean | null>(null)
@@ -61,7 +95,8 @@ export default function AssinaturaPage() {
     if (error) setErro('Não foi possível carregar sua assinatura. Verifique sua conexão.')
     // Mostra a assinatura com acesso vigente; senão, a mais recente
     // Checkout cancelado sem nunca ter sido pago (ex.: cartão recusado) não é mostrado
-    const lista = ((data ?? []) as Assinatura[]).filter(a => !(a.status === 'cancelada' && !a.iniciada_em))
+    const lista = ((data ?? []) as Assinatura[]).filter(a => !(a.status === 'cancelada' && !a.iniciada_em)
+      && !(a.modalidade === 'teste' && (!a.periodo_atual_fim || Date.parse(a.periodo_atual_fim) <= Date.now())))
     const vigente = lista.find(s => ['ativa', 'inadimplente', 'cancelada'].includes(s.status) && s.periodo_atual_fim && Date.parse(s.periodo_atual_fim) > Date.now())
     setAssinatura(vigente ?? lista[0] ?? null)
     setCarregando(false)
@@ -105,6 +140,7 @@ export default function AssinaturaPage() {
       navigate('/assinatura/retorno?origem=cartao')
     } catch (e) {
       const msg = e instanceof ErroApi ? e.message : 'Não foi possível concluir a assinatura.'
+      setSugerirOutraForma(true)
       setErro(/CC_VAL_433|validation/i.test(msg)
         ? 'O cartão não foi aceito para cobrança automática. Use um cartão de crédito (débito não é aceito na renovação automática), confira os dados ou escolha Pix, boleto ou outros.'
         : `${msg} Confira os dados do cartão ou escolha outra forma de pagamento.`)
@@ -144,11 +180,12 @@ export default function AssinaturaPage() {
   const plano = config?.plano
   const avulso = assinatura?.modalidade === 'avulso'
   const cortesia = assinatura?.modalidade === 'cortesia'
+  const emTeste = assinatura?.modalidade === 'teste'
   const dentroArrependimento = !!(assinatura?.iniciada_em && plano &&
     Date.now() - Date.parse(assinatura.iniciada_em) <= plano.arrependimento_dias * 86400000)
-  const podeCancelar = !!assinatura && ['ativa', 'inadimplente', 'pendente'].includes(assinatura.status) && !cortesia
+  const podeCancelar = !!assinatura && ['ativa', 'inadimplente', 'pendente'].includes(assinatura.status) && !cortesia && !emTeste
     && (!avulso || dentroArrependimento)
-  const semAcesso = ['sem_assinatura', 'expirada', 'pagamento_pendente', 'cancelada_vigente'].includes(estado)
+  const semAcesso = ['sem_assinatura', 'expirada', 'pagamento_pendente', 'cancelada_vigente', 'teste'].includes(estado)
   // Quem paga por período pode renovar antes do vencimento (o tempo comprado se soma)
   const renovacaoAvulsa = avulso && ['ativa', 'tolerancia'].includes(estado)
   const podeComprar = (semAcesso || renovacaoAvulsa) && estado !== 'admin'
@@ -165,8 +202,11 @@ export default function AssinaturaPage() {
         <div className="mt-2"><Badge variant={rotulo.cor}>{rotulo.texto}</Badge></div>
       </div>
 
-      {erro && <p role="alert" className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{erro}</p>}
-      {aviso && <p role="status" className="text-green-400 text-sm bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">{aviso}</p>}
+      {erro && (
+        <Popup tipo="erro" texto={erro} onFechar={() => { setErro(''); setSugerirOutraForma(false) }}
+          acaoExtra={sugerirOutraForma ? { rotulo: 'Pagar com Pix, boleto ou outros', onClick: () => { setErro(''); setSugerirOutraForma(false); setPeriodo('mensal'); setForma('avulso') } } : undefined} />
+      )}
+      {aviso && !erro && <Popup tipo="ok" texto={aviso} onFechar={() => setAviso('')} />}
 
       {estado === 'admin' && (
         <Card><p className="text-sm text-zinc-300">Contas administrativas têm acesso completo sem assinatura.</p></Card>
@@ -175,7 +215,9 @@ export default function AssinaturaPage() {
       {assinatura && (
         <Card>
           <h2 className="font-semibold mb-2">{assinatura.plano_nome}</h2>
-          {cortesia ? (
+          {emTeste ? (
+            <Linha rotulo="Tipo" valor="Teste grátis (sem cobrança)" />
+          ) : cortesia ? (
             <Linha rotulo="Tipo" valor="Cortesia (sem cobrança)" />
           ) : avulso ? (
             <Linha rotulo="Plano" valor={`${nomePeriodo(assinatura.meses_periodo)} · ${brl(assinatura.preco_centavos)} (pagamento único)`} />
@@ -185,18 +227,21 @@ export default function AssinaturaPage() {
           <Linha rotulo="Situação" valor={rotulo.texto} />
           <Linha rotulo="Início" valor={dataBR(assinatura.iniciada_em)} />
           {assinatura.periodo_atual_fim && !cortesia && (
-            <Linha rotulo={assinatura.status === 'cancelada' || avulso ? 'Acesso até' : 'Período pago até'} valor={dataBR(assinatura.periodo_atual_fim)} />
+            <Linha rotulo={assinatura.status === 'cancelada' || avulso || emTeste ? 'Acesso até' : 'Período pago até'} valor={dataBR(assinatura.periodo_atual_fim)} />
           )}
           {avulso && assinatura.status !== 'cancelada' && <Linha rotulo="Renovação" valor="Manual — avisamos por e-mail antes de vencer" />}
-          {!avulso && !cortesia && assinatura.status !== 'cancelada' && <Linha rotulo="Próxima cobrança" valor={assinatura.proxima_cobranca ? dataBR(assinatura.proxima_cobranca) : 'Após a confirmação do pagamento'} />}
+          {!avulso && !cortesia && !emTeste && assinatura.status !== 'cancelada' && <Linha rotulo="Próxima cobrança" valor={assinatura.proxima_cobranca ? dataBR(assinatura.proxima_cobranca) : 'Após a confirmação do pagamento'} />}
           {assinatura.cancelada_em && <Linha rotulo="Cancelada em" valor={dataBR(assinatura.cancelada_em)} />}
         </Card>
       )}
 
       {plano && podeComprar && (
         <Card className="border-green-500/30">
-          <h2 className="font-semibold">{renovacaoAvulsa ? 'Renovar ou adicionar tempo' : plano.nome}</h2>
+          <h2 className="font-semibold">{renovacaoAvulsa ? 'Renovar ou adicionar tempo' : estado === 'teste' ? 'Continue com o Premium depois do teste' : plano.nome}</h2>
           {renovacaoAvulsa && <p className="text-xs text-zinc-400 mt-1">O tempo comprado agora é somado ao seu período atual.</p>}
+          {estado === 'teste' && assinatura?.periodo_atual_fim && (
+            <p className="text-xs text-zinc-400 mt-1">Seu teste grátis vai até {dataBR(assinatura.periodo_atual_fim)}. Assine para não perder o acesso quando ele acabar.</p>
+          )}
 
           {temAnual && (
             <div role="radiogroup" aria-label="Plano" className="grid grid-cols-2 gap-2 mt-3">

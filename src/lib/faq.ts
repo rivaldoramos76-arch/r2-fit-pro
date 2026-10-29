@@ -1,6 +1,7 @@
 // Perguntas frequentes usadas na página comercial e na Central de Ajuda.
 export const FAQ_COMERCIAL = [
   { p: 'Quanto custa?', r: 'O R2 Fit Pro Premium tem plano mensal e anual, com os valores exibidos nesta página. No mensal com cartão de crédito, a cobrança é automática todo mês até você cancelar. Também dá para pagar 1 mês ou 12 meses de uma vez, sem renovação automática.' },
+  { p: 'Tem teste grátis?', r: 'Sim. Toda conta nova tem 7 dias de Premium grátis, sem precisar cadastrar cartão. Ao fim do teste nada é cobrado: para continuar, é só assinar em "Minha Assinatura".' },
   { p: 'Quais formas de pagamento são aceitas?', r: 'Cartão de crédito (com renovação automática mensal ou parcelado no plano anual), Pix, boleto, cartão de débito e saldo do Mercado Pago. Não é preciso ter conta no Mercado Pago. No Pix e no boleto, você paga 1 mês (ou 12 meses) por vez e avisamos por e-mail antes de vencer.' },
   { p: 'Como funciona o pagamento?', r: 'O pagamento é processado pelo Mercado Pago, em ambiente seguro. O R2 Fit Pro não armazena dados do seu cartão. O acesso Premium é liberado assim que o Mercado Pago confirma o pagamento: Pix e cartão em instantes, boleto em até 3 dias úteis.' },
   { p: 'Posso cancelar quando quiser?', r: 'Sim. O cancelamento é feito em "Minha Assinatura", sem multa. Você mantém o acesso até o fim do período já pago e não haverá novas cobranças.' },

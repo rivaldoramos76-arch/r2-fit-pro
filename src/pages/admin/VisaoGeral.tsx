@@ -43,7 +43,7 @@ export default function VisaoGeral() {
         <h2 className="font-semibold mb-3">Clientes</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Cartao titulo="Usuários cadastrados" valor={n('usuarios_total')} nota={`${n('usuarios_30d')} nos últimos 30 dias`} />
-          <Cartao titulo="Assinantes com acesso" valor={n('assinantes_ativos')} />
+          <Cartao titulo="Assinantes com acesso" valor={n('assinantes_ativos')} nota={`${n('testes_ativos')} em teste grátis · ${n('cortesias_ativas')} cortesias`} />
           <Cartao titulo="Chamados em aberto" valor={n('tickets_abertos')} />
           <Cartao titulo="Pedidos LGPD em aberto" valor={n('privacidade_abertas')} />
         </div>
