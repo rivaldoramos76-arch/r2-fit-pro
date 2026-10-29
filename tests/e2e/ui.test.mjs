@@ -87,6 +87,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       return json(objeto ? DIETA : [DIETA])
     }
     if (p.startsWith('/rest/v1/')) return json([])
+    if (p.startsWith('/functions/v1/r2-api/admin')) { gravacoes.push({ tabela: 'r2-api/admin', corpo: rota.request().postDataJSON() }); return json({ ok: true }) }
     if (p.startsWith('/functions/v1/r2-api/billing')) {
       const corpo = rota.request().postDataJSON() ?? {}
       chamadasBilling.push(corpo)
@@ -610,6 +611,15 @@ for (const [nomeDisp, viewport] of [['celular', { width: 390, height: 844 }], ['
     const acao = page.gravacoes.find(x => x.tabela === 'admin_gerenciar_acesso')
     assert.equal(acao?.corpo?.p_acao, 'cortesia'); assert.equal(acao?.corpo?.p_user, CLIENTE.id)
     await page.screenshot({ path: `${SHOTS}/admin-cliente-${nomeDisp}.png` })
+    // Apagar conta: só libera o botão com o e-mail do cliente digitado
+    await ficha.getByRole('button', { name: 'Apagar esta conta' }).click()
+    const apagar = ficha.getByRole('button', { name: 'Apagar definitivamente' })
+    assert.equal(await apagar.isDisabled(), true)
+    await ficha.getByLabel(/Digite o e-mail do cliente/).fill('maria@teste.com')
+    await apagar.click()
+    await ficha.waitFor({ state: 'detached' })
+    const exc = page.gravacoes.find(x => x.tabela === 'r2-api/admin')
+    assert.equal(exc?.corpo?.acao, 'excluir_usuario'); assert.equal(exc?.corpo?.user_id, CLIENTE.id); assert.equal(exc?.corpo?.confirmacao, 'maria@teste.com')
     assert.deepEqual(page.consoleErros, [])
     await ctx.close()
   })

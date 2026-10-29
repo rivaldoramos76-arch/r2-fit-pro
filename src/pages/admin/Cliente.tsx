@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { X, Gift, CalendarPlus, Ban, HandCoins } from 'lucide-react'
+import { X, Gift, CalendarPlus, Ban, HandCoins, Trash2 } from 'lucide-react'
+import { chamarApi, ErroApi } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { brl, dataBR, dataHoraBR, ROTULO_ESTADO, ROTULO_PAGAMENTO, type EstadoAcesso } from '../../lib/formatos'
 import { Badge, Button, Input, Select } from '../../components/UI'
@@ -35,6 +36,8 @@ export default function Cliente({ resumo, onClose, onAlterado }: { resumo: Resum
   const [executando, setExecutando] = useState(false)
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
+  const [apagar, setApagar] = useState<null | string>(null)
+  const [apagando, setApagando] = useState(false)
 
   const carregar = useCallback(async () => {
     const id = resumo.id
@@ -66,6 +69,17 @@ export default function Cliente({ resumo, onClose, onAlterado }: { resumo: Resum
     setAviso(r?.aviso ?? `Feito.${r?.acesso_ate ? ` Acesso até ${dataBR(r.acesso_ate)}.` : ''}`)
     setAcao(null)
     await carregar(); onAlterado()
+  }
+
+  const apagarConta = async () => {
+    setErro(''); setApagando(true)
+    try {
+      await chamarApi('admin', { acao: 'excluir_usuario', user_id: resumo.id, confirmacao: apagar })
+      onAlterado(); onClose()
+    } catch (e) {
+      setErro(e instanceof ErroApi ? e.message : 'Não foi possível apagar a conta.')
+      setApagando(false)
+    }
   }
 
   const centavos = (s: string) => Math.round(Number(s.replace(/\./g, '').replace(',', '.')) * 100)
@@ -189,6 +203,25 @@ export default function Cliente({ resumo, onClose, onAlterado }: { resumo: Resum
               </ul>
             )}
           </Bloco>
+          {!resumo.admin && (
+            <Bloco titulo="Apagar conta">
+              {apagar === null ? (
+                <button type="button" onClick={() => { setApagar(''); setErro('') }}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-500/30 py-2.5 text-sm font-semibold text-red-300 hover:bg-red-500/10">
+                  <Trash2 className="w-4 h-4" />Apagar esta conta
+                </button>
+              ) : (
+                <div className="flex flex-col gap-3 animate-fade-up">
+                  <p className="text-xs text-zinc-400">Apaga o cliente e todos os dados pessoais (treinos, dietas, diário, metas). Assinatura recorrente é cancelada no Mercado Pago antes. Pagamentos ficam guardados sem identificação, como exige a lei. <b className="text-red-300">Não dá para desfazer.</b></p>
+                  <Input label={`Digite o e-mail do cliente (${resumo.email}) para confirmar`} value={apagar} onChange={e => setApagar(e.target.value)} autoComplete="off" />
+                  <div className="flex gap-2">
+                    <Button variant="secondary" className="flex-1" onClick={() => setApagar(null)}>Cancelar</Button>
+                    <Button variant="danger" className="flex-1" loading={apagando} disabled={apagar.trim().toLowerCase() !== resumo.email.toLowerCase()} onClick={apagarConta}>Apagar definitivamente</Button>
+                  </div>
+                </div>
+              )}
+            </Bloco>
+          )}
         </div>
       </aside>
     </div>

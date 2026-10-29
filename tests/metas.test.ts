@@ -133,6 +133,16 @@ await t('busca na TACO: resultados mais comuns primeiro e medidas caseiras', asy
   const a = paraAlimento(arroz, m[1])
   assert.equal(a.quantidade, '1 escumadeira cheia (90 g)'); assert.equal(a.calorias, 115)
   assert.equal(paraAlimento(arroz, m[2]).quantidade, '100 g')
+  // Líquidos em ml; cremosos com gramas e ml; sólidos só gramas
+  const leite = taco.find(x => x.nome.startsWith('Leite, de vaca, integral (líquido)'))!
+  assert.deepEqual(medidasDe(leite).map(x => x.rotulo), ['copo (200 ml)', 'xícara (240 ml)', 'ml'])
+  assert.equal(paraAlimento(leite, { rotulo: 'ml', gramas: 100 }).quantidade, '100 ml')
+  const iogurte = taco.find(x => x.nome.startsWith('Iogurte, natural'))!
+  assert.deepEqual(medidasDe(iogurte).map(x => x.rotulo).slice(-2), ['gramas', 'ml'])
+  assert.ok(!medidasDe(arroz).some(x => x.rotulo === 'ml'))
+  const suco = { id: 'x', nome: 'Suco de laranja integral', detalhe: 'Produto', fonte: 'off' as const, kcal: 45, proteina: 0.7, carboidrato: 10, gordura: 0, porcaoG: 200 }
+  assert.deepEqual(medidasDe(suco).map(x => x.rotulo), ['porção do rótulo', 'ml'])
+  assert.equal(paraAlimento(suco, medidasDe(suco)[0]).quantidade, '1 porção do rótulo (200 ml)')
 })
 
 console.log(`\n${ok} testes de metas e diário passaram`)

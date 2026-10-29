@@ -11,7 +11,7 @@ import { Button, Spinner, Textarea } from '../UI'
 import { fmt } from './Graficos'
 import EditorAlimento from './EditorAlimento'
 import BuscaAlimentos from './BuscaAlimentos'
-import { medidasDe, paraAlimento, semAcento } from '../../lib/alimentosBase'
+import { medidasDe, paraAlimento, semAcento, tipoMedida } from '../../lib/alimentosBase'
 import type { ItemBase } from '../../lib/alimentosBase'
 
 type Aba = 'buscar' | 'favoritos' | 'texto' | 'foto'
@@ -144,7 +144,7 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
               {medidas.map((m, i) => (
                 <button key={m.rotulo} type="button" aria-pressed={medida === i} onClick={() => { setMedida(i); setDetalhe(paraAlimento(base, m)); setEditado(null) }}
                   className={`px-2.5 py-1.5 rounded-full text-[13px] font-medium border transition ${medida === i ? 'bg-green-500 text-zinc-950 border-green-500' : 'border-zinc-700 text-zinc-300 hover:border-zinc-500'}`}>
-                  {m.rotulo === 'gramas' ? 'Em gramas' : `${m.rotulo}${m.rotulo.includes('(') ? '' : ` (${m.gramas} g)`}`}
+                  {m.rotulo === 'gramas' ? 'Em gramas' : m.rotulo === 'ml' ? 'Em ml' : `${m.rotulo}${m.rotulo.includes('(') ? '' : ` (${m.gramas} ${tipoMedida(base) === 'liquido' ? 'ml' : 'g'})`}`}
                 </button>
               ))}
             </div>

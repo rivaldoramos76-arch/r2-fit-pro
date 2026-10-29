@@ -148,7 +148,18 @@ const REGRAS: [RegExp, Medida[]][] = [
   [/^(chocolate|doce|brigadeiro)/, [{ rotulo: 'unidade / quadrado', gramas: 25 }]],
 ]
 
-/** Medidas oferecidas para um item: as caseiras do tipo dele, a porção do rótulo e 100 g. */
+// Líquidos são medidos em ml (1 ml ≈ 1 g, como nos rótulos); cremosos aceitam as duas medidas
+const LIQUIDO = /^(leite\b(?!.*\b(po|condensado|em po)\b)|suco|refrigerante|bebida|cerveja|vinho|agua|cha\b|cafe, infusao|cafe com leite|caldo|energetico|isotonico|kefir|achocolatado liquido|leite fermentado)/
+const CREMOSO = /^(iogurte|acai|sopa|vitamina|mingau|creme|coalhada|smoothie)/
+export type TipoMedida = 'solido' | 'liquido' | 'cremoso'
+export function tipoMedida(item: Pick<ItemBase, 'nome' | 'detalhe' | 'porcaoRotulo'>): TipoMedida {
+  const nome = semAcento(item.nome)
+  if (CREMOSO.test(nome)) return 'cremoso'
+  if (LIQUIDO.test(nome) || /^bebidas/i.test(item.detalhe) || /\bml\b/i.test(item.porcaoRotulo ?? '')) return 'liquido'
+  return 'solido'
+}
+
+/** Medidas oferecidas para um item: as caseiras do tipo dele, a porção do rótulo e 100 g (ou 100 ml). */
 export function medidasDe(item: ItemBase): Medida[] {
   const nome = semAcento(item.nome)
   const lista: Medida[] = []
@@ -157,17 +168,21 @@ export function medidasDe(item: ItemBase): Medida[] {
     const regra = REGRAS.find(([re]) => re.test(nome))
     if (regra) lista.push(...regra[1])
   }
-  lista.push({ rotulo: 'gramas', gramas: 100 })
+  const tipo = tipoMedida(item)
+  if (tipo !== 'liquido') lista.push({ rotulo: 'gramas', gramas: 100 })
+  if (tipo !== 'solido') lista.push({ rotulo: 'ml', gramas: 100 })
   return lista
 }
 
 const um = (n: number) => Math.round(n * 10) / 10
 
-/** Converte o item numa porção para o diário. Medida "gramas" vira "100 g" (ajustável). */
+/** Converte o item numa porção para o diário. Medida "gramas"/"ml" vira "100 g"/"100 ml" (ajustável). */
 export function paraAlimento(item: ItemBase, medida: Medida): Alimento {
   const f = medida.gramas / 100
+  const un = tipoMedida(item) === 'liquido' ? 'ml' : 'g'
   const quantidade = medida.rotulo === 'gramas' ? `${medida.gramas} g`
-    : medida.rotulo.includes('(') ? `1 ${medida.rotulo}` : `1 ${medida.rotulo} (${medida.gramas} g)`
+    : medida.rotulo === 'ml' ? `${medida.gramas} ml`
+    : medida.rotulo.includes('(') ? `1 ${medida.rotulo}` : `1 ${medida.rotulo} (${medida.gramas} ${un})`
   return {
     nome: item.nome, quantidade,
     calorias: Math.round(item.kcal * f), proteina_g: um(item.proteina * f),
