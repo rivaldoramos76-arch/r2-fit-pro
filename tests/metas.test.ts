@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { taxaBasal, gastoDiario, calcularMeta, distribuirMacros, idadeEm, caloriasDosMacros, CALORIAS_MINIMAS, ajustarPorCalorias, ajustarPorMacro, percentuais } from '../src/lib/metas'
 import { ATIVIDADES, caloriasExercicio, metaAguaSugerida, resumoPeso, restanteDia } from '../src/lib/exercicios'
+import { porcaoReceita, totaisIngredientes, inicioSemana, resumoSemana } from '../src/lib/relatorio'
 import { carregarTaco, buscarBase, medidasDe, paraAlimento } from '../src/lib/alimentosBase'
 import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade } from '../src/lib/diario'
 
@@ -168,6 +169,41 @@ await t('peso: resumo do período e restante do dia com ou sem exercício', () =
   assert.equal(resumoPeso([]), null)
   assert.equal(restanteDia(2200, 1500, 400, false), 700, 'exercício não muda a meta por padrão')
   assert.equal(restanteDia(2200, 1500, 400, true), 1100)
+})
+
+await t('receita: totais e valores por porção', () => {
+  const ing = [
+    { nome: 'Frango', quantidade: '500 g', calorias: 800, proteina_g: 150, carboidrato_g: 0, gordura_g: 18 },
+    { nome: 'Arroz', quantidade: '300 g', calorias: 384, proteina_g: 7.5, carboidrato_g: 84.3, gordura_g: 0.6 },
+  ]
+  assert.equal(totaisIngredientes(ing).calorias, 1184)
+  const p = porcaoReceita('Frango com arroz', ing, 4)
+  assert.deepEqual(p, { nome: 'Frango com arroz', quantidade: '1 porção', calorias: 296, proteina_g: 39.4, carboidrato_g: 21.1, gordura_g: 4.7 })
+  assert.equal(porcaoReceita('X', ing, 0).calorias, 1184, 'rendimento inválido vira 1 porção')
+})
+
+await t('relatório semanal: segunda-feira, médias, dias na meta e peso', () => {
+  assert.equal(inicioSemana('2026-10-29'), '2026-10-26') // quinta → segunda
+  assert.equal(inicioSemana('2026-11-01'), '2026-10-26') // domingo → segunda anterior
+  assert.equal(inicioSemana('2026-10-26'), '2026-10-26')
+  const al = (data: string, calorias: number, nome = 'Arroz') => ({ data, nome, calorias, proteina_g: 100, carboidrato_g: 200, gordura_g: 50 })
+  const r = resumoSemana({
+    inicio: '2026-10-26',
+    alimentos: [al('2026-10-26', 1900), al('2026-10-27', 2500), al('2026-10-28', 1500, 'Ovo'), al('2026-10-28', 300), al('2026-11-02', 9999)],
+    agua: [{ data: '2026-10-26', ml: 2500 }, { data: '2026-10-27', ml: 1500 }],
+    exercicios: [{ data: '2026-10-27', calorias: 400, duracao_min: 45 }],
+    pesos: [{ data: '2026-10-20', peso_kg: 83 }, { data: '2026-10-28', peso_kg: 82.2 }],
+    treinosConcluidos: 3,
+    meta: { calorias: 2000, proteina_g: 150, carboidrato_g: 200, gordura_g: 60, agua_ml: 2000, somar_exercicio: false },
+  })
+  assert.equal(r.diasRegistrados, 3); assert.equal(r.mediaCalorias, 2067)
+  assert.equal(r.diasNaMeta, 2, '1900 e 1800 ficam entre 80% e 100% da meta; 2500 passa')
+  assert.equal(r.aguaMedia, 2000); assert.equal(r.diasMetaAgua, 1)
+  assert.deepEqual(r.exercicio, { calorias: 400, minutos: 45, sessoes: 1 })
+  assert.deepEqual(r.peso, { atual: 82.2, variacao: -0.8 })
+  assert.deepEqual(r.alimentoMaisRegistrado, { nome: 'Arroz', vezes: 3 })
+  assert.equal(r.melhorDia, '2026-10-26')
+  assert.equal(r.dias.length, 7); assert.equal(r.dias[6].calorias, 0)
 })
 
 console.log(`\n${ok} testes de metas e diário passaram`)

@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { X, Search, Star, Plus, Check, Sparkles, Camera, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react'
+import { X, Search, Star, Plus, Check, Sparkles, Camera, ChevronLeft, ChevronRight, Pencil, Trash2, ChefHat } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { listarReceitas } from '../../lib/receitasApi'
+import type { Receita } from '../../lib/receitasApi'
+import { porcaoReceita } from '../../lib/relatorio'
 import { estimarAlimentoTexto, analisarImagemAlimento } from '../../lib/foodAI'
 import type { FoodEstimate } from '../../lib/foodAI'
 import { REFEICOES, chaveAlimento, grupoRefeicao } from '../../lib/diario'
@@ -14,10 +18,11 @@ import BuscaAlimentos from './BuscaAlimentos'
 import { medidasDe, paraAlimento, semAcento, tipoMedida } from '../../lib/alimentosBase'
 import type { ItemBase } from '../../lib/alimentosBase'
 
-type Aba = 'buscar' | 'favoritos' | 'texto' | 'foto'
+type Aba = 'buscar' | 'favoritos' | 'receitas' | 'texto' | 'foto'
 const ABAS: { id: Aba; rotulo: string; icone: typeof Search }[] = [
   { id: 'buscar', rotulo: 'Buscar', icone: Search },
   { id: 'favoritos', rotulo: 'Favoritos', icone: Star },
+  { id: 'receitas', rotulo: 'Receitas', icone: ChefHat },
   { id: 'texto', rotulo: 'Digitar', icone: Sparkles },
   { id: 'foto', rotulo: 'Foto', icone: Camera },
 ]
@@ -58,9 +63,15 @@ function Estrela({ ativa, onClick }: { ativa: boolean; onClick: () => void }) {
   )
 }
 
-export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClose, onSalvo }: {
-  userId: string; data: string; refeicaoInicial: Refeicao; onClose: () => void; onSalvo: () => void
+/** Folha de adicionar alimento. Com `onEscolher`, serve para escolher ingredientes de uma receita
+ *  (não grava no diário, não pede refeição e esconde a aba de receitas). */
+export default function AdicionarAlimento({ userId, data = '', refeicaoInicial = 'Lanches', onClose, onSalvo, onEscolher }: {
+  userId: string; data?: string; refeicaoInicial?: Refeicao; onClose: () => void; onSalvo?: () => void
+  onEscolher?: (itens: Alimento[]) => void
 }) {
+  const ingrediente = !!onEscolher
+  const abas = ingrediente ? ABAS.filter(a => a.id !== 'receitas') : ABAS
+  const [receitas, setReceitas] = useState<Receita[] | null>(null)
   const [refeicao, setRefeicao] = useState<Refeicao>(refeicaoInicial)
   const [aba, setAba] = useState<Aba>('buscar')
   const [recentes, setRecentes] = useState<Alimento[] | null>(null)
@@ -99,11 +110,18 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
   }
 
   const adicionar = async (itens: (Alimento & { observacao?: string | null })[], origem: string, fechar: boolean) => {
-    setErro(''); setSalvando(true)
+    setErro('')
+    if (onEscolher) {
+      onEscolher(itens.map(({ nome, quantidade, calorias, proteina_g, carboidrato_g, gordura_g }) => ({ nome, quantidade, calorias, proteina_g, carboidrato_g, gordura_g })))
+      setAdicionados(s => new Set([...s, ...itens.map(chaveAlimento)]))
+      if (fechar) onClose()
+      return
+    }
+    setSalvando(true)
     try {
       await registrarAlimentos(userId, data, refeicao, itens, origem)
       setAdicionados(s => new Set([...s, ...itens.map(chaveAlimento)]))
-      onSalvo()
+      onSalvo?.()
       if (fechar) onClose()
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível adicionar')
@@ -121,14 +139,14 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
 
   const titulo = detalhe
     ? <button onClick={fecharDetalhe} className="flex items-center gap-1 text-zinc-300 hover:text-zinc-100 text-sm font-semibold -ml-1"><ChevronLeft className="w-5 h-5" />Voltar</button>
-    : <h2 className="text-lg font-bold text-zinc-50">Adicionar alimento</h2>
+    : <h2 className="text-lg font-bold text-zinc-50">{ingrediente ? 'Adicionar ingrediente' : 'Adicionar alimento'}</h2>
 
   if (detalhe) {
     const final = editado ?? detalhe
     const medidas = base ? medidasDe(base) : []
     return (
       <Folha titulo={titulo} onClose={onClose}
-        rodape={<Button size="lg" className="w-full" loading={salvando} onClick={async () => { await adicionar([final], base ? 'busca' : aba === 'favoritos' ? 'favorito' : 'recente', false); fecharDetalhe() }}>Adicionar a {refeicao}</Button>}>
+        rodape={<Button size="lg" className="w-full" loading={salvando} onClick={async () => { await adicionar([final], base ? 'busca' : aba === 'favoritos' ? 'favorito' : 'recente', false); fecharDetalhe() }}>{ingrediente ? 'Adicionar à receita' : `Adicionar a ${refeicao}`}</Button>}>
         <div className="flex items-start gap-2 animate-fade-up">
           <div className="flex-1 min-w-0">
             <p className="text-xl font-bold text-zinc-50">{final.nome}</p>
@@ -151,7 +169,7 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
           </div>
         )}
         <div className="mt-4"><EditorAlimento key={chaveAlimento(detalhe)} original={detalhe} onChange={setEditado} /></div>
-        <SeletorRefeicao valor={refeicao} onChange={setRefeicao} />
+        {!ingrediente && <SeletorRefeicao valor={refeicao} onChange={setRefeicao} />}
         {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
       </Folha>
     )
@@ -193,13 +211,13 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
 
   return (
     <Folha titulo={titulo} onClose={onClose}
-      rodape={adicionados.size > 0 && (aba === 'buscar' || aba === 'favoritos')
+      rodape={adicionados.size > 0 && (aba === 'buscar' || aba === 'favoritos' || aba === 'receitas')
         ? <Button size="lg" className="w-full" onClick={onClose}><Check className="w-5 h-5" />Concluir ({adicionados.size})</Button> : undefined}>
-      <SeletorRefeicao valor={refeicao} onChange={setRefeicao} />
-      <div className="mt-4 grid grid-cols-4 gap-1 bg-zinc-800/60 rounded-xl p-1" role="tablist">
-        {ABAS.map(({ id, rotulo, icone: Icone }) => (
-          <button key={id} role="tab" aria-selected={aba === id} onClick={() => { setAba(id); setErro('') }}
-            className={`flex flex-col items-center gap-0.5 py-2 rounded-lg text-xs font-semibold transition ${aba === id ? 'bg-zinc-950 text-green-400 shadow' : 'text-zinc-400 hover:text-zinc-200'}`}>
+      {!ingrediente && <SeletorRefeicao valor={refeicao} onChange={setRefeicao} />}
+      <div className={`mt-4 grid ${abas.length === 5 ? 'grid-cols-5' : 'grid-cols-4'} gap-1 bg-zinc-800/60 rounded-xl p-1`} role="tablist">
+        {abas.map(({ id, rotulo, icone: Icone }) => (
+          <button key={id} role="tab" aria-selected={aba === id} onClick={() => { setAba(id); setErro(''); if (id === 'receitas' && receitas === null) listarReceitas(userId).then(setReceitas).catch(() => setReceitas([])) }}
+            className={`flex flex-col items-center gap-0.5 py-2 rounded-lg text-[11px] font-semibold transition ${aba === id ? 'bg-zinc-950 text-green-400 shadow' : 'text-zinc-400 hover:text-zinc-200'}`}>
             <Icone className="w-4 h-4" />{rotulo}
           </button>
         ))}
@@ -230,6 +248,21 @@ export default function AdicionarAlimento({ userId, data, refeicaoInicial, onClo
               <p className="text-sm text-zinc-500 mt-1">Toque na estrela de um alimento para guardar aqui.</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {aba === 'receitas' && (
+        <div className="mt-4 flex flex-col gap-3">
+          {receitas === null ? <div className="flex justify-center py-8"><Spinner /></div>
+            : receitas.length === 0 ? (
+              <div className="text-center py-8 px-4">
+                <p className="text-zinc-300 font-semibold">Nenhuma receita ainda</p>
+                <p className="text-sm text-zinc-500 mt-1">Monte uma receita com os ingredientes e o rendimento. O app calcula as calorias por porção.</p>
+              </div>
+            ) : lista(receitas.map(r => porcaoReceita(r.nome, r.ingredientes, r.porcoes)), 'receita', null)}
+          <Link to="/receitas/nova" onClick={onClose} className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-700 py-3 text-sm font-semibold text-green-400 hover:border-green-500/50">
+            <Plus className="w-4 h-4" />Criar receita
+          </Link>
         </div>
       )}
 

@@ -23,6 +23,9 @@ const registro = (refeicao, nome, quantidade, calorias, i) => ({ id: 'f' + i, us
 const REGISTROS = [registro('Café da manhã', 'Pão francês', '1 unidade', 135, 1), registro('Lanche da tarde', 'Banana prata', '1 unidade', 89, 2)]
 const isoDiasAtras = n => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const PESOS = [{ id: 'p1', data: isoDiasAtras(20), peso_kg: 84.1 }, { id: 'p2', data: isoDiasAtras(10), peso_kg: 83.4 }, { id: 'p3', data: isoDiasAtras(2), peso_kg: 82.6 }]
+const RECEITA = { id: 'r1', nome: 'Frango com arroz', porcoes: 4, modo_preparo: null, updated_at: '2026-10-28T00:00:00Z', ingredientes: [
+  { nome: 'Frango', quantidade: '500 g', calorias: 800, proteina_g: 150, carboidrato_g: 0, gordura_g: 18 },
+  { nome: 'Arroz', quantidade: '300 g', calorias: 384, proteina_g: 7.5, carboidrato_g: 84.3, gordura_g: 0.6 }] }
 const META = { user_id: UID, sexo: 'masculino', nascimento: '1990-05-10', altura_cm: 178, peso_kg: 82, atividade: 'moderado', objetivo: 'perder', ritmo_kg_semana: 0.5, calorias: 2280, proteina_g: 164, carboidrato_g: 233, gordura_g: 76, personalizada: false, somar_exercicio: false }
 const DIETA = { id: 'd1', user_id: UID, nome: 'Plano Cutting', objetivo: 'Perda de gordura', calorias_dia: 600, created_at: '2026-10-20T00:00:00Z',
   plano: { nome: 'Plano Cutting', objetivo: 'Perda de gordura', calorias_dia: 600, macros: { proteina_g: 150, carboidrato_g: 180, gordura_g: 60 }, dicas: ['Beba água'],
@@ -75,6 +78,11 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? perfil : [perfil])
     }
     if (p === '/rest/v1/user_settings') return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? { notificacoes: {}, audio: { volume: 0.8, mudo: false } } : [])
+    if (nutricao && p === '/rest/v1/receitas') {
+      const metodo = rota.request().method()
+      if (metodo !== 'GET') { const corpo = rota.request().postDataJSON(); gravacoes.push({ tabela: 'receitas', metodo, corpo }); return json({ id: 'r9', ...corpo }) }
+      return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? RECEITA : [RECEITA])
+    }
     if (nutricao && ['/rest/v1/registros_agua', '/rest/v1/registros_peso', '/rest/v1/exercicios_registro'].includes(p)) {
       const metodo = rota.request().method()
       const tabela = p.split('/').pop()
@@ -234,7 +242,7 @@ await t('usuário sem assinatura: paywall nos recursos Premium e CTA no início'
 await t('usuário sem assinatura acessa conta, menu, assinatura e pagamentos', async () => {
   const { ctx, page } = await contexto(browser, { logado: true })
   await page.goto(BASE + '/menu')
-  for (const item of ['Início', 'Meus Treinos', 'Dieta', 'Diário alimentar', 'Meta diária', 'Peso', 'Perfil', 'Configurações', 'Minha Assinatura', 'Pagamentos e Faturas', 'Ajuda e Suporte', 'Termos de Uso', 'Política de Privacidade', 'Sobre o aplicativo']) {
+  for (const item of ['Início', 'Meus Treinos', 'Dieta', 'Diário alimentar', 'Meta diária', 'Peso', 'Receitas', 'Relatório da semana', 'Perfil', 'Configurações', 'Minha Assinatura', 'Pagamentos e Faturas', 'Ajuda e Suporte', 'Termos de Uso', 'Política de Privacidade', 'Sobre o aplicativo']) {
     await page.getByRole('main').getByRole('link', { name: item, exact: true }).waitFor()
   }
   await page.getByRole('button', { name: 'Sair da conta' }).waitFor()
@@ -527,6 +535,58 @@ await t('peso: gráfico, registro do dia e meta de peso', async () => {
   const meta = page.gravacoes.find(x => x.tabela === 'metas_nutricionais' && x.metodo === 'PATCH')
   assert.equal(meta?.corpo?.meta_peso_kg, 78)
   await page.screenshot({ path: `${SHOTS}/peso.png`, fullPage: true })
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('receitas: montar com ingredientes da busca e adicionar ao diário por porção', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/receitas')
+  await page.getByText('296 kcal por porção').waitFor() // (800 + 384) / 4
+  await page.getByRole('link', { name: /Nova/ }).click()
+  await page.getByLabel('Nome da receita').fill('Arroz da semana')
+  await page.getByRole('button', { name: 'Adicionar ingrediente' }).click()
+  const folha = page.getByRole('dialog')
+  await folha.getByRole('heading', { name: 'Adicionar ingrediente' }).waitFor()
+  assert.equal(await folha.getByRole('tab', { name: 'Receitas' }).count(), 0, 'sem aba de receitas ao montar receita')
+  await folha.getByPlaceholder(/Buscar alimento/).fill('arroz branco')
+  await folha.getByText('Arroz, tipo 1, cozido').first().click()
+  await folha.getByRole('button', { name: /escumadeira cheia/ }).click()
+  await folha.getByRole('button', { name: 'Adicionar à receita' }).click()
+  await folha.getByRole('button', { name: /Concluir \(1\)/ }).click() // o painel fica aberto para vários ingredientes
+  await folha.waitFor({ state: 'detached' })
+  await page.getByRole('region', { name: 'Ingredientes' }).getByText('1 escumadeira cheia (90 g)').waitFor()
+  await page.getByRole('region', { name: 'Por porção' }).getByText('29').waitFor() // 115 kcal / 4 porções
+  await page.screenshot({ path: `${SHOTS}/receita.png`, fullPage: true })
+  await page.getByRole('button', { name: 'Salvar receita' }).click()
+  await page.waitForURL(/\/receitas$/)
+  const nova = page.gravacoes.find(x => x.tabela === 'receitas' && x.metodo === 'POST')
+  assert.equal(nova?.corpo?.nome, 'Arroz da semana'); assert.equal(nova?.corpo?.porcoes, 4); assert.equal(nova?.corpo?.ingredientes?.[0]?.calorias, 115)
+  // No diário: aba Receitas adiciona 1 porção
+  await page.goto(BASE + '/calorias')
+  await page.getByRole('button', { name: 'Adicionar alimento' }).first().click()
+  await page.getByRole('dialog').getByRole('tab', { name: 'Receitas' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Adicionar Frango com arroz' }).click()
+  await page.waitForTimeout(300)
+  const log = page.gravacoes.filter(x => x.tabela === 'food_logs' && x.metodo === 'POST').pop()
+  assert.equal(log?.corpo?.[0]?.nome, 'Frango com arroz'); assert.equal(log?.corpo?.[0]?.quantidade, '1 porção'); assert.equal(log?.corpo?.[0]?.calorias, 296); assert.equal(log?.corpo?.[0]?.origem, 'receita')
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('relatório semanal: média, dias na meta e navegação entre semanas', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/relatorio')
+  await page.getByRole('heading', { name: 'Relatório da semana' }).waitFor()
+  await page.getByText(/Esta semana/).waitFor()
+  await page.getByRole('region', { name: 'Calorias da semana' }).getByText('224').first().waitFor() // 135 + 89 no dia
+  await page.getByText('0/1').waitFor() // 224 kcal fica abaixo de 80% da meta
+  await page.getByRole('img', { name: /Calorias por dia/ }).waitFor()
+  await page.waitForTimeout(1200) // animação das barras
+  await page.screenshot({ path: `${SHOTS}/relatorio.png`, fullPage: true })
+  await page.getByRole('button', { name: 'Semana anterior' }).click()
+  await page.getByText(/^Semana · /).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Próxima semana' }).isDisabled(), false)
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })

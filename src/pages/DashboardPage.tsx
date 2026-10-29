@@ -19,7 +19,7 @@ import type { Exercicio } from '../lib/progresso'
 import { resumoPeso } from '../lib/exercicios'
 import type { PontoPeso } from '../lib/exercicios'
 import { somarDias } from '../lib/diario'
-import { Flame, Scale } from 'lucide-react'
+import { Flame, Scale, BarChart3 } from 'lucide-react'
 
 const ICONE_REFEICAO: Record<Refeicao, string> = { 'Café da manhã': '☕', Almoço: '🍽️', Jantar: '🌙', Lanches: '🍎' }
 
@@ -181,6 +181,12 @@ export default function DashboardPage() {
             : <p className="text-sm text-green-400">Registre seu peso →</p>}
         </div>
         {pesos.length > 1 ? <GraficoPeso pontos={pesos} mini /> : <ChevronRight className="w-5 h-5 text-zinc-600" />}
+      </Link>
+
+      <Link to="/relatorio" className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl px-4 py-3 animate-fade-up transition" style={{ animationDelay: '170ms' }}>
+        <span className="w-9 h-9 rounded-xl bg-green-500/15 flex items-center justify-center shrink-0"><BarChart3 className="w-5 h-5 text-green-400" /></span>
+        <span className="flex-1 text-sm font-semibold text-zinc-100">Relatório da semana</span>
+        <ChevronRight className="w-5 h-5 text-zinc-600" />
       </Link>
 
       {/* Treino e dieta */}
