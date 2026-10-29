@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { taxaBasal, gastoDiario, calcularMeta, distribuirMacros, idadeEm, caloriasDosMacros, CALORIAS_MINIMAS, ajustarPorCalorias, ajustarPorMacro, percentuais } from '../src/lib/metas'
+import { carregarTaco, buscarBase, medidasDe, paraAlimento } from '../src/lib/alimentosBase'
 import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade } from '../src/lib/diario'
 
 let ok = 0
@@ -113,6 +114,25 @@ await t('quantidade editável: 4 ovos → 2 ovos, 150 g → 200 g', () => {
   assert.equal(passoQuantidade({ valor: 150, unidade: 'g' }), 10)
   assert.equal(passoQuantidade({ valor: 4, unidade: 'ovos' }), 1)
   assert.equal(passoQuantidade({ valor: 0.5, unidade: 'copo' }), 0.5)
+})
+
+await t('busca na TACO: resultados mais comuns primeiro e medidas caseiras', async () => {
+  const taco = await carregarTaco()
+  assert.ok(taco.length > 590, `${taco.length} alimentos`)
+  const primeiro = (q: string) => buscarBase(taco, q)[0]?.nome
+  assert.equal(primeiro('arroz branco'), 'Arroz, tipo 1, cozido')
+  assert.equal(primeiro('feijão'), 'Feijão, carioca, cozido')
+  assert.equal(primeiro('ovo'), 'Ovo, de galinha, inteiro, cozido/10minutos')
+  assert.equal(primeiro('leite'), 'Leite, de vaca, integral (líquido)')
+  assert.match(primeiro('maçã') ?? '', /^Maçã/)
+  assert.match(primeiro('carne moida') ?? '', /moído/)
+  assert.equal(buscarBase(taco, 'xyzqw').length, 0)
+  const arroz = taco.find(x => x.nome === 'Arroz, tipo 1, cozido')!
+  const m = medidasDe(arroz)
+  assert.deepEqual(m.map(x => x.rotulo), ['colher de servir', 'escumadeira cheia', 'gramas'])
+  const a = paraAlimento(arroz, m[1])
+  assert.equal(a.quantidade, '1 escumadeira cheia (90 g)'); assert.equal(a.calorias, 115)
+  assert.equal(paraAlimento(arroz, m[2]).quantidade, '100 g')
 })
 
 console.log(`\n${ok} testes de metas e diário passaram`)

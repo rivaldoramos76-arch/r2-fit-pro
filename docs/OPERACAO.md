@@ -105,13 +105,15 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 10. `20261029180100_teste_gratis_lembretes_config.sql` — lembretes do fim do teste, métricas e configuração (`teste_dias`, `teste_limite_ia`).
 11. `20261030120000_metas_favoritos.sql` — meta diária (`metas_nutricionais`) e alimentos favoritos (`alimentos_favoritos`), com RLS; favoritar exige Premium.
 12. `20261030130000_editar_alimentos_admin.sql` — edição de alimentos já registrados no diário (Premium) e `admin_gerenciar_acesso` (liberar cortesia, estender, encerrar, registrar pagamento manual e corrigir status de pagamento; tudo auditado).
+13. `20261030150000_alimentos_base.sql` — banco compartilhado de alimentos (estimados pela IA, produtos do código de barras/Open Food Facts e tabelas nutricionais fotografadas), gravado só pela função `salvar_alimento_base` (Premium, sem duplicar, limite de 60 por pessoa por dia).
 
 ## Testes
-- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails (14) + meta diária e diário (11).
+- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails (14) + meta diária, diário e busca (12).
 - `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
 - `tests/sql/nutricao.test.sql` — 17 verificações de RLS da meta diária e dos favoritos (resultado esperado: `TESTES_OK (17)`).
 - `tests/sql/admin_acesso.test.sql` — 16 verificações das ações do administrador e da edição no diário (resultado esperado: `TESTES_OK (16)`).
-- `tests/e2e/ui.test.mjs` — 27 testes de interface (Playwright, celular e desktop) com API simulada.
+- `tests/sql/alimentos_base.test.sql` — 11 verificações do banco compartilhado de alimentos (resultado esperado: `TESTES_OK (11)`).
+- `tests/e2e/ui.test.mjs` — 29 testes de interface (Playwright, celular e desktop) com API simulada.
 
 ## Monitoramento e recuperação
 - Painel `/admin`: webhooks com erro, e-mails não enviados, falhas de cobrança, auditoria.
@@ -120,3 +122,7 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 - Webhook com erro retorna 500 e o Mercado Pago reenvia; reprocessamento é idempotente. Além disso, com pagamento pendente o app reconsulta o Mercado Pago sozinho ao abrir e ao voltar para a aba. Avisos de recursos que não existem no Mercado Pago (ex.: cobrança de validação de cartão recusada) são marcados como ignorados.
 - Backups: plano Pro do Supabase inclui backups diários (recomendado PITR para produção). Plano gratuito não tem backup automático — **contratar antes do lançamento** ou agendar `pg_dump`.
 - Publicação: `npm run build` → deploy Vercel; Edge Function via `supabase functions deploy r2-api --no-verify-jwt`.
+
+## Tabela de alimentos (TACO)
+
+`src/data/taco.json` é gerado por `node scripts/gerar-taco.mjs` a partir da TACO 4ª edição (NEPA/UNICAMP; reprodução permitida citando a fonte), com complementos marcados (leite fluido e macarrão cozido, que a TACO não traz). Medidas caseiras ficam em `src/lib/alimentosBase.ts`.

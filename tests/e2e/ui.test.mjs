@@ -62,6 +62,11 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
     if (p === '/rest/v1/rpc/admin_metricas') return admin ? json({ usuarios_total: 3, usuarios_30d: 2, assinantes_ativos: 1, mrr_centavos: 1990, recebido_mes_centavos: 1990, recebido_total_centavos: 3980, pendente_centavos: 0, estornado_centavos: 0, projetado_proximo_mes_centavos: 1990, falhas_30d: 1, webhooks_erro_7d: 0, emails_pendentes: 2, tickets_abertos: 1, privacidade_abertas: 0, assinaturas_por_status: { ativa: 1 } }) : json({ message: 'Acesso negado' }, 400)
     if (p === '/rest/v1/app_config') return json(CONFIG)
     if (p === '/rest/v1/rpc/admin_usuarios') return admin ? json([CLIENTE]) : json({ message: 'Acesso negado' }, 400)
+    if (p === '/rest/v1/rpc/salvar_alimento_base') {
+      const { p: d } = rota.request().postDataJSON()
+      gravacoes.push({ tabela: 'alimentos_base', corpo: d })
+      return json({ id: 'ab1', nome: d.nome, marca: d.marca, codigo_barras: d.codigo_barras, fonte: d.fonte, kcal: d.kcal, proteina: d.proteina, carboidrato: d.carboidrato, gordura: d.gordura, porcao_rotulo: d.porcao_rotulo, porcao_g: d.porcao_g })
+    }
     if (p === '/rest/v1/rpc/admin_gerenciar_acesso') { gravacoes.push({ tabela: 'admin_gerenciar_acesso', corpo: rota.request().postDataJSON() }); return json({ estado: 'ativa', acesso_ate: '2099-12-31T23:59:59Z' }) }
     if (p === '/rest/v1/profiles') {
       const perfil = { id: UID, nome: 'Cliente Teste', email: usuario.email, telefone: null, data_nascimento: null, avatar_url: null, created_at: '2026-10-01T00:00:00Z', versao_termos: '2026-10-22', aceite_termos_em: '2026-10-01T00:00:00Z', marketing_opt_in: false }
@@ -91,6 +96,21 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       return json({ pagamentos_configurados: true, modo_teste: false, public_key: null })
     }
     return json({})
+  })
+  // Open Food Facts e IA simulados
+  await ctx.route('https://br.openfoodfacts.org/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ products: [
+    { code: '7899999999999', product_name: 'Whey Protein Baunilha', brands: 'Marca X', serving_quantity: 30, nutriments: { 'energy-kcal_100g': 390, proteins_100g: 75, carbohydrates_100g: 10, fat_100g: 5 } }] }) }))
+  await ctx.route('https://world.openfoodfacts.org/api/v2/product/**', r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify(r.request().url().includes('7891000100103')
+      ? { status: 1, product: { code: '7891000100103', product_name: 'Achocolatado em pó', brands: 'Marca Y', serving_quantity: 20, nutriments: { 'energy-kcal_100g': 380, proteins_100g: 4, carbohydrates_100g: 88, fat_100g: 2 } } }
+      : { status: 0 }) }))
+  await ctx.route('**/api/ai', r => {
+    const corpo = JSON.stringify(r.request().postDataJSON())
+    const resposta = corpo.includes('tabelas nutricionais')
+      ? { nome: 'Barra de cereal', kcal: 400, proteina: 6, carboidrato: 70, gordura: 10, porcao_rotulo: 'unidade (25 g)', porcao_g: 25 }
+      : { nome: 'Açaí na tigela com granola', kcal: 140, proteina: 2, carboidrato: 24, gordura: 4, porcao_rotulo: 'tigela', porcao_g: 300 }
+    gravacoes.push({ tabela: 'api_ai', corpo: corpo.slice(0, 200) })
+    return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(resposta) } }] }) })
   })
   if (treino) {
     await ctx.route('**/audio/*.wav', r => r.fulfill({ status: 200, contentType: 'audio/wav', body: tomWav() }))
@@ -353,11 +373,71 @@ await t('diário: editar alimento já salvo e ajustar item da IA', async () => {
   await folha.waitFor({ state: 'detached' })
   const upd = page.gravacoes.find(x => x.tabela === 'food_logs' && x.metodo === 'PATCH')
   assert.equal(upd?.corpo?.calorias, 270); assert.equal(upd?.corpo?.quantidade, '2 unidades'); assert.equal(upd?.corpo?.refeicao, 'Jantar')
-  // Busca sem resultado leva para o cálculo com IA com o texto já preenchido
+  // O texto da busca vai junto para a aba "Digitar" (IA por texto)
   await page.getByRole('button', { name: 'Adicionar alimento' }).first().click()
-  await page.getByPlaceholder('Buscar nos recentes').fill('tapioca')
-  await page.getByRole('button', { name: /Calcular "tapioca" com IA/ }).click()
+  await page.getByPlaceholder(/Buscar alimento/).fill('tapioca')
+  await page.getByRole('tab', { name: 'Digitar' }).click()
   assert.equal(await page.getByLabel('O que você comeu?').inputValue(), 'tapioca')
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('busca: TACO com medidas caseiras, produto industrializado e cálculo pela IA salvo no banco', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/calorias')
+  await page.getByRole('button', { name: 'Adicionar alimento' }).first().click()
+  const folha = page.getByRole('dialog')
+  await folha.getByPlaceholder(/Buscar alimento/).fill('arroz branco')
+  await folha.getByText('Arroz, tipo 1, cozido').first().click()
+  await folha.getByRole('button', { name: /escumadeira cheia \(90 g\)/ }).click()
+  await folha.getByText('115').first().waitFor() // 128 kcal/100 g × 90 g
+  await page.screenshot({ path: `${SHOTS}/busca-medida.png` })
+  await folha.getByRole('button', { name: /^Adicionar a [A-ZÁ]/ }).click()
+  await page.waitForTimeout(300)
+  const ins = page.gravacoes.filter(x => x.tabela === 'food_logs' && x.metodo === 'POST').pop()
+  assert.equal(ins?.corpo?.[0]?.nome, 'Arroz, tipo 1, cozido'); assert.equal(ins?.corpo?.[0]?.quantidade, '1 escumadeira cheia (90 g)')
+  assert.equal(ins?.corpo?.[0]?.calorias, 115); assert.equal(ins?.corpo?.[0]?.origem, 'busca')
+  // Produto industrializado (Open Food Facts)
+  await folha.getByPlaceholder(/Buscar alimento/).fill('whey')
+  await folha.getByText('Whey Protein Baunilha').waitFor({ timeout: 5000 })
+  await page.screenshot({ path: `${SHOTS}/busca-resultados.png` })
+  // Não está em lugar nenhum: a IA calcula e o alimento vai para o banco compartilhado
+  await folha.getByPlaceholder(/Buscar alimento/).fill('açaí na tigela com granola')
+  await folha.getByRole('button', { name: /Calcular "açaí na tigela com granola" com IA/ }).click()
+  await folha.getByRole('button', { name: /tigela \(300 g\)/ }).waitFor()
+  await folha.getByText('420').first().waitFor() // 140 kcal/100 g × 300 g
+  const salvo = page.gravacoes.find(x => x.tabela === 'alimentos_base')
+  assert.equal(salvo?.corpo?.fonte, 'ia'); assert.equal(salvo?.corpo?.kcal, 140)
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('código de barras: produto encontrado e produto novo lido pela foto do rótulo', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/calorias')
+  await page.getByRole('button', { name: 'Adicionar alimento' }).first().click()
+  const folha = page.getByRole('dialog').first()
+  await folha.getByRole('button', { name: /Código de barras/ }).click()
+  const leitor = page.getByRole('dialog', { name: 'Ler código de barras' })
+  await leitor.getByRole('button', { name: /Digitar o código/ }).click().catch(() => {})
+  await leitor.getByLabel('Código de barras').fill('7891000100103')
+  await leitor.getByRole('button', { name: 'Buscar' }).click()
+  await folha.getByText('Achocolatado em pó').first().waitFor()
+  await folha.getByRole('button', { name: /porção do rótulo \(20 g\)/ }).waitFor()
+  assert.ok(page.gravacoes.some(x => x.tabela === 'alimentos_base' && x.corpo.codigo_barras === '7891000100103' && x.corpo.fonte === 'off'), 'produto guardado no banco')
+  await folha.getByRole('button', { name: 'Voltar' }).click()
+  // Código desconhecido: fotografa a tabela nutricional
+  await folha.getByRole('button', { name: /Código de barras/ }).click()
+  await leitor.getByRole('button', { name: /Digitar o código/ }).click().catch(() => {})
+  await leitor.getByLabel('Código de barras').fill('7899999999999')
+  await leitor.getByRole('button', { name: 'Buscar' }).click()
+  await folha.getByText(/ainda não está na base/).waitFor()
+  await folha.getByLabel('Nome do produto (opcional)').fill('Barra de cereal de banana')
+  const jpeg = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64')
+  await folha.locator('input[type=file]').first().setInputFiles({ name: 'rotulo.jpg', mimeType: 'image/jpeg', buffer: jpeg })
+  await folha.getByText('Barra de cereal de banana').first().waitFor()
+  const rot = page.gravacoes.find(x => x.tabela === 'alimentos_base' && x.corpo.fonte === 'rotulo')
+  assert.equal(rot?.corpo?.codigo_barras, '7899999999999'); assert.equal(rot?.corpo?.porcao_g, 25)
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
