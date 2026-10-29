@@ -1,12 +1,13 @@
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Home, Dumbbell, Salad, Flame, User, Settings, CreditCard, Receipt, LifeBuoy, FileText, Shield, Info, LogOut, LayoutDashboard, ChevronRight,
+  Home, Dumbbell, Salad, Flame, User, Settings, CreditCard, Receipt, LifeBuoy, FileText, Shield, Info, LogOut, LayoutDashboard, ChevronRight, Sparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useAcesso } from '../context/AcessoContext'
 import { Badge } from '../components/UI'
-import { ROTULO_ESTADO } from '../lib/formatos'
+import { brl, ROTULO_ESTADO } from '../lib/formatos'
+import { useConfig } from '../lib/config'
 
 type Item = { href: string; label: string; icon: LucideIcon }
 const GRUPOS: { titulo: string; itens: Item[] }[] = [
@@ -34,7 +35,10 @@ export default function MenuPage() {
   const { user, signOut } = useAuth()
   const { estado, admin } = useAcesso()
   const navigate = useNavigate()
+  const { config } = useConfig()
   const rotulo = ROTULO_ESTADO[estado]
+  const semAcesso = ['sem_assinatura', 'expirada', 'pagamento_pendente'].includes(estado)
+  const plano = config?.plano
 
   const sair = async () => {
     await signOut()
@@ -47,6 +51,21 @@ export default function MenuPage() {
         <p className="font-semibold truncate">{user?.user_metadata?.nome ?? user?.email}</p>
         <p className="text-sm text-zinc-500 truncate">{user?.email}</p>
         <Link to="/assinatura" className="inline-block mt-2"><Badge variant={rotulo.cor}>{rotulo.texto}</Badge></Link>
+        {semAcesso && (
+          <Link to="/assinatura"
+            className="mt-4 flex items-center gap-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-400 px-4 py-3.5 text-zinc-950 shadow-lg shadow-green-500/20 transition-transform active:scale-[0.98]">
+            <Sparkles className="w-6 h-6 shrink-0" />
+            <span className="flex-1">
+              <span className="block font-bold">{estado === 'pagamento_pendente' ? 'Concluir assinatura' : estado === 'expirada' ? 'Assinar novamente' : 'Assinar o Premium'}</span>
+              {plano && (
+                <span className="block text-xs font-medium text-zinc-900/80">
+                  {brl(plano.preco_centavos)}/mês{plano.preco_anual_centavos ? ` ou ${brl(plano.preco_anual_centavos)}/ano` : ''} · Pix, cartão ou boleto
+                </span>
+              )}
+            </span>
+            <ChevronRight className="w-5 h-5 shrink-0" />
+          </Link>
+        )}
       </div>
 
       {admin && (

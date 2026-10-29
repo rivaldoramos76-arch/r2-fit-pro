@@ -149,6 +149,7 @@ await t('usuário sem assinatura acessa conta, menu, assinatura e pagamentos', a
   }
   await page.getByRole('button', { name: 'Sair da conta' }).waitFor()
   assert.equal(await page.getByText('Painel administrativo').count(), 0, 'usuário comum não vê o painel')
+  await page.getByRole('link', { name: /Assinar o Premium/ }).waitFor()
   await page.screenshot({ path: `${SHOTS}/menu.png`, fullPage: true })
   await page.goto(BASE + '/assinatura')
   await page.getByRole('heading', { name: 'Minha Assinatura' }).waitFor()
