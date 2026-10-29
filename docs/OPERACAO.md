@@ -107,7 +107,7 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 12. `20261030130000_editar_alimentos_admin.sql` — edição de alimentos já registrados no diário (Premium) e `admin_gerenciar_acesso` (liberar cortesia, estender, encerrar, registrar pagamento manual e corrigir status de pagamento; tudo auditado).
 
 ## Testes
-- `npm test` — lógica de treinos (14) + lógica comercial/Mercado Pago/e-mails (14) + meta diária e diário (11).
+- `npm test` — lógica de treinos (16) + lógica comercial/Mercado Pago/e-mails (14) + meta diária e diário (11).
 - `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
 - `tests/sql/nutricao.test.sql` — 17 verificações de RLS da meta diária e dos favoritos (resultado esperado: `TESTES_OK (17)`).
 - `tests/sql/admin_acesso.test.sql` — 16 verificações das ações do administrador e da edição no diário (resultado esperado: `TESTES_OK (16)`).

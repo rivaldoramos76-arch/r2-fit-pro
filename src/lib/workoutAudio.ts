@@ -110,15 +110,69 @@ export function renderizarFaixa(c: Cronograma, clips: Record<ClipKey, Float32Arr
 
 /** Remove silêncio do início/fim e normaliza o pico, para o som começar exatamente no tempo marcado. */
 export function aparar(s: Float32Array, sr: number, limiar = 0.012): Float32Array {
-  let a = 0, b = s.length - 1
-  while (a < s.length && Math.abs(s[a]) < limiar) a++
-  while (b > a && Math.abs(s[b]) < limiar) b--
-  if (a >= b) return new Float32Array(0)
-  const pad = Math.round(sr * 0.01)
-  const out = s.slice(Math.max(0, a - pad), Math.min(s.length, b + pad * 4))
   let pico = 0
-  for (const v of out) pico = Math.max(pico, Math.abs(v))
-  if (pico > 0) for (let i = 0; i < out.length; i++) out[i] = (out[i] / pico) * 0.92
+  for (const v of s) pico = Math.max(pico, Math.abs(v))
+  if (pico < limiar) return new Float32Array(0)
+  // Detecta a fala por janelas de 10 ms: chiado e respiração no fim da gravação ficam bem
+  // abaixo de 8% do pico e são cortados (antes, qualquer ruído acima de 1,2% ficava).
+  const jan = Math.max(1, Math.round(sr * 0.01))
+  const corte = Math.max(limiar, pico * 0.08)
+  const nj = Math.ceil(s.length / jan)
+  const rmsJ = (j: number) => {
+    let x = 0, n = 0
+    for (let i = j * jan; i < Math.min(s.length, (j + 1) * jan); i++) { x += s[i] * s[i]; n++ }
+    return Math.sqrt(x / Math.max(1, n))
+  }
+  let ja = 0, jb = nj - 1
+  while (ja < nj && rmsJ(ja) < corte) ja++
+  while (jb > ja && rmsJ(jb) < corte) jb--
+  if (ja >= jb && rmsJ(ja) < corte) return new Float32Array(0)
+  const ini = Math.max(0, ja * jan - jan)
+  const fim = Math.min(s.length, (jb + 1) * jan + 4 * jan)
+  const out = s.slice(ini, fim)
+  // Entradas e saídas suaves (evitam estalos e o "rabo" de ruído)
+  const fadeIn = Math.min(out.length, Math.round(sr * 0.005)), fadeOut = Math.min(out.length, Math.round(sr * 0.04))
+  for (let i = 0; i < fadeIn; i++) out[i] *= i / fadeIn
+  for (let i = 0; i < fadeOut; i++) out[out.length - 1 - i] *= i / fadeOut
+  let p = 0
+  for (const v of out) p = Math.max(p, Math.abs(v))
+  if (p > 0) for (let i = 0; i < out.length; i++) out[i] = (out[i] / p) * 0.92
+  return out
+}
+
+/** Deixa a fala alta e uniforme para ser ouvida por cima da música: controle automático de
+ *  ganho (sobe as partes baixas até um nível alvo, limitado a `ganhoMax`) seguido de um
+ *  limitador suave. O pico final fica abaixo de 1, sem estourar. */
+export function maximizar(s: Float32Array, sr: number, { alvo = 0.9, ganhoMax = 12, drive = 2.2 } = {}): Float32Array {
+  if (!s.length) return s
+  const out = new Float32Array(s.length)
+  const ataque = Math.exp(-1 / (sr * 0.004))
+  const soltura = Math.exp(-1 / (sr * 0.05))
+  // Envelope com olhar à frente de 5 ms, para o ganho baixar antes de um pico chegar
+  const adiante = Math.round(sr * 0.005)
+  let env = 0
+  const envs = new Float32Array(s.length)
+  for (let i = 0; i < s.length; i++) {
+    const x = Math.abs(s[Math.min(s.length - 1, i + adiante)])
+    env = x > env ? ataque * env + (1 - ataque) * x : soltura * env + (1 - soltura) * x
+    envs[i] = env
+  }
+  const norm = Math.tanh(drive)
+  // Portão de ruído: abaixo de 6% do pico não é fala; ali o ganho cai em vez de subir,
+  // para não transformar respiração e chiado em ruído alto.
+  let picoIn = 0
+  for (const v of s) picoIn = Math.max(picoIn, Math.abs(v))
+  const portao = picoIn * 0.06
+  let pico = 0
+  for (let i = 0; i < s.length; i++) {
+    const abertura = Math.min(1, Math.max(0, (envs[i] - portao) / portao))
+    const g = Math.min(ganhoMax, alvo / Math.max(envs[i], 1e-4)) * abertura
+    const y = Math.tanh(drive * s[i] * g) / norm
+    out[i] = y
+    pico = Math.max(pico, Math.abs(y))
+  }
+  const teto = 0.97
+  if (pico > teto) for (let i = 0; i < out.length; i++) out[i] *= teto / pico
   return out
 }
 
@@ -146,7 +200,7 @@ export function carregarClipes(): Promise<Record<ClipKey, Float32Array> | null> 
         const r = await fetch(`/audio/${k}.mp3`)
         if (!r.ok) throw new Error(`clip ${k}: ${r.status}`)
         const ab = await decodificar(await r.arrayBuffer())
-        const dados = aparar(ab.getChannelData(0), ab.sampleRate)
+        const dados = maximizar(aparar(ab.getChannelData(0), ab.sampleRate), ab.sampleRate)
         if (!dados.length) throw new Error(`clip ${k} vazio`)
         return [k, dados] as const
       }))
@@ -214,6 +268,7 @@ export class TreinoPlayer {
   private clips: Record<ClipKey, Float32Array> | null = null
   private ctx: Ctx | null = null
   private ganho: GainNode | null = null
+  private entrada: AudioNode | null = null
   private buffers: Partial<Record<ClipKey, AudioBuffer>> = {}
   private fontes: AudioBufferSourceNode[] = []
   private t0Ctx = 0
@@ -265,7 +320,17 @@ export class TreinoPlayer {
     if (!Ctor || !this.clips) throw new Error('Web Audio indisponível')
     const ctx = new Ctor()
     this.ctx = ctx
+    // Voz → realce de presença (nitidez sobre a música) → corte de graves → limitador → volume
+    const presenca = ctx.createBiquadFilter()
+    presenca.type = 'peaking'; presenca.frequency.value = 2800; presenca.Q.value = 0.9; presenca.gain.value = 6
+    const graves = ctx.createBiquadFilter()
+    graves.type = 'highpass'; graves.frequency.value = 140
+    const limitador = ctx.createDynamicsCompressor()
+    limitador.threshold.value = -10; limitador.knee.value = 2; limitador.ratio.value = 20
+    limitador.attack.value = 0.002; limitador.release.value = 0.12
     this.ganho = ctx.createGain()
+    this.entrada = presenca
+    presenca.connect(graves); graves.connect(limitador); limitador.connect(this.ganho)
     this.ganho.connect(ctx.destination)
     this.aplicarVolume()
     for (const k of CLIP_KEYS) {
@@ -295,7 +360,7 @@ export class TreinoPlayer {
       if (!b) continue
       const src = ctx.createBufferSource()
       src.buffer = b
-      src.connect(this.ganho!)
+      src.connect(this.entrada ?? this.ganho!)
       src.start(this.t0Ctx + cue.t)
       this.fontes.push(src)
     }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { CATALOGO, GRUPOS } from '../src/data/exercicios'
 import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
-import { montarCronograma, estadoEm, renderizarFaixa, aparar } from '../src/lib/workoutAudio'
+import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar } from '../src/lib/workoutAudio'
 import { normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
 let ok = 0
@@ -86,6 +86,32 @@ await t('faixa WAV: tamanho e posição dos clipes', () => {
     console.log('   duração', c.total.toFixed(1)+'s', 'tamanho', (blob.size/1024).toFixed(0)+'KB')
   })
 })
+await t('voz maximizada fica bem mais alta sem estourar', () => {
+  const sr = 16000
+  // fala simulada: uma sílaba forte a cada cinco, as outras fracas
+  const s = Float32Array.from({ length: sr }, (_, i) => Math.sin(i / 3) * (Math.floor(i / 1600) % 5 === 0 ? 0.92 : 0.1))
+  const rms = (a: Float32Array) => Math.sqrt(a.reduce((x, v) => x + v * v, 0) / a.length)
+  const m = maximizar(s, sr)
+  assert.ok(rms(m) > rms(s) * 2, `mais alto (${rms(s).toFixed(3)} → ${rms(m).toFixed(3)})`)
+  assert.ok(rms(m.slice(2000, 3000)) > rms(s.slice(2000, 3000)) * 4, 'partes fracas sobem bastante')
+  assert.ok(Math.max(...m.map(Math.abs)) <= 0.97 + 1e-6, 'sem estourar')
+})
+
+await t('chiado no fim da gravação é cortado e não é amplificado', () => {
+  const sr = 16000
+  // "Repouso!": 0,4 s de voz e depois 0,8 s de chiado fraco (3% do pico)
+  let semente = 1
+  const ruido = () => { semente = (semente * 16807) % 2147483647; return semente / 2147483647 * 2 - 1 }
+  const s = Float32Array.from({ length: Math.round(sr * 1.2) }, (_, i) => i < sr * 0.4 ? Math.sin(i / 3) * 0.8 : ruido() * 0.025)
+  const a = aparar(s, sr)
+  assert.ok(a.length < sr * 0.5, `cortou o chiado (${(a.length / sr).toFixed(2)} s)`)
+  assert.ok(Math.abs(a[a.length - 1]) < 0.01, 'termina em silêncio, sem estalo')
+  // Mesmo se o chiado ficasse, a maximização não o aumenta
+  const m = maximizar(s, sr)
+  const rms = (x: Float32Array) => Math.sqrt(x.reduce((t, v) => t + v * v, 0) / x.length)
+  assert.ok(rms(m.slice(sr * 0.6)) <= rms(s.slice(sr * 0.6)) * 1.01, 'chiado não sobe')
+})
+
 await t('aparar remove silêncio inicial', () => {
   const s = new Float32Array(16000); for (let i = 8000; i < 12000; i++) s[i] = 0.3
   const r = aparar(s, 16000); assert.ok(r.length < 6000 && Math.abs(r[200]) > 0.5)
