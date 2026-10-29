@@ -27,7 +27,13 @@ export default function TermosPage() {
           <p>Você é responsável pela veracidade dos dados informados e pela guarda da sua senha. Avise-nos imediatamente em caso de uso não autorizado. Podemos suspender contas usadas de forma fraudulenta, abusiva ou em violação a estes Termos.</p>
         </Secao>
         <Secao titulo="5. Assinatura, preço e renovação">
-          <p>Os recursos Premium exigem a assinatura do plano <b>{p.nome}</b>, pelo valor de <b>{brl(p.preco_centavos)} por mês</b>, cobrado de forma recorrente e automática no meio de pagamento cadastrado no Mercado Pago, a cada período mensal, até o cancelamento.</p>
+          <p>Os recursos Premium exigem a contratação do plano <b>{p.nome}</b>, em uma destas modalidades:</p>
+          <ul className="list-disc pl-5 flex flex-col gap-1">
+            <li><b>Mensal com renovação automática:</b> {brl(p.preco_centavos)} por mês, cobrado de forma recorrente no cartão de crédito informado, a cada período mensal, até o cancelamento.</li>
+            <li><b>Mensal avulso:</b> {brl(p.preco_centavos)} por 1 mês de acesso, pago uma única vez (Pix, boleto, cartão, débito ou saldo Mercado Pago), sem renovação automática.</li>
+            {p.preco_anual_centavos ? <li><b>Anual:</b> {brl(p.preco_anual_centavos)} por 12 meses de acesso, pago uma única vez (à vista ou parcelado no cartão, conforme as condições exibidas no pagamento), sem renovação automática.</li> : null}
+          </ul>
+          <p>Os pagamentos são processados pelo Mercado Pago. Nas modalidades sem renovação automática, o acesso termina ao fim do período contratado e o usuário é avisado por e-mail antes do vencimento; o tempo de uma nova compra feita antes do vencimento é somado ao período vigente.</p>
           <p>O acesso Premium é liberado somente após a confirmação do pagamento pelo Mercado Pago. Em caso de falha de cobrança, o acesso pode ser mantido por até {p.tolerancia_dias} dias de tolerância enquanto novas tentativas são feitas; após esse prazo, os recursos Premium ficam indisponíveis até a regularização.</p>
           <p>Eventuais alterações de preço serão comunicadas com antecedência mínima de 30 dias e só se aplicarão a partir do ciclo seguinte à comunicação, podendo você cancelar antes da alteração.</p>
         </Secao>

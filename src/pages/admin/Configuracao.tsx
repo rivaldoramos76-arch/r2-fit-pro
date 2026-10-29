@@ -14,6 +14,7 @@ const CAMPOS_EMPRESA: [keyof AppConfig['empresa'], string][] = [
 export default function Configuracao() {
   const [cfg, setCfg] = useState<AppConfig | null>(null)
   const [preco, setPreco] = useState('')
+  const [precoAnual, setPrecoAnual] = useState('')
   const [beneficios, setBeneficios] = useState('')
   const [salvando, setSalvando] = useState<string | null>(null)
   const [erro, setErro] = useState('')
@@ -23,6 +24,7 @@ export default function Configuracao() {
     carregarConfig(true).then(c => {
       setCfg(structuredClone(c))
       setPreco((c.plano.preco_centavos / 100).toFixed(2).replace('.', ','))
+      setPrecoAnual(c.plano.preco_anual_centavos ? (c.plano.preco_anual_centavos / 100).toFixed(2).replace('.', ',') : '')
       setBeneficios(c.plano.beneficios.join('\n'))
     }).catch(e => setErro(msgErro(e)))
   }, [])
@@ -42,7 +44,9 @@ export default function Configuracao() {
   const salvarPlano = () => {
     const centavos = Math.round(Number(preco.replace(/\./g, '').replace(',', '.')) * 100)
     if (!Number.isInteger(centavos) || centavos < 100) return setErro('Preço inválido.')
-    const plano = { ...cfg.plano, preco_centavos: centavos, beneficios: beneficios.split('\n').map(s => s.trim()).filter(Boolean) }
+    const anual = precoAnual.trim() ? Math.round(Number(precoAnual.replace(/\./g, '').replace(',', '.')) * 100) : null
+    if (anual !== null && (!Number.isInteger(anual) || anual < 100)) return setErro('Preço anual inválido.')
+    const plano = { ...cfg.plano, preco_centavos: centavos, preco_anual_centavos: anual, beneficios: beneficios.split('\n').map(s => s.trim()).filter(Boolean) }
     if (centavos !== cfg.plano.preco_centavos && !confirm(`Alterar o preço para ${brl(centavos)}? O novo valor vale para novas assinaturas. Assinantes atuais continuam no valor contratado e devem ser avisados com 30 dias de antecedência antes de qualquer reajuste.`)) return
     salvar('plano', plano)
     setCfg({ ...cfg, plano })
@@ -56,7 +60,12 @@ export default function Configuracao() {
       <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-3">
         <h2 className="font-semibold">Plano comercial</h2>
         <Input label="Nome do plano" value={cfg.plano.nome} onChange={e => setCfg({ ...cfg, plano: { ...cfg.plano, nome: e.target.value } })} maxLength={80} />
-        <Input label="Preço mensal (R$)" value={preco} onChange={e => setPreco(e.target.value)} inputMode="decimal" hint="Moeda: BRL · Cobrança mensal recorrente" />
+        <Input label="Preço mensal (R$)" value={preco} onChange={e => setPreco(e.target.value)} inputMode="decimal" hint="Cartão com renovação automática, ou 1 mês avulso (Pix/boleto)" />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Preço anual (R$)" value={precoAnual} onChange={e => setPrecoAnual(e.target.value)} inputMode="decimal" hint="12 meses, pagamento único. Vazio = sem plano anual" />
+          <Input label="Parcelas no cartão (anual)" type="number" min={1} max={12} value={cfg.plano.parcelas_max_anual ?? 12}
+            onChange={e => setCfg({ ...cfg, plano: { ...cfg.plano, parcelas_max_anual: Number(e.target.value) } })} />
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <Input label="Tolerância após falha (dias)" type="number" min={0} max={15} value={cfg.plano.tolerancia_dias}
             onChange={e => setCfg({ ...cfg, plano: { ...cfg.plano, tolerancia_dias: Number(e.target.value) } })} />

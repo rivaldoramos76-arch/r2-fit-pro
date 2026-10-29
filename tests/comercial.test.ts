@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto'
 import {
   mapearStatusPagamento, paraCentavos, extrairPreapprovalId, normalizarPagamento, normalizarAssinatura,
   corpoCriarAssinatura, parseAssinaturaHeader, montarManifesto, validarAssinaturaWebhook, lerNotificacao,
-  chaveEvento, elegivelArrependimento,
+  chaveEvento, elegivelArrependimento, corpoAssinaturaCartao, corpoPreferenciaAvulsa, lerCompraAvulsa,
 } from '../supabase/functions/_shared/mpLogic'
 import { renderizarEmail } from '../supabase/functions/_shared/emailTemplates'
 import { traduzirErroAuth } from '../src/lib/formatos'
@@ -100,13 +100,48 @@ await t('direito de arrependimento: 7 dias da contratação', () => {
 })
 
 await t('e-mails transacionais renderizam e escapam conteúdo', () => {
-  for (const m of ['assinatura_confirmada', 'pagamento_aprovado', 'falha_cobranca', 'assinatura_cancelada', 'pagamento_estornado', 'aviso']) {
+  for (const m of ['assinatura_confirmada', 'pagamento_aprovado', 'falha_cobranca', 'assinatura_cancelada', 'pagamento_estornado', 'aviso', 'renovacao_lembrete', 'acesso_expirado']) {
     const r = renderizarEmail(m, { nome: '<script>x</script>', valor_centavos: 1990, acesso_ate: '2026-11-22T00:00:00Z' }, 'https://r2-fit-pro.vercel.app')
     assert.ok(r.assunto.length > 5, m)
     assert.ok(!r.html.includes('<script>x'), 'conteúdo deve ser escapado: ' + m)
   }
   assert.ok(renderizarEmail('assinatura_confirmada', { valor_centavos: 1990 }, 'https://s').html.includes('R$'))
+  assert.ok(renderizarEmail('assinatura_confirmada', { valor_centavos: 19900, avulso: true }, 'https://s').html.includes('não renova automaticamente'))
+  assert.ok(renderizarEmail('renovacao_lembrete', { acesso_ate: '2026-11-22T00:00:00Z' }, 'https://s').html.includes('https://s/assinatura'))
   assert.throws(() => renderizarEmail('inexistente', {}, 'https://s'))
+})
+
+await t('assinatura no cartão sem conta Mercado Pago usa token e já nasce autorizada', () => {
+  const c = corpoAssinaturaCartao({ userId: UID, email: 'a@b.com', planoNome: 'R2 Fit Pro Premium', precoCentavos: 1990, voltarPara: 'https://x/r', cardTokenId: 'tok_123' })
+  assert.equal(c.card_token_id, 'tok_123')
+  assert.equal(c.status, 'authorized')
+  assert.equal(c.external_reference, UID)
+  assert.equal(c.auto_recurring.transaction_amount, 19.9)
+  assert.throws(() => corpoAssinaturaCartao({ userId: UID, email: 'a@b.com', planoNome: 'p', precoCentavos: 1990, voltarPara: 'u', cardTokenId: '' }))
+})
+
+await t('compra avulsa (Pix/boleto/cartão) mensal e anual', () => {
+  const base = { userId: UID, email: 'a@b.com', planoNome: 'R2 Fit Pro Premium', parcelasMax: 12, site: 'https://r2fitpro.com.br' }
+  const m = corpoPreferenciaAvulsa({ ...base, periodo: 'mensal', precoCentavos: 1990 })
+  assert.equal(m.items[0].unit_price, 19.9)
+  assert.deepEqual(m.metadata, { r2_tipo: 'avulso', r2_meses: 1, r2_user: UID })
+  assert.equal(m.payment_methods.installments, 1, 'mensal à vista')
+  assert.equal(m.back_urls.success, 'https://r2fitpro.com.br/assinatura/retorno')
+  assert.equal(m.external_reference, UID)
+  const a = corpoPreferenciaAvulsa({ ...base, periodo: 'anual', precoCentavos: 19900 })
+  assert.equal(a.metadata.r2_meses, 12)
+  assert.equal(a.payment_methods.installments, 12)
+  assert.equal(corpoPreferenciaAvulsa({ ...base, periodo: 'anual', precoCentavos: 19900, parcelasMax: 40 }).payment_methods.installments, 12)
+  assert.throws(() => corpoPreferenciaAvulsa({ ...base, periodo: 'anual', precoCentavos: 50 }))
+})
+
+await t('pagamento avulso é reconhecido pelos metadados', () => {
+  assert.deepEqual(lerCompraAvulsa({ metadata: { r2_tipo: 'avulso', r2_meses: 12 } }), { avulso: true, meses: 12 })
+  assert.deepEqual(lerCompraAvulsa({ metadata: { r2_tipo: 'avulso', r2_meses: '1' } }), { avulso: true, meses: 1 })
+  assert.deepEqual(lerCompraAvulsa({ metadata: { r2_tipo: 'avulso', r2_meses: 5 } }), { avulso: false, meses: 1 }, 'período desconhecido')
+  assert.deepEqual(lerCompraAvulsa({}), { avulso: false, meses: 1 })
+  const n = normalizarPagamento({ id: 9, status: 'approved', external_reference: UID, transaction_amount: 199, payment_type_id: 'bank_transfer', payment_method_id: 'pix', metadata: { r2_tipo: 'avulso', r2_meses: 12 } }, null)
+  assert.equal(n.avulso, true); assert.equal(n.meses, 12); assert.equal(n.metodo, 'bank_transfer:pix'); assert.equal(n.user_id, UID)
 })
 
 await t('erros do Supabase Auth são traduzidos corretamente', () => {

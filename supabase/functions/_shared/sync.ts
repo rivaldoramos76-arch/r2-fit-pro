@@ -2,7 +2,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.49.4'
 import { mp } from './mp.ts'
 import { rpc } from './supa.ts'
-import { normalizarAssinatura, normalizarPagamento, extrairPreapprovalId } from './mpLogic.ts'
+import { normalizarAssinatura, normalizarPagamento, extrairPreapprovalId, lerCompraAvulsa } from './mpLogic.ts'
 
 export async function registrarPreapproval(admin: SupabaseClient, preId: string) {
   const pre = await mp('GET', `/preapproval/${encodeURIComponent(preId)}`)
@@ -18,6 +18,14 @@ export async function registrarPagamento(admin: SupabaseClient, paymentId: strin
   } else if (!normalizarPagamento(pag, null).user_id) {
     return { ignorado: true, motivo: 'pagamento sem vínculo com assinatura do R2 Fit Pro' }
   }
+  return await rpc<Record<string, unknown>>(admin, 'billing_registrar_pagamento', { p: normalizarPagamento(pag, preId) })
+}
+
+/** Registra um pagamento informado pelo navegador, somente se ele pertencer ao usuário autenticado. */
+export async function registrarPagamentoDoUsuario(admin: SupabaseClient, paymentId: string, userId: string) {
+  const pag = await mp('GET', `/v1/payments/${encodeURIComponent(paymentId)}`)
+  if (pag?.external_reference !== userId) return { ignorado: true, motivo: 'pagamento de outro usuário' }
+  const preId = extrairPreapprovalId(pag)
   return await rpc<Record<string, unknown>>(admin, 'billing_registrar_pagamento', { p: normalizarPagamento(pag, preId) })
 }
 
@@ -46,6 +54,15 @@ export async function sincronizarUsuario(admin: SupabaseClient, userId: string) 
       const busca = await mp('GET', `/v1/payments/search?external_reference=${encodeURIComponent(userId)}&sort=date_created&criteria=desc&limit=20`)
       for (const pag of busca?.results ?? []) await registrarPagamento(admin, String(pag.id))
     }
+  }
+  // Compras avulsas (Pix, boleto, cartão à vista ou parcelado, saldo) feitas pelo Checkout Pro
+  try {
+    const busca = await mp('GET', `/v1/payments/search?external_reference=${encodeURIComponent(userId)}&sort=date_created&criteria=desc&limit=10`)
+    for (const pag of busca?.results ?? []) {
+      if (lerCompraAvulsa(pag).avulso) await rpc(admin, 'billing_registrar_pagamento', { p: normalizarPagamento(pag, null) })
+    }
+  } catch (e) {
+    avisos.push(`pagamentos_avulsos: ${String(e)}`)
   }
   return { assinaturas: subs?.length ?? 0, avisos }
 }

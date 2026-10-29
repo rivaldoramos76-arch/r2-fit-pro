@@ -3,9 +3,20 @@
 import { corsHeaders, json, ErroHttp, log } from '../_shared/http.ts'
 import { clienteAdmin, usuarioAutenticado, rpc, auditar } from '../_shared/supa.ts'
 import { mp, mpConfigurado, mpModoTeste } from '../_shared/mp.ts'
-import { corpoCriarAssinatura, elegivelArrependimento } from '../_shared/mpLogic.ts'
-import { sincronizarUsuario } from '../_shared/sync.ts'
+import { corpoCriarAssinatura, corpoAssinaturaCartao, corpoPreferenciaAvulsa, elegivelArrependimento } from '../_shared/mpLogic.ts'
+import { sincronizarUsuario, registrarPagamentoDoUsuario } from '../_shared/sync.ts'
 import { processarFilaEmails, siteUrl } from '../_shared/email.ts'
+
+interface PlanoVenda { nome: string; preco_centavos: number; preco_anual_centavos?: number | null; parcelas_max_anual?: number; vendas_ativas?: boolean }
+
+// deno-lint-ignore no-explicit-any
+async function planoParaVenda(admin: any, user: { email_confirmed_at?: string | null }): Promise<PlanoVenda> {
+  if (!user.email_confirmed_at) throw new ErroHttp(403, 'Confirme seu e-mail antes de assinar.')
+  const { data: cfg } = await admin.from('app_config').select('valor').eq('chave', 'plano').single()
+  const plano = cfg!.valor as PlanoVenda
+  if (plano.vendas_ativas === false) throw new ErroHttp(403, 'As vendas estão temporariamente suspensas.')
+  return plano
+}
 
 export async function handleBilling(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
@@ -17,7 +28,68 @@ export async function handleBilling(req: Request): Promise<Response> {
     const acao = String(corpo?.acao ?? '')
 
     if (acao === 'config') {
-      return json(req, { pagamentos_configurados: mpConfigurado(), modo_teste: mpModoTeste() })
+      return json(req, {
+        pagamentos_configurados: mpConfigurado(), modo_teste: mpModoTeste(),
+        public_key: Deno.env.get('MP_PUBLIC_KEY') ?? null,
+      })
+    }
+
+    // Assinatura mensal no cartão sem conta Mercado Pago (cartão tokenizado no navegador pelo Card Payment Brick)
+    if (acao === 'assinar_cartao') {
+      const plano = await planoParaVenda(admin, user)
+      const estado = await rpc<string>(admin, 'estado_acesso', { uid: user.id })
+      if (['ativa', 'tolerancia', 'admin'].includes(estado)) throw new ErroHttp(409, 'Você já possui acesso Premium ativo.')
+      const pre = await mp('POST', '/preapproval', corpoAssinaturaCartao({
+        userId: user.id, email: user.email!, planoNome: plano.nome, precoCentavos: plano.preco_centavos,
+        voltarPara: `${siteUrl()}/assinatura/retorno`, cardTokenId: String(corpo?.card_token_id ?? ''),
+      }), crypto.randomUUID())
+      await rpc(admin, 'billing_registrar_assinatura', { p: {
+        provider_subscription_id: String(pre.id), user_id: user.id, provider_status: pre.status ?? 'authorized',
+        preco_centavos: plano.preco_centavos, plano_nome: plano.nome, proxima_cobranca: pre.next_payment_date ?? null,
+      } })
+      await auditar(admin, user.id, 'assinatura.cartao', String(pre.id), { preco_centavos: plano.preco_centavos, status: pre.status })
+      log('info', 'assinatura_cartao_criada', { user: user.id, preapproval: pre.id, status: pre.status })
+      // A primeira cobrança costuma sair na hora; o webhook também confirma depois
+      await sincronizarUsuario(admin, user.id).catch(e => log('warn', 'sincronizar_apos_cartao', { erro: String(e) }))
+      await processarFilaEmails(admin, 5)
+      return json(req, { ok: true, status: pre.status, estado: await rpc<string>(admin, 'estado_acesso', { uid: user.id }) })
+    }
+
+    // Troca do cartão da assinatura recorrente
+    if (acao === 'trocar_cartao') {
+      const { data: sub } = await admin.from('subscriptions').select('id, provider_subscription_id')
+        .eq('user_id', user.id).eq('modalidade', 'recorrente').in('status', ['ativa', 'inadimplente'])
+        .not('provider_subscription_id', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      if (!sub) throw new ErroHttp(404, 'Nenhuma assinatura com renovação automática encontrada.')
+      const token = String(corpo?.card_token_id ?? '')
+      if (!token || token.length > 200) throw new ErroHttp(400, 'Cartão inválido.')
+      await mp('PUT', `/preapproval/${encodeURIComponent(sub.provider_subscription_id!)}`, { card_token_id: token })
+      await auditar(admin, user.id, 'assinatura.cartao_trocado', sub.id, {})
+      return json(req, { ok: true })
+    }
+
+    // Compra de 1 ou 12 meses pelo Checkout Pro: Pix, boleto, cartão de crédito/débito, saldo Mercado Pago
+    if (acao === 'checkout_avulso') {
+      const plano = await planoParaVenda(admin, user)
+      const periodo = corpo?.periodo === 'anual' ? 'anual' : 'mensal'
+      const preco = periodo === 'anual' ? plano.preco_anual_centavos : plano.preco_centavos
+      if (!preco) throw new ErroHttp(400, 'O plano anual não está disponível no momento.')
+      const estado = await rpc<string>(admin, 'estado_acesso', { uid: user.id })
+      if (estado === 'admin') throw new ErroHttp(409, 'Contas administrativas já têm acesso completo.')
+      if (['ativa', 'tolerancia', 'cancelada_vigente'].includes(estado)) {
+        // Quem já paga por período pode antecipar a renovação; assinatura automática ou cortesia não precisa
+        const { data: outra } = await admin.from('subscriptions').select('id')
+          .eq('user_id', user.id).in('modalidade', ['recorrente', 'cortesia']).in('status', ['ativa', 'inadimplente'])
+          .gt('periodo_atual_fim', new Date().toISOString()).limit(1).maybeSingle()
+        if (outra) throw new ErroHttp(409, 'Sua assinatura já renova automaticamente. Não é preciso pagar à parte.')
+      }
+      const pref = await mp('POST', '/checkout/preferences', corpoPreferenciaAvulsa({
+        userId: user.id, email: user.email!, planoNome: plano.nome, periodo, precoCentavos: preco,
+        parcelasMax: plano.parcelas_max_anual ?? 12, site: siteUrl(),
+      }), crypto.randomUUID())
+      await auditar(admin, user.id, 'assinatura.checkout_avulso', String(pref.id), { periodo, preco_centavos: preco })
+      log('info', 'checkout_avulso_criado', { user: user.id, preferencia: pref.id, periodo })
+      return json(req, { url: pref.init_point })
     }
 
     if (acao === 'checkout') {
@@ -51,6 +123,11 @@ export async function handleBilling(req: Request): Promise<Response> {
     }
 
     if (acao === 'sincronizar') {
+      // Retorno do Checkout Pro traz o id do pagamento: registra na hora (só se for deste usuário)
+      const pagamentoId = String(corpo?.payment_id ?? '')
+      if (mpConfigurado() && /^\d{1,20}$/.test(pagamentoId)) {
+        await registrarPagamentoDoUsuario(admin, pagamentoId, user.id).catch(e => log('warn', 'registrar_retorno', { erro: String(e) }))
+      }
       const r = mpConfigurado() ? await sincronizarUsuario(admin, user.id) : { assinaturas: 0, avisos: ['mp_nao_configurado'] }
       await processarFilaEmails(admin, 5)
       const estado = await rpc<string>(admin, 'estado_acesso', { uid: user.id })
@@ -59,7 +136,7 @@ export async function handleBilling(req: Request): Promise<Response> {
 
     if (acao === 'cancelar') {
       const { data: sub } = await admin.from('subscriptions')
-        .select('*').eq('user_id', user.id).in('status', ['ativa', 'inadimplente', 'pendente'])
+        .select('*').eq('user_id', user.id).in('status', ['ativa', 'inadimplente', 'pendente']).neq('modalidade', 'cortesia')
         .order('created_at', { ascending: false }).limit(1).maybeSingle()
       if (!sub) throw new ErroHttp(404, 'Nenhuma assinatura ativa para cancelar.')
       const { data: cfg } = await admin.from('app_config').select('valor').eq('chave', 'plano').single()

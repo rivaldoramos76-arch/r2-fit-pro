@@ -39,6 +39,20 @@ criado exclusivamente por `billing_registrar_pagamento` com pagamento aprovado c
 6. **Produção ativada em 29/10/2026**: `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET` trocados pelos da aplicação 272652831473739 da conta real (webhook em modo produtivo com "Planos e assinaturas" e "Pagamentos"); `docs/limpeza-dados-de-teste.sql` executado. Checkout real validado (abre a tela de pagamento do Mercado Pago). O Mercado Pago recusa com "User bad request" quando o e-mail do comprador é o da própria conta vendedora (inclusive aliases `+algo` do Gmail) — é esperado.
 7. **Acesso de cortesia** (sem cobrança): inserir em `subscriptions` uma linha com `provider = 'cortesia'`, `status = 'ativa'`, `provider_subscription_id` nulo, `iniciada_em = now()` e `periodo_atual_fim` na data final, e registrar `assinatura.cortesia_manual` em `audit_logs`. A sincronização com o Mercado Pago ignora essas linhas. Cortesia ativa: `euerika.msantos@gmail.com` (testadora, até 2099-12-31). Atenção: cortesias contam como assinatura ativa nas métricas do painel.
 
+### 1b. Formas de pagamento (desde 29/10/2026)
+| Opção | Como funciona | Rota (`/billing`) |
+|---|---|---|
+| Mensal no **cartão de crédito**, renovação automática | Cartão digitado no app pelo *Card Payment Brick* do Mercado Pago (token de uso único) → `preapproval` com `card_token_id` e `status: authorized`. Não exige conta Mercado Pago. | `assinar_cartao`, `trocar_cartao` |
+| **Mensal avulso** (1 mês) | Checkout Pro: Pix, boleto, cartão de crédito/débito, saldo. Sem renovação automática. | `checkout_avulso` (`periodo: mensal`) |
+| **Anual** (12 meses) | Checkout Pro, todas as formas; cartão parcelado em até `parcelas_max_anual` vezes. Sem renovação automática. | `checkout_avulso` (`periodo: anual`) |
+| Mensal pela **conta Mercado Pago** (fluxo antigo) | `preapproval` pendente + `init_point`. Usado só se `MP_PUBLIC_KEY` não estiver configurada. | `checkout` |
+
+- Preço anual e parcelas ficam em `app_config.plano` (`preco_anual_centavos`, `parcelas_max_anual`), editáveis no painel (Plano e empresa). Vazio = plano anual não é oferecido.
+- Compras avulsas são identificadas pelos metadados `r2_tipo = avulso` e `r2_meses` (1 ou 12) do pagamento; criam/estendem uma linha `subscriptions` com `modalidade = 'avulso'` (o tempo comprado soma ao período vigente) e `proxima_cobranca` nula.
+- Secret necessário: `MP_PUBLIC_KEY` (Public Key de produção, `APP_USR-...`) nas Edge Functions, para o formulário de cartão.
+- **Rotina automática (pg_cron)**: `r2-lembretes-diarios` (09:07 de Brasília) enfileira o lembrete 3 dias antes do vencimento e o aviso de acesso vencido das compras avulsas; `r2-fila-emails` (de hora em hora, :17) envia a fila. A função `billing_rotina` chama `/r2-api/cron/emails` com um token de uso único gravado em `cron_tokens` (sem segredo compartilhado). Para pausar: `select cron.unschedule('r2-fila-emails');`.
+- Reembolso de compra avulsa: em até 7 dias, botão "Desistir e pedir reembolso" em Minha Assinatura (mesma rota `cancelar`, com reembolso).
+
 ### 2. E-mails
 **Concluído em 28/10/2026.** Domínio `r2fitpro.com.br` verificado no Resend (região São Paulo); secrets `RESEND_API_KEY`, `EMAIL_FROM` (`R2 Fit Pro <nao-responda@r2fitpro.com.br>`) e `SITE_URL` configurados na Edge Function; SMTP personalizado do Supabase Auth apontando para o Resend; modelos de `docs/emails/*.html` aplicados em *Confirm signup* e *Reset password*. Testado: e-mail transacional e recuperação de senha chegaram na caixa de entrada do Gmail.
 - SMTP do Auth: `smtp.resend.com:465`, usuário `resend`, senha = API key própria (`supabase-auth-smtp`), remetente `nao-responda@r2fitpro.com.br`.
@@ -76,11 +90,15 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 1. `20261022220000_comercial_base.sql` — perfis, preferências, admins, configuração, assinaturas, pagamentos, webhooks, suporte, LGPD, auditoria, e-mails, uso de IA, funções de acesso e RLS.
 2. `20261022230000_billing_admin.sql` — máquina de estados de cobrança idempotente, painel admin, provisionamento, validação de configuração, bucket privado `avatars`.
 3. `20261022235000_pg_net.sql` — extensão `pg_net` (usada em testes HTTP e disponível para rotinas).
+4. `20261023003000_corrige_ordenacao_estado_acesso.sql` — correção da ordenação de `estado_acesso`.
+5. `20261029160000_pagamentos_avulsos.sql` — modalidade (recorrente/avulso/cortesia), meses do período e compras avulsas em `billing_registrar_pagamento` (aplicada em 29/10/2026).
+6. `20261029160100_lembretes_metricas_config.sql` — lembretes de renovação, métricas sem cortesias e preço anual.
+7. `20261029160200_rotina_emails.sql` — `cron_tokens`, `billing_rotina` e agendamentos do pg_cron.
 
 ## Testes
-- `npm test` — lógica de treinos (14) + lógica comercial/Mercado Pago/e-mails (10).
-- `tests/sql/rls_billing.test.sql` — 54 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (54)`).
-- `tests/e2e/ui.test.mjs` — 14 testes de interface (Playwright, celular e desktop) com API simulada.
+- `npm test` — lógica de treinos (14) + lógica comercial/Mercado Pago/e-mails (14).
+- `tests/sql/rls_billing.test.sql` — 68 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (68)`).
+- `tests/e2e/ui.test.mjs` — 15 testes de interface (Playwright, celular e desktop) com API simulada.
 
 ## Monitoramento e recuperação
 - Painel `/admin`: webhooks com erro, e-mails não enviados, falhas de cobrança, auditoria.

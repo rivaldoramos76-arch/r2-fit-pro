@@ -7,6 +7,9 @@ export interface ConfigPlano {
   produto: string
   nome: string
   preco_centavos: number
+  /** Preço do plano anual (12 meses, pagamento único). Ausente ou nulo: plano anual não é oferecido. */
+  preco_anual_centavos?: number | null
+  parcelas_max_anual?: number
   moeda: 'BRL'
   intervalo: 'mensal'
   tolerancia_dias: number

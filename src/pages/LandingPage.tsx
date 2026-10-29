@@ -64,7 +64,10 @@ export default function LandingPage() {
             <>
               <h2 id="titulo-preco" className="text-lg font-semibold">{plano.nome}</h2>
               <p className="mt-3"><span className="text-4xl font-bold">{brl(plano.preco_centavos)}</span><span className="text-zinc-400">/mês</span></p>
-              <p className="text-xs text-zinc-500 mt-1">Cobrança mensal recorrente no cartão via Mercado Pago. Cancele quando quiser.</p>
+              {plano.preco_anual_centavos ? (
+                <p className="text-sm text-zinc-300 mt-1">ou <b>{brl(plano.preco_anual_centavos)}</b> no plano anual{(plano.parcelas_max_anual ?? 12) > 1 ? ` (até ${plano.parcelas_max_anual ?? 12}x)` : ''}</p>
+              ) : null}
+              <p className="text-xs text-zinc-500 mt-1">Pague com cartão de crédito (renovação automática), Pix, boleto ou débito. Não precisa ter conta no Mercado Pago. Cancele quando quiser.</p>
               <ul className="mt-6 flex flex-col gap-2.5">
                 {plano.beneficios.map(b => (
                   <li key={b} className="flex gap-2 text-sm text-zinc-300"><Check className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />{b}</li>

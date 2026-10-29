@@ -55,8 +55,20 @@ export function normalizarPagamento(pagamento: Obj, preapprovalId: string | null
     moeda: pagamento.currency_id ?? 'BRL',
     metodo: [pagamento.payment_type_id, pagamento.payment_method_id].filter(Boolean).join(':') || null,
     pago_em: pagamento.date_approved ?? pagamento.date_last_updated ?? pagamento.date_created ?? null,
+    ...lerCompraAvulsa(pagamento),
   }
 }
+
+/** Pagamento avulso (Checkout Pro: Pix, boleto, cartão, saldo): quantos meses de acesso ele compra. */
+export function lerCompraAvulsa(pagamento: Obj): { avulso: boolean; meses: number } {
+  const m = pagamento?.metadata ?? {}
+  const meses = Number(m.r2_meses)
+  if (m.r2_tipo !== 'avulso' || !MESES_VALIDOS.includes(meses)) return { avulso: false, meses: 1 }
+  return { avulso: true, meses }
+}
+
+export const MESES_VALIDOS = [1, 12]
+export type PeriodoAvulso = 'mensal' | 'anual'
 
 /** Normaliza uma assinatura (preapproval) do MP para billing_registrar_assinatura. */
 export function normalizarAssinatura(pre: Obj) {
@@ -89,6 +101,39 @@ export function corpoCriarAssinatura(opts: {
       transaction_amount: opts.precoCentavos / 100,
       currency_id: 'BRL',
     },
+  }
+}
+
+/** Assinatura mensal no cartão sem conta Mercado Pago: o cartão vem tokenizado do Card Payment Brick. */
+export function corpoAssinaturaCartao(opts: {
+  userId: string; email: string; planoNome: string; precoCentavos: number; voltarPara: string; cardTokenId: string
+}) {
+  if (!opts.cardTokenId || typeof opts.cardTokenId !== 'string' || opts.cardTokenId.length > 200) throw new Error('cartão inválido')
+  return { ...corpoCriarAssinatura(opts), card_token_id: opts.cardTokenId, status: 'authorized' }
+}
+
+/** Preferência do Checkout Pro para comprar 1 ou 12 meses de acesso, aceitando todos os meios de pagamento. */
+export function corpoPreferenciaAvulsa(opts: {
+  userId: string; email: string; planoNome: string; periodo: PeriodoAvulso; precoCentavos: number
+  parcelasMax: number; site: string
+}) {
+  if (!ehUuid(opts.userId)) throw new Error('userId inválido')
+  if (!Number.isInteger(opts.precoCentavos) || opts.precoCentavos < 100) throw new Error('preço inválido')
+  const meses = opts.periodo === 'anual' ? 12 : 1
+  const titulo = `${opts.planoNome} — ${meses === 12 ? '12 meses' : '1 mês'}`
+  const retorno = `${opts.site}/assinatura/retorno`
+  return {
+    items: [{
+      id: `r2-premium-${opts.periodo}`, title: titulo, description: 'Acesso Premium ao app R2 Fit Pro, sem renovação automática',
+      category_id: 'services', quantity: 1, currency_id: 'BRL', unit_price: opts.precoCentavos / 100,
+    }],
+    payer: { email: opts.email },
+    external_reference: opts.userId,
+    metadata: { r2_tipo: 'avulso', r2_meses: meses, r2_user: opts.userId },
+    back_urls: { success: retorno, pending: retorno, failure: retorno },
+    auto_return: 'approved',
+    statement_descriptor: 'R2FITPRO',
+    payment_methods: { installments: meses === 12 ? Math.min(Math.max(Math.trunc(opts.parcelasMax), 1), 12) : 1 },
   }
 }
 

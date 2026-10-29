@@ -13,7 +13,7 @@ const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: UID, role: 'authe
 const usuario = { id: UID, aud: 'authenticated', role: 'authenticated', email: 'cliente@teste.com', email_confirmed_at: '2026-10-01T00:00:00Z', created_at: '2026-10-01T00:00:00Z', user_metadata: { nome: 'Cliente Teste' }, app_metadata: {} }
 const sessao = { access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: agora + 3600, user: usuario }
 const CONFIG = [
-  { chave: 'plano', valor: { produto: 'R2 Fit Pro', nome: 'R2 Fit Pro Premium', preco_centavos: 1990, moeda: 'BRL', intervalo: 'mensal', tolerancia_dias: 3, arrependimento_dias: 7, vendas_ativas: true, beneficios: ['Treinos com IA', 'Dieta personalizada'] } },
+  { chave: 'plano', valor: { produto: 'R2 Fit Pro', nome: 'R2 Fit Pro Premium', preco_centavos: 1990, moeda: 'BRL', intervalo: 'mensal', tolerancia_dias: 3, arrependimento_dias: 7, vendas_ativas: true, preco_anual_centavos: 19900, parcelas_max_anual: 12, beneficios: ['Treinos com IA', 'Dieta personalizada'] } },
   { chave: 'empresa', valor: { nome_fantasia: 'R2 Fit Pro', razao_social: null, cnpj: null, endereco: null, email_suporte: null, email_privacidade: null, telefone: null, encarregado_dados: null, foro: null } },
   { chave: 'textos', valor: { versao_termos: '2026-10-22', versao_privacidade: '2026-10-22', aviso_global: null, horario_suporte: null } },
 ]
@@ -22,7 +22,8 @@ let ok = 0
 const erros = []
 const t = async (nome, f) => { try { await f(); ok++; console.log('✓', nome) } catch (e) { erros.push(nome); console.log('✗', nome, '\n   ', e.message.split('\n')[0]) } }
 
-async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, viewport = { width: 390, height: 844 } } = {}) {
+async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, viewport = { width: 390, height: 844 } } = {}) {
+  const chamadasBilling = []
   const ctx = await browser.newContext({ viewport })
   await ctx.addInitScript(([s, logado]) => {
     sessionStorage.setItem('r2fit:welcome-visto', '1')
@@ -44,10 +45,18 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
     }
     if (p === '/rest/v1/user_settings') return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? { notificacoes: {}, audio: { volume: 0.8, mudo: false } } : [])
     if (p.startsWith('/rest/v1/')) return json([])
-    if (p.startsWith('/functions/v1/r2-api/billing')) return json({ pagamentos_configurados: false, modo_teste: false })
+    if (p.startsWith('/functions/v1/r2-api/billing')) {
+      const corpo = rota.request().postDataJSON() ?? {}
+      chamadasBilling.push(corpo)
+      if (!pagamentos) return json({ pagamentos_configurados: false, modo_teste: false })
+      if (corpo.acao === 'checkout_avulso') return json({ url: BASE + '/assinatura/retorno?status=approved&payment_id=123' })
+      if (corpo.acao === 'sincronizar') return json({ estado: 'ativa' })
+      return json({ pagamentos_configurados: true, modo_teste: false, public_key: null })
+    }
     return json({})
   })
   const page = await ctx.newPage()
+  page.chamadasBilling = chamadasBilling
   page.consoleErros = []
   page.on('pageerror', e => page.consoleErros.push(e.message))
   return { ctx, page }
@@ -172,6 +181,27 @@ await t('assinante ativo acessa os treinos', async () => {
   await page.waitForTimeout(800)
   assert.equal(await page.getByRole('heading', { name: 'Recurso Premium' }).count(), 0)
   await page.screenshot({ path: `${SHOTS}/treinos-assinante.png` })
+  await ctx.close()
+})
+
+await t('assinatura: escolhe plano e forma de pagamento (cartão, Pix/boleto, anual)', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, pagamentos: true })
+  await page.goto(BASE + '/assinatura')
+  await page.getByRole('radio', { name: /Cartão de crédito/ }).waitFor()
+  // Sem chave pública do formulário de cartão, cai no checkout da conta Mercado Pago
+  await page.getByRole('button', { name: 'Assinar com Mercado Pago' }).waitFor()
+  await page.getByRole('radio', { name: /Pix, boleto/ }).click()
+  await page.getByRole('button', { name: /Pagar R\$\s19,90 — 1 mês/ }).waitFor()
+  await page.getByRole('radio', { name: /Anual/ }).click()
+  await page.getByText('Economize 17%').waitFor()
+  await page.getByText(/até 12x no cartão/).waitFor()
+  assert.equal(await page.getByRole('radio', { name: /Cartão de crédito/ }).count(), 0, 'anual é pagamento único')
+  await page.screenshot({ path: `${SHOTS}/assinatura-anual.png`, fullPage: true })
+  await page.getByRole('button', { name: /Pagar R\$\s199,00 — 12 meses/ }).click()
+  await page.waitForURL(/\/assinatura\/retorno/)
+  await page.getByText('Acesso Premium liberado!').waitFor()
+  assert.ok(page.chamadasBilling.some(c => c.acao === 'checkout_avulso' && c.periodo === 'anual'), 'pediu o checkout anual')
+  assert.ok(page.chamadasBilling.some(c => c.acao === 'sincronizar' && c.payment_id === '123'), 'confirmou o pagamento devolvido pelo Mercado Pago')
   await ctx.close()
 })
 

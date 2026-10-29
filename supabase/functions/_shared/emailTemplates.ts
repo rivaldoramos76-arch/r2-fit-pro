@@ -32,14 +32,29 @@ export function renderizarEmail(modelo: string, d: Dados, site: string): { assun
   const ola = nome ? `<p>Olá, ${nome}!</p>` : '<p>Olá!</p>'
   switch (modelo) {
     case 'assinatura_confirmada':
-      return {
-        assunto: 'Sua assinatura R2 Fit Pro Premium está ativa',
-        html: layout('Assinatura confirmada', `${ola}<p>Recebemos a confirmação do pagamento de <b>${brl(d.valor_centavos)}</b> e seu acesso Premium já está liberado${data(d.acesso_ate) ? ` até <b>${data(d.acesso_ate)}</b>, com renovação automática mensal` : ''}.</p><p>Você pode acompanhar cobranças ou cancelar quando quiser em <b>Minha Assinatura</b>. Cancelando em até 7 dias da contratação, o valor é reembolsado integralmente.</p>`, site, 'Abrir o app', `${site}/dashboard`),
-      }
+      return d.avulso
+        ? {
+          assunto: 'Seu acesso R2 Fit Pro Premium está liberado',
+          html: layout('Pagamento confirmado', `${ola}<p>Recebemos o pagamento de <b>${brl(d.valor_centavos)}</b> e seu acesso Premium já está liberado${data(d.acesso_ate) ? ` até <b>${data(d.acesso_ate)}</b>` : ''}.</p><p>Este plano <b>não renova automaticamente</b>: avisaremos por e-mail alguns dias antes do vencimento para você renovar, se quiser.</p><p>Em até 7 dias da contratação você pode pedir o reembolso integral em <b>Minha Assinatura</b>.</p>`, site, 'Abrir o app', `${site}/dashboard`),
+        }
+        : {
+          assunto: 'Sua assinatura R2 Fit Pro Premium está ativa',
+          html: layout('Assinatura confirmada', `${ola}<p>Recebemos a confirmação do pagamento de <b>${brl(d.valor_centavos)}</b> e seu acesso Premium já está liberado${data(d.acesso_ate) ? ` até <b>${data(d.acesso_ate)}</b>, com renovação automática mensal` : ''}.</p><p>Você pode acompanhar cobranças ou cancelar quando quiser em <b>Minha Assinatura</b>. Cancelando em até 7 dias da contratação, o valor é reembolsado integralmente.</p>`, site, 'Abrir o app', `${site}/dashboard`),
+        }
     case 'pagamento_aprovado':
       return {
         assunto: 'Pagamento confirmado — R2 Fit Pro Premium',
-        html: layout('Pagamento confirmado', `${ola}<p>Sua renovação de <b>${brl(d.valor_centavos)}</b> foi aprovada.${data(d.acesso_ate) ? ` Seu acesso segue liberado até <b>${data(d.acesso_ate)}</b>.` : ''}</p>`, site, 'Ver pagamentos', `${site}/pagamentos`),
+        html: layout('Pagamento confirmado', `${ola}<p>${d.avulso ? 'Seu pagamento' : 'Sua renovação'} de <b>${brl(d.valor_centavos)}</b> foi aprovad${d.avulso ? 'o' : 'a'}.${data(d.acesso_ate) ? ` Seu acesso segue liberado até <b>${data(d.acesso_ate)}</b>.` : ''}</p>`, site, 'Ver pagamentos', `${site}/pagamentos`),
+      }
+    case 'renovacao_lembrete':
+      return {
+        assunto: 'Seu acesso R2 Fit Pro Premium vence em breve',
+        html: layout('Seu acesso vence em breve', `${ola}<p>Seu acesso Premium vai até <b>${data(d.acesso_ate) ?? 'os próximos dias'}</b> e não renova automaticamente.</p><p>Para continuar sem interrupção, renove pelo app: dá para pagar com <b>Pix, boleto, cartão de crédito ou débito</b>. Se preferir não se preocupar mais com isso, escolha o cartão com renovação automática.</p>`, site, 'Renovar agora', `${site}/assinatura`),
+      }
+    case 'acesso_expirado':
+      return {
+        assunto: 'Seu acesso R2 Fit Pro Premium venceu',
+        html: layout('Seu acesso venceu', `${ola}<p>Seu período Premium terminou${data(d.acesso_ate) ? ` em <b>${data(d.acesso_ate)}</b>` : ''}. Seus treinos, dietas e registros continuam salvos na sua conta.</p><p>Renove quando quiser com <b>Pix, boleto ou cartão</b> e volte a usar todos os recursos na hora.</p>`, site, 'Renovar acesso', `${site}/assinatura`),
       }
     case 'falha_cobranca':
       return {

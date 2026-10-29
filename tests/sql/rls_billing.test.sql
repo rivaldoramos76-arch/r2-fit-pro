@@ -184,6 +184,43 @@ BEGIN
   SELECT count(*) INTO cnt FROM public.email_outbox WHERE user_id = a AND dedupe_key = 'cancelada:' || (SELECT id FROM public.subscriptions WHERE provider_subscription_id = 'PRE3-'||a);
   IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 46d: e-mail de cancelamento para assinatura nunca ativada'; END IF; n := n + 1;
 
+  -- ── Compras avulsas (Pix, boleto, cartão à vista, saldo) ─────────────────
+  j := public.billing_registrar_pagamento(jsonb_build_object('provider_payment_id', 'AV1-'||b, 'user_id', b, 'status', 'pendente', 'valor_centavos', 1990, 'avulso', TRUE, 'meses', 1));
+  IF public.tem_premium(b) OR EXISTS (SELECT 1 FROM public.subscriptions WHERE user_id = b) THEN RAISE EXCEPTION 'FALHA 58: Pix pendente liberou acesso'; END IF; n := n + 1;
+  j := public.billing_registrar_pagamento(jsonb_build_object('provider_payment_id', 'AV1-'||b, 'user_id', b, 'status', 'aprovado', 'valor_centavos', 1990, 'avulso', TRUE, 'meses', 1, 'pago_em', NOW()));
+  IF j ->> 'transicao' <> 'ativacao' OR public.estado_acesso(b) <> 'ativa' THEN RAISE EXCEPTION 'FALHA 59: compra avulsa aprovada (%)', j; END IF; n := n + 1;
+  SELECT id, periodo_atual_fim INTO sub, fim1 FROM public.subscriptions WHERE user_id = b AND modalidade = 'avulso';
+  IF fim1 < NOW() + INTERVAL '27 days' OR fim1 > NOW() + INTERVAL '32 days' OR (SELECT proxima_cobranca FROM public.subscriptions WHERE id = sub) IS NOT NULL
+     OR (SELECT subscription_id FROM public.payments WHERE provider_payment_id = 'AV1-'||b) IS DISTINCT FROM sub THEN
+    RAISE EXCEPTION 'FALHA 60: período de 1 mês sem cobrança automática'; END IF; n := n + 1;
+  j := public.billing_registrar_pagamento(jsonb_build_object('provider_payment_id', 'AV1-'||b, 'user_id', b, 'status', 'aprovado', 'valor_centavos', 1990, 'avulso', TRUE, 'meses', 1, 'pago_em', NOW()));
+  IF j ->> 'transicao' <> 'nenhuma' OR (SELECT periodo_atual_fim FROM public.subscriptions WHERE id = sub) <> fim1 THEN RAISE EXCEPTION 'FALHA 61: notificação duplicada estendeu o acesso'; END IF; n := n + 1;
+  j := public.billing_registrar_pagamento(jsonb_build_object('provider_payment_id', 'AV2-'||b, 'user_id', b, 'status', 'aprovado', 'valor_centavos', 19900, 'avulso', TRUE, 'meses', 12, 'pago_em', NOW()));
+  SELECT periodo_atual_fim INTO fim2 FROM public.subscriptions WHERE id = sub;
+  IF j ->> 'transicao' <> 'renovacao' OR fim2 <> fim1 + INTERVAL '12 months'
+     OR (SELECT count(*) FROM public.subscriptions WHERE user_id = b) <> 1
+     OR (SELECT meses_periodo FROM public.subscriptions WHERE id = sub) <> 12 THEN
+    RAISE EXCEPTION 'FALHA 62: plano anual não somou 12 meses ao período vigente (% / %)', fim1, fim2; END IF; n := n + 1;
+  UPDATE public.subscriptions SET periodo_atual_fim = NOW() + INTERVAL '2 days' WHERE id = sub;
+  PERFORM public.billing_enfileirar_lembretes(); PERFORM public.billing_enfileirar_lembretes();
+  SELECT count(*) INTO cnt FROM public.email_outbox WHERE user_id = b AND modelo = 'renovacao_lembrete';
+  IF cnt <> 1 THEN RAISE EXCEPTION 'FALHA 63: lembrete de renovação (%)', cnt; END IF; n := n + 1;
+  UPDATE public.subscriptions SET periodo_atual_fim = NOW() - INTERVAL '1 hour' WHERE id = sub;
+  PERFORM public.billing_enfileirar_lembretes();
+  SELECT count(*) INTO cnt FROM public.email_outbox WHERE user_id = b AND modelo = 'acesso_expirado';
+  IF cnt <> 1 THEN RAISE EXCEPTION 'FALHA 64: aviso de acesso expirado (%)', cnt; END IF; n := n + 1;
+  SELECT count(*) INTO cnt FROM public.email_outbox WHERE user_id = a AND modelo IN ('renovacao_lembrete', 'acesso_expirado');
+  IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 65: lembrete enviado a assinante recorrente'; END IF; n := n + 1;
+  UPDATE public.subscriptions SET periodo_atual_fim = NOW() + INTERVAL '11 months' WHERE id = sub;
+  j := public.billing_registrar_pagamento(jsonb_build_object('provider_payment_id', 'AV2-'||b, 'user_id', b, 'status', 'estornado', 'valor_centavos', 19900, 'avulso', TRUE, 'meses', 12));
+  IF j ->> 'transicao' <> 'estorno' OR (SELECT periodo_atual_fim FROM public.subscriptions WHERE id = sub) > NOW() THEN RAISE EXCEPTION 'FALHA 66: estorno do anual não encerrou o período'; END IF; n := n + 1;
+  ok := FALSE; BEGIN PERFORM public.billing_registrar_pagamento(jsonb_build_object('provider_payment_id', 'AV3-'||b, 'user_id', b, 'status', 'aprovado', 'valor_centavos', 1990, 'avulso', TRUE, 'meses', 5));
+  EXCEPTION WHEN raise_exception THEN ok := TRUE; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALHA 67: período avulso inválido aceito'; END IF; n := n + 1;
+  PERFORM public.billing_registrar_pagamento(jsonb_build_object('provider_payment_id', 'AV4-'||b, 'user_id', b, 'status', 'recusado', 'valor_centavos', 1990, 'avulso', TRUE, 'meses', 1));
+  SELECT count(*) INTO cnt FROM public.email_outbox WHERE user_id = b AND modelo = 'falha_cobranca';
+  IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 68: e-mail de falha de cobrança para compra avulsa recusada'; END IF; n := n + 1;
+
   -- ── Administrador ───────────────────────────────────────────────────────
   PERFORM public.provisionar_admin('teste-c-'||c||'@exemplo.invalid', 'teste');
   PERFORM set_config('request.jwt.claims', json_build_object('sub', c, 'role', 'authenticated')::TEXT, TRUE);

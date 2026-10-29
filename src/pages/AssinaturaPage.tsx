@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ExternalLink, RefreshCw } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { CreditCard, QrCode, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useAcesso } from '../context/AcessoContext'
@@ -8,6 +8,7 @@ import { useConfig } from '../lib/config'
 import { chamarApi, ErroApi } from '../lib/api'
 import { brl, dataBR, ROTULO_ESTADO } from '../lib/formatos'
 import { Badge, Button, Card, Spinner } from '../components/UI'
+import CartaoMercadoPago from '../components/CartaoMercadoPago'
 
 interface Assinatura {
   id: string
@@ -19,9 +20,12 @@ interface Assinatura {
   proxima_cobranca: string | null
   cancelada_em: string | null
   created_at: string
+  modalidade: 'recorrente' | 'avulso' | 'cortesia'
+  meses_periodo: number
 }
 
-const MP_ASSINATURAS = 'https://www.mercadopago.com.br/subscriptions'
+type Periodo = 'mensal' | 'anual'
+type Forma = 'cartao' | 'avulso'
 
 function Linha({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
   return (
@@ -37,7 +41,12 @@ export default function AssinaturaPage() {
   const { config } = useConfig()
   const [assinatura, setAssinatura] = useState<Assinatura | null>(null)
   const [carregando, setCarregando] = useState(true)
+  const navigate = useNavigate()
   const [processando, setProcessando] = useState<'checkout' | 'sincronizar' | 'cancelar' | null>(null)
+  const [periodo, setPeriodo] = useState<Periodo>('mensal')
+  const [forma, setForma] = useState<Forma>('cartao')
+  const [trocandoCartao, setTrocandoCartao] = useState(false)
+  const [publicKey, setPublicKey] = useState<string | null>(null)
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
   const [confirmarCancelamento, setConfirmarCancelamento] = useState(false)
@@ -47,7 +56,7 @@ export default function AssinaturaPage() {
   const carregar = useCallback(async () => {
     if (!user) return
     const { data, error } = await supabase.from('subscriptions')
-      .select('id, status, plano_nome, preco_centavos, iniciada_em, periodo_atual_fim, proxima_cobranca, cancelada_em, created_at')
+      .select('id, status, plano_nome, preco_centavos, iniciada_em, periodo_atual_fim, proxima_cobranca, cancelada_em, created_at, modalidade, meses_periodo')
       .eq('user_id', user.id).order('created_at', { ascending: false }).limit(5)
     if (error) setErro('Não foi possível carregar sua assinatura. Verifique sua conexão.')
     // Mostra a assinatura com acesso vigente; senão, a mais recente
@@ -59,11 +68,12 @@ export default function AssinaturaPage() {
 
   useEffect(() => {
     carregar()
-    chamarApi<{ pagamentos_configurados: boolean }>('billing', { acao: 'config' })
-      .then(r => setPagamentosConfigurados(r.pagamentos_configurados))
+    chamarApi<{ pagamentos_configurados: boolean; public_key: string | null }>('billing', { acao: 'config' })
+      .then(r => { setPagamentosConfigurados(r.pagamentos_configurados); setPublicKey(r.public_key) })
       .catch(() => setPagamentosConfigurados(null))
   }, [carregar])
 
+  // Assinatura pela conta Mercado Pago (usada quando o formulário de cartão não está disponível)
   const assinar = async () => {
     setErro(''); setProcessando('checkout')
     try {
@@ -72,6 +82,42 @@ export default function AssinaturaPage() {
     } catch (e) {
       setErro(e instanceof ErroApi ? e.message : 'Não foi possível iniciar o pagamento.')
       setProcessando(null)
+    }
+  }
+
+  // Pix, boleto, cartão (à vista ou parcelado no anual), débito ou saldo, no Checkout Pro
+  const pagarAvulso = async (p: Periodo) => {
+    setErro(''); setProcessando('checkout')
+    try {
+      const r = await chamarApi<{ url: string }>('billing', { acao: 'checkout_avulso', periodo: p })
+      window.location.href = r.url
+    } catch (e) {
+      setErro(e instanceof ErroApi ? e.message : 'Não foi possível iniciar o pagamento.')
+      setProcessando(null)
+    }
+  }
+
+  const assinarComCartao = async ({ token }: { token: string }) => {
+    setErro('')
+    try {
+      await chamarApi('billing', { acao: 'assinar_cartao', card_token_id: token })
+      navigate('/assinatura/retorno?origem=cartao')
+    } catch (e) {
+      const msg = e instanceof ErroApi ? e.message : 'Não foi possível concluir a assinatura.'
+      setErro(`${msg} Confira os dados do cartão ou escolha outra forma de pagamento.`)
+      throw e
+    }
+  }
+
+  const trocarCartao = async ({ token }: { token: string }) => {
+    setErro(''); setAviso('')
+    try {
+      await chamarApi('billing', { acao: 'trocar_cartao', card_token_id: token })
+      setTrocandoCartao(false)
+      setAviso('Cartão atualizado. As próximas cobranças serão feitas no novo cartão.')
+    } catch (e) {
+      setErro(e instanceof ErroApi ? e.message : 'Não foi possível trocar o cartão.')
+      throw e
     }
   }
 
@@ -89,12 +135,12 @@ export default function AssinaturaPage() {
   const cancelar = async () => {
     setErro(''); setAviso(''); setProcessando('cancelar')
     try {
-      const r = await chamarApi<{ reembolsado: boolean }>('billing', { acao: 'cancelar', reembolso: pedirReembolso })
+      const r = await chamarApi<{ reembolsado: boolean; aviso?: string }>('billing', { acao: 'cancelar', reembolso: avulso || pedirReembolso })
       setConfirmarCancelamento(false)
       await Promise.all([carregar(), recarregar()])
-      setAviso(r.reembolsado
-        ? 'Assinatura cancelada e reembolso integral solicitado ao Mercado Pago. O acesso Premium foi encerrado.'
-        : 'Assinatura cancelada. Não haverá novas cobranças e seu acesso continua até o fim do período pago.')
+      setAviso(r.aviso ?? (r.reembolsado
+        ? 'Reembolso integral solicitado ao Mercado Pago. O acesso Premium foi encerrado.'
+        : 'Assinatura cancelada. Não haverá novas cobranças e seu acesso continua até o fim do período pago.'))
     } catch (e) {
       setErro(e instanceof ErroApi ? e.message : 'Não foi possível cancelar agora. Tente novamente ou fale com o suporte.')
     } finally { setProcessando(null) }
@@ -104,10 +150,21 @@ export default function AssinaturaPage() {
 
   const rotulo = ROTULO_ESTADO[estado]
   const plano = config?.plano
+  const avulso = assinatura?.modalidade === 'avulso'
+  const cortesia = assinatura?.modalidade === 'cortesia'
   const dentroArrependimento = !!(assinatura?.iniciada_em && plano &&
     Date.now() - Date.parse(assinatura.iniciada_em) <= plano.arrependimento_dias * 86400000)
-  const podeCancelar = !!assinatura && ['ativa', 'inadimplente', 'pendente'].includes(assinatura.status)
-  const podeAssinar = ['sem_assinatura', 'expirada', 'pagamento_pendente', 'cancelada_vigente'].includes(estado)
+  const podeCancelar = !!assinatura && ['ativa', 'inadimplente', 'pendente'].includes(assinatura.status) && !cortesia
+    && (!avulso || dentroArrependimento)
+  const semAcesso = ['sem_assinatura', 'expirada', 'pagamento_pendente', 'cancelada_vigente'].includes(estado)
+  // Quem paga por período pode renovar antes do vencimento (o tempo comprado se soma)
+  const renovacaoAvulsa = avulso && ['ativa', 'tolerancia'].includes(estado)
+  const podeComprar = (semAcesso || renovacaoAvulsa) && estado !== 'admin'
+  const temAnual = !!plano?.preco_anual_centavos
+  const precoAnual = plano?.preco_anual_centavos ?? 0
+  const economia = plano && temAnual ? Math.round((1 - precoAnual / (plano.preco_centavos * 12)) * 100) : 0
+  const formaEfetiva: Forma = renovacaoAvulsa || periodo === 'anual' ? 'avulso' : forma
+  const nomePeriodo = (meses: number) => (meses >= 12 ? 'Anual' : 'Mensal')
 
   return (
     <div className="flex flex-col gap-5">
@@ -126,50 +183,120 @@ export default function AssinaturaPage() {
       {assinatura && (
         <Card>
           <h2 className="font-semibold mb-2">{assinatura.plano_nome}</h2>
-          <Linha rotulo="Preço contratado" valor={`${brl(assinatura.preco_centavos)}/mês`} />
+          {cortesia ? (
+            <Linha rotulo="Tipo" valor="Cortesia (sem cobrança)" />
+          ) : avulso ? (
+            <Linha rotulo="Plano" valor={`${nomePeriodo(assinatura.meses_periodo)} · ${brl(assinatura.preco_centavos)} (pagamento único)`} />
+          ) : (
+            <Linha rotulo="Preço contratado" valor={`${brl(assinatura.preco_centavos)}/mês`} />
+          )}
           <Linha rotulo="Situação" valor={rotulo.texto} />
           <Linha rotulo="Início" valor={dataBR(assinatura.iniciada_em)} />
-          {assinatura.periodo_atual_fim && (
-            <Linha rotulo={assinatura.status === 'cancelada' ? 'Acesso até' : 'Período pago até'} valor={dataBR(assinatura.periodo_atual_fim)} />
+          {assinatura.periodo_atual_fim && !cortesia && (
+            <Linha rotulo={assinatura.status === 'cancelada' || avulso ? 'Acesso até' : 'Período pago até'} valor={dataBR(assinatura.periodo_atual_fim)} />
           )}
-          {assinatura.status !== 'cancelada' && <Linha rotulo="Próxima cobrança" valor={assinatura.proxima_cobranca ? dataBR(assinatura.proxima_cobranca) : 'Após a confirmação do pagamento'} />}
+          {avulso && assinatura.status !== 'cancelada' && <Linha rotulo="Renovação" valor="Manual — avisamos por e-mail antes de vencer" />}
+          {!avulso && !cortesia && assinatura.status !== 'cancelada' && <Linha rotulo="Próxima cobrança" valor={assinatura.proxima_cobranca ? dataBR(assinatura.proxima_cobranca) : 'Após a confirmação do pagamento'} />}
           {assinatura.cancelada_em && <Linha rotulo="Cancelada em" valor={dataBR(assinatura.cancelada_em)} />}
         </Card>
       )}
 
-      {plano && podeAssinar && estado !== 'admin' && (
+      {plano && podeComprar && (
         <Card className="border-green-500/30">
-          <h2 className="font-semibold">{plano.nome}</h2>
-          <p className="mt-1"><span className="text-3xl font-bold">{brl(plano.preco_centavos)}</span><span className="text-zinc-400">/mês</span></p>
-          <ul className="text-sm text-zinc-400 mt-3 list-disc pl-5 flex flex-col gap-1">
-            {plano.beneficios.slice(0, 4).map(b => <li key={b}>{b}</li>)}
-          </ul>
-          <p className="text-xs text-zinc-500 mt-3">
-            Cobrança mensal recorrente no cartão via Mercado Pago, renovada automaticamente até o cancelamento. Cancele quando quiser;
-            em até {plano.arrependimento_dias} dias da contratação o reembolso é integral. Ao assinar você concorda com os <Link to="/termos" className="underline">Termos de Uso</Link>.
-          </p>
+          <h2 className="font-semibold">{renovacaoAvulsa ? 'Renovar ou adicionar tempo' : plano.nome}</h2>
+          {renovacaoAvulsa && <p className="text-xs text-zinc-400 mt-1">O tempo comprado agora é somado ao seu período atual.</p>}
+
+          {temAnual && (
+            <div role="radiogroup" aria-label="Plano" className="grid grid-cols-2 gap-2 mt-3">
+              {(['mensal', 'anual'] as Periodo[]).map(p => (
+                <button key={p} type="button" role="radio" aria-checked={periodo === p} onClick={() => setPeriodo(p)}
+                  className={`rounded-xl border px-3 py-2.5 text-left ${periodo === p ? 'border-green-500 bg-green-500/10' : 'border-zinc-700 bg-zinc-800/50'}`}>
+                  <span className="block text-sm font-semibold">{p === 'mensal' ? 'Mensal' : 'Anual'}</span>
+                  <span className="block text-xs text-zinc-400">{p === 'mensal' ? `${brl(plano.preco_centavos)}/mês` : `${brl(precoAnual)} por 12 meses`}</span>
+                  {p === 'anual' && economia > 0 && <span className="block text-[11px] text-green-400 font-semibold mt-0.5">Economize {economia}%</span>}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {periodo === 'mensal' || !temAnual ? (
+            <p className="mt-3"><span className="text-3xl font-bold">{brl(plano.preco_centavos)}</span><span className="text-zinc-400">/mês</span></p>
+          ) : (
+            <p className="mt-3"><span className="text-3xl font-bold">{brl(precoAnual)}</span><span className="text-zinc-400"> por 12 meses</span>
+              {(plano.parcelas_max_anual ?? 12) > 1 && <span className="block text-xs text-zinc-400 mt-1">ou em até {plano.parcelas_max_anual ?? 12}x no cartão</span>}</p>
+          )}
+          {!renovacaoAvulsa && (
+            <ul className="text-sm text-zinc-400 mt-3 list-disc pl-5 flex flex-col gap-1">
+              {plano.beneficios.slice(0, 4).map(b => <li key={b}>{b}</li>)}
+            </ul>
+          )}
+
           {pagamentosConfigurados === false ? (
             <p className="mt-4 text-sm text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-3 py-2">As assinaturas ainda não estão disponíveis. Tente novamente em breve.</p>
           ) : !plano.vendas_ativas ? (
             <p className="mt-4 text-sm text-yellow-300">Novas assinaturas temporariamente suspensas.</p>
+          ) : !user?.email_confirmed_at ? (
+            <p className="mt-4 text-sm text-yellow-300">Confirme seu e-mail para assinar.</p>
           ) : (
-            <Button onClick={assinar} loading={processando === 'checkout'} size="lg" className="w-full mt-4">
-              {estado === 'pagamento_pendente' ? 'Pagar / tentar novamente' : estado === 'cancelada_vigente' ? 'Reativar assinatura' : 'Assinar com Mercado Pago'}
-            </Button>
+            <div className="mt-4 flex flex-col gap-3">
+              {!renovacaoAvulsa && periodo === 'mensal' && (
+                <div role="radiogroup" aria-label="Forma de pagamento" className="flex flex-col gap-2">
+                  <button type="button" role="radio" aria-checked={forma === 'cartao'} onClick={() => setForma('cartao')}
+                    className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left ${forma === 'cartao' ? 'border-green-500 bg-green-500/10' : 'border-zinc-700 bg-zinc-800/50'}`}>
+                    <CreditCard className="w-5 h-5 mt-0.5 text-green-400 shrink-0" />
+                    <span><span className="block text-sm font-semibold">Cartão de crédito</span>
+                      <span className="block text-xs text-zinc-400">Renovação automática todo mês. Não precisa de conta no Mercado Pago.</span></span>
+                  </button>
+                  <button type="button" role="radio" aria-checked={forma === 'avulso'} onClick={() => setForma('avulso')}
+                    className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left ${forma === 'avulso' ? 'border-green-500 bg-green-500/10' : 'border-zinc-700 bg-zinc-800/50'}`}>
+                    <QrCode className="w-5 h-5 mt-0.5 text-green-400 shrink-0" />
+                    <span><span className="block text-sm font-semibold">Pix, boleto, débito ou outros</span>
+                      <span className="block text-xs text-zinc-400">Paga 1 mês por vez, sem renovação automática. Avisamos antes de vencer.</span></span>
+                  </button>
+                </div>
+              )}
+
+              {formaEfetiva === 'cartao' ? (
+                publicKey && user?.email ? (
+                  <CartaoMercadoPago publicKey={publicKey} valorCentavos={plano.preco_centavos} email={user.email} onToken={assinarComCartao} />
+                ) : (
+                  <Button onClick={assinar} loading={processando === 'checkout'} size="lg" className="w-full">Assinar com Mercado Pago</Button>
+                )
+              ) : (
+                <>
+                  <Button onClick={() => pagarAvulso(periodo === 'anual' && temAnual ? 'anual' : 'mensal')} loading={processando === 'checkout'} size="lg" className="w-full">
+                    {periodo === 'anual' && temAnual ? `Pagar ${brl(precoAnual)} — 12 meses` : `Pagar ${brl(plano.preco_centavos)} — 1 mês`}
+                  </Button>
+                  <p className="text-xs text-zinc-500 text-center">Pix, boleto, cartão de crédito{periodo === 'anual' ? ' (parcelado)' : ''}, débito ou saldo Mercado Pago. Não precisa ter conta no Mercado Pago.</p>
+                </>
+              )}
+            </div>
           )}
-          {!user?.email_confirmed_at && <p className="text-xs text-yellow-300 mt-2">Confirme seu e-mail para assinar.</p>}
+          <p className="text-xs text-zinc-500 mt-3">
+            {formaEfetiva === 'cartao'
+              ? 'Cobrança mensal recorrente no cartão, renovada automaticamente até o cancelamento. Cancele quando quiser;'
+              : 'Pagamento único, sem renovação automática;'} em até {plano.arrependimento_dias} dias da contratação o reembolso é integral.
+            Pagamentos processados pelo Mercado Pago. Ao assinar você concorda com os <Link to="/termos" className="underline">Termos de Uso</Link>.
+          </p>
         </Card>
       )}
 
-      {assinatura && (
+      {assinatura && !cortesia && (
         <div className="flex flex-col gap-2">
           <Button variant="secondary" onClick={sincronizar} loading={processando === 'sincronizar'}>
             <RefreshCw className="w-4 h-4" /> Verificar pagamento no Mercado Pago
           </Button>
-          <a href={MP_ASSINATURAS} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 text-sm text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl px-4 py-2.5">
-            <ExternalLink className="w-4 h-4" /> Atualizar forma de pagamento no Mercado Pago
-          </a>
+          {assinatura.modalidade === 'recorrente' && ['ativa', 'inadimplente'].includes(assinatura.status) && publicKey && user?.email && (
+            trocandoCartao ? (
+              <Card>
+                <h2 className="font-semibold mb-2">Trocar cartão</h2>
+                <CartaoMercadoPago publicKey={publicKey} valorCentavos={assinatura.preco_centavos} email={user.email} onToken={trocarCartao} />
+                <button onClick={() => setTrocandoCartao(false)} className="text-sm text-zinc-400 underline mt-2">Cancelar troca</button>
+              </Card>
+            ) : (
+              <Button variant="secondary" onClick={() => setTrocandoCartao(true)}><CreditCard className="w-4 h-4" /> Trocar cartão</Button>
+            )
+          )}
           <Link to="/pagamentos" className="text-center text-sm text-green-400 underline py-2">Ver histórico de pagamentos</Link>
         </div>
       )}
@@ -177,23 +304,27 @@ export default function AssinaturaPage() {
       {podeCancelar && (
         <Card className="border-red-500/20">
           {!confirmarCancelamento ? (
-            <button onClick={() => setConfirmarCancelamento(true)} className="text-red-400 text-sm font-semibold w-full text-left">Cancelar assinatura</button>
+            <button onClick={() => setConfirmarCancelamento(true)} className="text-red-400 text-sm font-semibold w-full text-left">{avulso ? 'Desistir e pedir reembolso' : 'Cancelar assinatura'}</button>
           ) : (
             <div className="flex flex-col gap-3">
-              <h2 className="font-semibold text-red-300">Confirmar cancelamento</h2>
+              <h2 className="font-semibold text-red-300">{avulso ? 'Confirmar reembolso' : 'Confirmar cancelamento'}</h2>
+              {avulso ? (
+                <p className="text-sm text-zinc-300">Você está dentro do prazo de {plano?.arrependimento_dias} dias: o valor pago é devolvido integralmente pelo Mercado Pago e o acesso Premium termina imediatamente. Seus treinos, dietas e registros continuam salvos.</p>
+              ) : (<>
               <p className="text-sm text-zinc-300">
                 Não haverá novas cobranças.{assinatura?.periodo_atual_fim && Date.parse(assinatura.periodo_atual_fim) > Date.now()
                   ? ` Você mantém o acesso Premium até ${dataBR(assinatura.periodo_atual_fim)}.` : ''} Seus treinos, dietas e registros continuam salvos.
               </p>
-              {dentroArrependimento && (
+              </>)}
+              {dentroArrependimento && !avulso && (
                 <label className="flex items-start gap-2 text-sm text-zinc-300">
                   <input type="checkbox" checked={pedirReembolso} onChange={e => setPedirReembolso(e.target.checked)} className="mt-1 accent-green-500" />
                   <span>Estou dentro do prazo de {plano?.arrependimento_dias} dias e quero o <b>reembolso integral</b> (o acesso Premium termina imediatamente).</span>
                 </label>
               )}
               <div className="flex gap-2">
-                <Button variant="secondary" className="flex-1" onClick={() => setConfirmarCancelamento(false)} disabled={processando === 'cancelar'}>Manter assinatura</Button>
-                <Button variant="danger" className="flex-1" onClick={cancelar} loading={processando === 'cancelar'}>Confirmar cancelamento</Button>
+                <Button variant="secondary" className="flex-1" onClick={() => setConfirmarCancelamento(false)} disabled={processando === 'cancelar'}>{avulso ? 'Manter acesso' : 'Manter assinatura'}</Button>
+                <Button variant="danger" className="flex-1" onClick={cancelar} loading={processando === 'cancelar'}>{avulso ? 'Pedir reembolso' : 'Confirmar cancelamento'}</Button>
               </div>
             </div>
           )}

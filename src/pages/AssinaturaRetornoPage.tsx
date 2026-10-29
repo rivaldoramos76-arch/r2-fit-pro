@@ -13,33 +13,35 @@ export default function AssinaturaRetornoPage() {
   const { recarregar } = useAcesso()
   const [resultado, setResultado] = useState<'verificando' | 'aprovado' | 'pendente' | 'falha'>('verificando')
   const tentativas = useRef(0)
+  const statusMp = (params.get('status') ?? params.get('collection_status') ?? '').toLowerCase()
 
   useEffect(() => {
     let vivo = true
-    const statusMp = (params.get('status') ?? params.get('collection_status') ?? '').toLowerCase()
+    // Checkout Pro devolve o id do pagamento (Pix, boleto, cartão): o servidor confere se é deste usuário
+    const pagamentoId = params.get('payment_id') ?? params.get('collection_id') ?? undefined
     const verificar = async () => {
       tentativas.current++
       try {
-        const r = await chamarApi<{ estado: EstadoAcesso }>('billing', { acao: 'sincronizar' })
+        const r = await chamarApi<{ estado: EstadoAcesso }>('billing', { acao: 'sincronizar', payment_id: pagamentoId })
         if (!vivo) return
         if (['ativa', 'tolerancia', 'admin'].includes(r.estado)) {
           await recarregar(); setResultado('aprovado'); return
         }
       } catch { /* tenta de novo */ }
       if (!vivo) return
-      if (['rejected', 'failure', 'cancelled'].includes(statusMp)) { setResultado('falha'); return }
-      if (tentativas.current < 6) setTimeout(verificar, 5000)
+      if (['rejected', 'failure', 'cancelled', 'null'].includes(statusMp)) { setResultado('falha'); return }
+      if (tentativas.current < 8) setTimeout(verificar, 5000)
       else setResultado('pendente')
     }
     verificar()
     return () => { vivo = false }
-  }, [params, recarregar])
+  }, [params, recarregar, statusMp])
 
   const telas = {
     verificando: { icon: <Spinner size="lg" />, titulo: 'Confirmando seu pagamento…', texto: 'Estamos consultando o Mercado Pago. Isso leva poucos segundos.' },
-    aprovado: { icon: <CheckCircle2 className="w-14 h-14 text-green-400" />, titulo: 'Assinatura ativa!', texto: 'Pagamento confirmado. Todos os recursos Premium já estão liberados.' },
-    pendente: { icon: <Clock className="w-14 h-14 text-yellow-400" />, titulo: 'Pagamento em processamento', texto: 'Ainda não recebemos a confirmação do Mercado Pago. Assim que for aprovado, o acesso é liberado automaticamente e você recebe um e-mail.' },
-    falha: { icon: <XCircle className="w-14 h-14 text-red-400" />, titulo: 'Pagamento não concluído', texto: 'O pagamento foi recusado ou cancelado. Nenhuma cobrança foi confirmada. Você pode tentar novamente com outro cartão.' },
+    aprovado: { icon: <CheckCircle2 className="w-14 h-14 text-green-400" />, titulo: 'Acesso Premium liberado!', texto: 'Pagamento confirmado. Todos os recursos Premium já estão liberados.' },
+    pendente: { icon: <Clock className="w-14 h-14 text-yellow-400" />, titulo: 'Pagamento em processamento', texto: statusMp === 'pending' || statusMp === 'in_process' ? 'Se você pagou com boleto, a compensação leva até 3 dias úteis. Pix costuma ser aprovado em instantes. Assim que o Mercado Pago confirmar, o acesso é liberado automaticamente e você recebe um e-mail.' : 'Ainda não recebemos a confirmação do Mercado Pago. Assim que for aprovado, o acesso é liberado automaticamente e você recebe um e-mail.' },
+    falha: { icon: <XCircle className="w-14 h-14 text-red-400" />, titulo: 'Pagamento não concluído', texto: 'O pagamento foi recusado ou cancelado. Nenhuma cobrança foi confirmada. Você pode tentar de novo com outro cartão, Pix ou boleto.' },
   }
   const t = telas[resultado]
   return (

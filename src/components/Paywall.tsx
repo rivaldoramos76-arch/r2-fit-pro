@@ -22,7 +22,10 @@ export default function Paywall({ recurso }: { recurso: string }) {
       <h1 className="text-xl font-bold">{titulo}</h1>
       <p className="text-zinc-400 text-sm mt-2 max-w-sm">{texto}</p>
       {config && (
-        <p className="mt-4 text-2xl font-bold">{brl(config.plano.preco_centavos)}<span className="text-sm text-zinc-500 font-normal">/mês</span></p>
+        <>
+          <p className="mt-4 text-2xl font-bold">{brl(config.plano.preco_centavos)}<span className="text-sm text-zinc-500 font-normal">/mês</span></p>
+          <p className="text-xs text-zinc-500 mt-1">Cartão, Pix, boleto ou débito{config.plano.preco_anual_centavos ? ` · anual por ${brl(config.plano.preco_anual_centavos)}` : ''}</p>
+        </>
       )}
       <Link to="/assinatura" className="mt-6 bg-green-500 hover:bg-green-400 text-zinc-950 font-semibold px-6 py-3 rounded-xl">
         {estado === 'pagamento_pendente' ? 'Ver status do pagamento' : estado === 'expirada' ? 'Assinar novamente' : 'Assinar agora'}
