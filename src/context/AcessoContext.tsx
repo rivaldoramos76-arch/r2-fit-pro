@@ -31,8 +31,9 @@ export function AcessoProvider({ children }: { children: ReactNode }) {
   // Usuário para o qual o estado atual foi calculado (evita usar dados de outra sessão)
   const [carregadoPara, setCarregadoPara] = useState<string | null | undefined>(undefined)
 
+  const uid = user?.id ?? null
   const recarregar = useCallback(async () => {
-    if (!user) {
+    if (!uid) {
       setEstado('visitante'); setPremium(false); setAdmin(false); setTesteAte(null); setCarregando(false); setErro(false)
       setCarregadoPara(null)
       return
@@ -44,9 +45,9 @@ export function AcessoProvider({ children }: { children: ReactNode }) {
       const d = data as { estado: EstadoAcesso; premium: boolean; admin: boolean; teste_ate?: string | null }
       setEstado(d.estado); setPremium(d.premium); setAdmin(d.admin); setTesteAte(d.teste_ate ?? null); setErro(false)
     }
-    setCarregadoPara(user.id)
+    setCarregadoPara(uid)
     setCarregando(false)
-  }, [user])
+  }, [uid])
 
   useEffect(() => {
     setCarregando(true)
@@ -58,7 +59,7 @@ export function AcessoProvider({ children }: { children: ReactNode }) {
   // no app do banco), caso a notificação do Mercado Pago tenha atrasado ou se perdido.
   const ultimaConsulta = useRef(0)
   useEffect(() => {
-    if (!user || estado !== 'pagamento_pendente' || carregadoPara !== user.id) return
+    if (!uid || estado !== 'pagamento_pendente' || carregadoPara !== uid) return
     const consultar = async () => {
       if (document.visibilityState !== 'visible' || Date.now() - ultimaConsulta.current < 30_000) return
       ultimaConsulta.current = Date.now()
@@ -70,12 +71,12 @@ export function AcessoProvider({ children }: { children: ReactNode }) {
     consultar()
     document.addEventListener('visibilitychange', consultar)
     return () => document.removeEventListener('visibilitychange', consultar)
-  }, [user, estado, carregadoPara, recarregar])
+  }, [uid, estado, carregadoPara, recarregar])
 
   return (
     <AcessoContext.Provider value={{
       estado, premium, admin, testeAte, erro, recarregar,
-      carregando: carregando || carregadoPara !== (user?.id ?? null),
+      carregando: carregando || carregadoPara !== uid,
     }}>
       {children}
     </AcessoContext.Provider>

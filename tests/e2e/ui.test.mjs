@@ -418,6 +418,16 @@ await t('contador: por cima da música toca só os avisos curtos, agendados, e r
   await page.waitForTimeout(1200)
   assert.equal(await page.evaluate(() => window.__ctx.state), 'running', 'retomou sozinho')
   assert.ok(await page.evaluate(() => window.__agendados.length) > 19, 'reagendou os avisos restantes')
+  // Sair e voltar para o app (como bloquear e desbloquear): a sessão é revalidada e a série não pode parar
+  await page.evaluate(() => { window.__ctx.__marca = 'antes' })
+  await page.evaluate(() => {
+    const definir = v => Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => v })
+    definir('hidden'); document.dispatchEvent(new Event('visibilitychange', { bubbles: true }))
+    definir('visible'); document.dispatchEvent(new Event('visibilitychange', { bubbles: true }))
+  })
+  await page.waitForTimeout(1500)
+  assert.equal(await page.getByRole('button', { name: /Iniciar treino/ }).count(), 0, 'não voltou para a tela inicial do contador')
+  assert.ok(await page.evaluate(() => window.__ctx.__marca === 'antes' && window.__ctx.state === 'running'), 'mesmo som continua tocando')
   await page.getByRole('button', { name: /Pausar/ }).click()
   await page.getByText('Pausado').waitFor()
   assert.equal(await page.evaluate(() => window.__ctx.state), 'suspended')

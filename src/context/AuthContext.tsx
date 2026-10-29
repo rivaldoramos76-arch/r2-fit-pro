@@ -25,10 +25,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     })
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Listen for auth changes. Ao voltar para o app, o Supabase renova a sessão e avisa de novo:
+    // mantemos o mesmo objeto de usuário (mesma conta) para não recarregar telas abertas,
+    // como o contador de séries no meio de um exercício.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
-      setUser(session?.user ?? null)
+      const novo = session?.user ?? null
+      setUser(atual => (event !== 'USER_UPDATED' && atual && novo && atual.id === novo.id ? atual : novo))
       setLoading(false)
     })
 
