@@ -55,12 +55,14 @@ BEGIN
   IF public.tem_premium(a) OR j ->> 'transicao' <> 'estorno' THEN RAISE EXCEPTION 'FALHA 11: estorno pelo admin (%)', j; END IF; n := n + 1;
   j := public.admin_gerenciar_acesso(a, 'status_pagamento', jsonb_build_object('payment_id', pid, 'status', 'aprovado'));
   SELECT status INTO v FROM public.payments WHERE id = pid;
-  IF v <> 'aprovado' THEN RAISE EXCEPTION 'FALHA 12: voltar para aprovado (%)', v; END IF; n := n + 1;
+  -- Voltar um estorno para "aprovado" corrige o registro, mas não devolve o acesso sozinho
+  IF v <> 'aprovado' OR public.tem_premium(a) THEN RAISE EXCEPTION 'FALHA 12: voltar para aprovado (%)', v; END IF; n := n + 1;
   ok := FALSE; BEGIN PERFORM public.admin_gerenciar_acesso(a, 'pagamento_manual', '{"meses": 5, "valor_centavos": 1990}');
   EXCEPTION WHEN raise_exception THEN ok := TRUE; END;
   IF NOT ok THEN RAISE EXCEPTION 'FALHA 13: período inválido aceito'; END IF; n := n + 1;
   SELECT count(*) INTO cnt FROM public.audit_logs WHERE actor_id = c AND acao LIKE 'admin.%';
   IF cnt < 7 THEN RAISE EXCEPTION 'FALHA 14: ações não auditadas (%)', cnt; END IF; n := n + 1;
+  PERFORM public.admin_gerenciar_acesso(a, 'cortesia', '{}');
   EXECUTE 'RESET ROLE';
   PERFORM set_config('request.jwt.claims', '', TRUE);
 
