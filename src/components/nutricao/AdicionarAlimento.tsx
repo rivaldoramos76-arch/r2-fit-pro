@@ -168,7 +168,7 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
             </div>
           </div>
         )}
-        <div className="mt-4"><EditorAlimento key={chaveAlimento(detalhe)} original={detalhe} onChange={setEditado} /></div>
+        <div className="mt-4"><EditorAlimento key={chaveAlimento(detalhe)} original={detalhe} onChange={setEditado} semGramas={!!base} /></div>
         {!ingrediente && <SeletorRefeicao valor={refeicao} onChange={setRefeicao} />}
         {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
       </Folha>

@@ -122,6 +122,27 @@ export function ajustarQuantidade<T extends Alimento>(a: T, novoValor: number): 
   }
 }
 
+/** Peso de cada unidade, entre parênteses no fim da quantidade: "2 porções (350 g)" → { valor: 350, unidade: 'g' }. */
+export function pesoDaQuantidade(q: string | null | undefined): { valor: number; unidade: 'g' | 'ml' } | null {
+  const m = (q ?? '').match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)\s*$/i)
+  const valor = m ? Number(m[1].replace(',', '.')) : 0
+  return m && valor > 0 ? { valor, unidade: m[2].toLowerCase() as 'g' | 'ml' } : null
+}
+
+/** Mesmo alimento em gramas (ou ml), a partir do peso da medida. */
+export function alimentoEmPeso<T extends Alimento>(a: T, valor: number): T {
+  const q = lerQuantidade(a.quantidade)
+  const peso = pesoDaQuantidade(a.quantidade)
+  if (!q || !peso || !(valor > 0)) return a
+  const f = valor / (q.valor * peso.valor)
+  return {
+    ...a,
+    quantidade: `${numeroBR(valor)} ${peso.unidade}`,
+    calorias: Math.round(a.calorias * f), proteina_g: um(a.proteina_g * f),
+    carboidrato_g: um(a.carboidrato_g * f), gordura_g: um(a.gordura_g * f),
+  }
+}
+
 /** Passo dos botões − / + conforme a unidade (gramas sobem de 10 em 10). */
 export function passoQuantidade(q: { valor: number; unidade: string }): number {
   if (/^(g|ml|gramas?|mililitros?)\b/i.test(q.unidade) || q.valor >= 20) return 10

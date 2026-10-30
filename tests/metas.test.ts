@@ -3,7 +3,7 @@ import { taxaBasal, gastoDiario, calcularMeta, distribuirMacros, idadeEm, calori
 import { ATIVIDADES, caloriasExercicio, metaAguaSugerida, resumoPeso, restanteDia } from '../src/lib/exercicios'
 import { porcaoReceita, receitaComoItem, totaisIngredientes, inicioSemana, resumoSemana } from '../src/lib/relatorio'
 import { carregarTaco, buscarBase, medidasDe, paraAlimento } from '../src/lib/alimentosBase'
-import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade } from '../src/lib/diario'
+import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade, pesoDaQuantidade, alimentoEmPeso } from '../src/lib/diario'
 
 let ok = 0
 const t = async (n: string, f: () => void | Promise<void>) => { await f(); ok++; console.log('✓', n) }
@@ -116,6 +116,18 @@ await t('quantidade editável: 4 ovos → 2 ovos, 150 g → 200 g', () => {
   assert.equal(passoQuantidade({ valor: 150, unidade: 'g' }), 10)
   assert.equal(passoQuantidade({ valor: 4, unidade: 'ovos' }), 1)
   assert.equal(passoQuantidade({ valor: 0.5, unidade: 'copo' }), 0.5)
+})
+
+await t('medida com peso pode virar gramas: 1 porção (100 g) → 300 g', () => {
+  assert.deepEqual(pesoDaQuantidade('1 porção (100 g)'), { valor: 100, unidade: 'g' })
+  assert.deepEqual(pesoDaQuantidade('1 copo (240 ml)'), { valor: 240, unidade: 'ml' })
+  assert.equal(pesoDaQuantidade('2 ovos'), null)
+  const porcao = { nome: 'Escondidinho', quantidade: '1 porção (100 g)', calorias: 120, proteina_g: 8, carboidrato_g: 10, gordura_g: 5 }
+  const prato = alimentoEmPeso(porcao, 300)
+  assert.equal(prato.quantidade, '300 g'); assert.equal(prato.calorias, 360); assert.equal(prato.proteina_g, 24)
+  // peso entre parênteses é de cada unidade: 2 unidades (50 g) = 100 g
+  assert.equal(alimentoEmPeso({ ...porcao, quantidade: '2 unidades (50 g)' }, 50).calorias, 60)
+  assert.equal(alimentoEmPeso({ ...porcao, quantidade: '2 ovos' }, 50).quantidade, '2 ovos', 'sem peso não muda')
 })
 
 await t('busca na TACO: resultados mais comuns primeiro e medidas caseiras', async () => {

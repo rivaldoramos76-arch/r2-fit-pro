@@ -20,7 +20,7 @@ const CONFIG = [
 
 const hojeISO = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
 const registro = (refeicao, nome, quantidade, calorias, i) => ({ id: 'f' + i, user_id: UID, data: hojeISO, refeicao, nome, quantidade, calorias, proteina_g: 10, carboidrato_g: 20, gordura_g: 5, observacao: null, origem: 'texto', created_at: `${hojeISO}T0${i}:00:00Z` })
-const REGISTROS = [registro('Café da manhã', 'Pão francês', '1 unidade', 135, 1), registro('Lanche da tarde', 'Banana prata', '1 unidade', 89, 2)]
+const REGISTROS = [registro('Café da manhã', 'Pão francês', '1 unidade (50 g)', 135, 1), registro('Lanche da tarde', 'Banana prata', '1 unidade', 89, 2)]
 const isoDiasAtras = n => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const PESOS = [{ id: 'p1', data: isoDiasAtras(20), peso_kg: 84.1 }, { id: 'p2', data: isoDiasAtras(10), peso_kg: 83.4 }, { id: 'p3', data: isoDiasAtras(2), peso_kg: 82.6 }]
 const RECEITA = { id: 'r1', nome: 'Frango com arroz', porcoes: 4, peso_final_g: 1200, modo_preparo: null, updated_at: '2026-10-28T00:00:00Z', ingredientes: [
@@ -394,12 +394,17 @@ await t('diário: editar alimento já salvo e ajustar item da IA', async () => {
   await folha.getByRole('heading', { name: 'Editar alimento' }).waitFor()
   await folha.getByLabel('Quantidade').fill('2')
   await folha.getByText('270').waitFor()
+  // Medida com peso também ajusta em gramas: 2 unidades de 50 g = 100 g
+  await folha.getByRole('button', { name: 'Em gramas' }).click()
+  assert.equal(await folha.getByLabel('Quantidade').inputValue(), '100')
+  await folha.getByLabel('Quantidade').fill('75')
+  await folha.getByText('203').waitFor() // 135 kcal em 50 g → 75 g
   await folha.getByRole('button', { name: 'Jantar' }).click()
   await page.screenshot({ path: `${SHOTS}/editar-registro.png` })
   await folha.getByRole('button', { name: 'Salvar alterações' }).click()
   await folha.waitFor({ state: 'detached' })
   const upd = page.gravacoes.find(x => x.tabela === 'food_logs' && x.metodo === 'PATCH')
-  assert.equal(upd?.corpo?.calorias, 270); assert.equal(upd?.corpo?.quantidade, '2 unidades'); assert.equal(upd?.corpo?.refeicao, 'Jantar')
+  assert.equal(upd?.corpo?.calorias, 203); assert.equal(upd?.corpo?.quantidade, '75 g'); assert.equal(upd?.corpo?.refeicao, 'Jantar')
   // O texto da busca vai junto para a aba "Digitar" (IA por texto)
   await page.getByRole('button', { name: 'Adicionar alimento' }).first().click()
   await page.getByPlaceholder(/Buscar alimento/).fill('tapioca')

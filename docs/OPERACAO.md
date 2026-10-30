@@ -111,7 +111,7 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 16. `20261031090000_receitas_peso_final.sql` — peso final da receita pronta (`receitas.peso_final_g`, opcional), para registrar a receita no diário em gramas.
 
 ## Testes
-- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails (14) + meta diária, diário, busca, exercício, peso, receitas e relatório semanal (17).
+- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails (14) + meta diária, diário, busca, exercício, peso, receitas e relatório semanal (18).
 - `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
 - `tests/sql/nutricao.test.sql` — 17 verificações de RLS da meta diária e dos favoritos (resultado esperado: `TESTES_OK (17)`).
 - `tests/sql/admin_acesso.test.sql` — 16 verificações das ações do administrador e da edição no diário (resultado esperado: `TESTES_OK (16)`).

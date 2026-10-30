@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Minus, Plus, Pencil } from 'lucide-react'
-import { ajustarQuantidade, escalarAlimento, lerQuantidade, numeroBR, passoQuantidade } from '../../lib/diario'
+import { ajustarQuantidade, alimentoEmPeso, escalarAlimento, lerQuantidade, numeroBR, passoQuantidade, pesoDaQuantidade } from '../../lib/diario'
 import type { Alimento } from '../../lib/diario'
 import { Input } from '../UI'
 import { fmt } from './Graficos'
@@ -9,10 +9,13 @@ const num = (s: string) => Number(s.replace(',', '.'))
 const PORCOES = [0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4, 5]
 
 /** Ajuste de quantidade (proporcional) e edição manual de um alimento.
+ *  Medidas com peso, como "1 porção (350 g)", também podem ser ajustadas em gramas (exceto com semGramas).
  *  Chama onChange com o resultado sempre que algo muda. */
-export default function EditorAlimento({ original, onChange }: { original: Alimento; onChange: (a: Alimento) => void }) {
+export default function EditorAlimento({ original, onChange, semGramas = false }: { original: Alimento; onChange: (a: Alimento) => void; semGramas?: boolean }) {
   const q = useMemo(() => lerQuantidade(original.quantidade), [original.quantidade])
+  const peso = useMemo(() => (semGramas || !q || /^(g|ml|gramas?)\b/i.test(q.unidade) ? null : pesoDaQuantidade(original.quantidade)), [semGramas, q, original.quantidade])
   const [valor, setValor] = useState(q ? numeroBR(q.valor) : '1')
+  const [emPeso, setEmPeso] = useState(false)
   const [manual, setManual] = useState<null | Record<keyof Alimento, string>>(null)
 
   const resultado: Alimento = useMemo(() => {
@@ -25,13 +28,21 @@ export default function EditorAlimento({ original, onChange }: { original: Alime
     }
     const v = num(valor)
     if (!(v > 0)) return original
+    if (emPeso && peso) return alimentoEmPeso(original, v)
     return q ? ajustarQuantidade(original, v) : escalarAlimento(original, v)
-  }, [manual, valor, q, original])
+  }, [manual, valor, q, original, emPeso, peso])
 
   const chave = JSON.stringify(resultado)
   useEffect(() => { onChange(resultado) }, [chave])
 
-  const passo = q ? passoQuantidade(q) : 0
+  const passo = emPeso ? 10 : q ? passoQuantidade(q) : 0
+  // Troca porção ↔ gramas mantendo a mesma quantidade de comida
+  const alternarPeso = (gramas: boolean) => {
+    if (!peso || !q || gramas === emPeso) return
+    const v = num(valor) || (gramas ? q.valor : peso.valor)
+    setValor(numeroBR(gramas ? Math.round(v * peso.valor) : Math.round(v / peso.valor * 100) / 100))
+    setEmPeso(gramas)
+  }
   const mudar = (dir: 1 | -1) => {
     const v = num(valor) || 0
     if (q) setValor(numeroBR(Math.max(passo, Math.round((v + dir * passo) * 100) / 100)))
@@ -47,13 +58,23 @@ export default function EditorAlimento({ original, onChange }: { original: Alime
       {!manual && (
         <div>
           <p className="text-sm font-medium text-zinc-300 mb-1.5">Quantidade</p>
+          {peso && q && (
+            <div className="flex gap-1.5 mb-2" role="group" aria-label="Unidade">
+              {[false, true].map(g => (
+                <button key={String(g)} type="button" aria-pressed={emPeso === g} onClick={() => alternarPeso(g)}
+                  className={`px-3 py-1.5 rounded-full text-[13px] font-medium border transition ${emPeso === g ? 'bg-green-500 text-zinc-950 border-green-500' : 'border-zinc-700 text-zinc-300 hover:border-zinc-500'}`}>
+                  {g ? (peso.unidade === 'ml' ? 'Em ml' : 'Em gramas') : `Por ${q.unidade.replace(/\s*\([^)]*\)\s*$/, '') || 'porção'}`}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 bg-zinc-800/60 rounded-2xl p-2">
             <button type="button" onClick={() => mudar(-1)} aria-label="Menos"
               className="w-11 h-11 rounded-xl bg-zinc-900 flex items-center justify-center active:scale-95 transition shrink-0"><Minus className="w-5 h-5" /></button>
             <label className="flex-1 flex items-baseline justify-center gap-2 min-w-0">
               <input value={valor} onChange={e => setValor(e.target.value.replace(/[^\d.,]/g, ''))} inputMode="decimal" aria-label="Quantidade"
                 className="w-20 bg-transparent text-center text-2xl font-bold tabular-nums text-zinc-50 focus:outline-none border-b border-zinc-600 focus:border-green-500" />
-              <span className="text-sm text-zinc-300 truncate">{q ? (lerQuantidade(resultado.quantidade)?.unidade || q.unidade) : `× ${original.quantidade || 'porção'}`}</span>
+              <span className="text-sm text-zinc-300 truncate">{emPeso && peso ? peso.unidade : q ? (lerQuantidade(resultado.quantidade)?.unidade || q.unidade) : `× ${original.quantidade || 'porção'}`}</span>
             </label>
             <button type="button" onClick={() => mudar(1)} aria-label="Mais"
               className="w-11 h-11 rounded-xl bg-zinc-900 flex items-center justify-center active:scale-95 transition shrink-0"><Plus className="w-5 h-5" /></button>
