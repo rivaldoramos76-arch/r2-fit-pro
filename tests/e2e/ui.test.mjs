@@ -15,7 +15,7 @@ const sessao = { access_token: jwt, refresh_token: 'r', token_type: 'bearer', ex
 const CONFIG = [
   { chave: 'plano', valor: { produto: 'R2 Fit Pro', nome: 'R2 Fit Pro Premium', preco_centavos: 1990, moeda: 'BRL', intervalo: 'mensal', tolerancia_dias: 3, arrependimento_dias: 7, vendas_ativas: true, preco_anual_centavos: 19900, parcelas_max_anual: 12, beneficios: ['Treinos com IA', 'Dieta personalizada'] } },
   { chave: 'empresa', valor: { nome_fantasia: 'R2 Fit Pro', razao_social: null, cnpj: null, endereco: null, email_suporte: null, email_privacidade: null, telefone: null, encarregado_dados: null, foro: null } },
-  { chave: 'textos', valor: { versao_termos: '2026-10-22', versao_privacidade: '2026-10-22', aviso_global: null, horario_suporte: null } },
+  { chave: 'textos', valor: { versao_termos: '2026-10-22', versao_privacidade: '2026-10-22', aviso_global: null, horario_suporte: null, whatsapp: '(31) 98888-7777' } },
 ]
 
 const hojeISO = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
@@ -312,6 +312,8 @@ await t('erro no pagamento aparece em destaque no meio da tela', async () => {
   const popup = page.getByRole('alertdialog', { name: 'Pagamento não concluído' })
   await popup.waitFor()
   await popup.getByText('pagamento indisponível').waitFor()
+  const wpp = await popup.getByRole('link', { name: /WhatsApp/ }).getAttribute('href')
+  assert.match(wpp ?? '', /^https:\/\/wa\.me\/5531988887777\?text=.*pagamento/, 'botão do WhatsApp com mensagem pronta')
   assert.ok(await popup.isVisible(), 'popup visível sem rolar a tela')
   await page.screenshot({ path: `${SHOTS}/popup-erro.png` })
   await popup.getByRole('button', { name: 'Entendi' }).click()

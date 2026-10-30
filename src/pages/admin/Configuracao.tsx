@@ -97,6 +97,8 @@ export default function Configuracao() {
 
       <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-3">
         <h2 className="font-semibold">Textos e contato</h2>
+        <Input label="WhatsApp de atendimento (com DDD)" value={cfg.textos.whatsapp ?? ''} onChange={e => setCfg({ ...cfg, textos: { ...cfg.textos, whatsapp: e.target.value || null } })}
+          placeholder={cfg.empresa.telefone || 'Ex.: 31 99999-9999'} hint="Botão de contato no Suporte e quando um pagamento falha. Vazio: usa o telefone da empresa." />
         <Input label="Horário de atendimento" value={cfg.textos.horario_suporte ?? ''} onChange={e => setCfg({ ...cfg, textos: { ...cfg.textos, horario_suporte: e.target.value || null } })} placeholder="Ex.: seg. a sex., 9h às 18h" />
         <div className="grid grid-cols-2 gap-3">
           <Input label="Versão dos Termos" value={cfg.textos.versao_termos} onChange={e => setCfg({ ...cfg, textos: { ...cfg.textos, versao_termos: e.target.value } })} hint="Alterar exige novo aceite dos usuários" />

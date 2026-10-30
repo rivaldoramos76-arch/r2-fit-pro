@@ -36,6 +36,8 @@ export interface ConfigTextos {
   versao_privacidade: string
   aviso_global: string | null
   horario_suporte: string | null
+  /** WhatsApp de atendimento (com DDD). Vazio: usa o telefone da empresa. */
+  whatsapp?: string | null
 }
 export interface AppConfig { plano: ConfigPlano; empresa: ConfigEmpresa; textos: ConfigTextos }
 
@@ -64,6 +66,14 @@ export function useConfig() {
     return () => { vivo = false }
   }, [])
   return { config, erro }
+}
+
+/** Link do WhatsApp de atendimento com mensagem pronta, ou null se não houver número. */
+export function linkWhatsapp(config: AppConfig | null, mensagem: string): string | null {
+  let numero = (config?.textos.whatsapp || config?.empresa.telefone || '').replace(/\D/g, '')
+  if (numero.length === 10 || numero.length === 11) numero = '55' + numero // número brasileiro sem o código do país
+  if (numero.length < 12 || numero.length > 15) return null
+  return `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`
 }
 
 /** Texto exibido quando um dado empresarial ainda não foi informado pelo responsável. */

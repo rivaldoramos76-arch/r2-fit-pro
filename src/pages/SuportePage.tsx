@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { useConfig, ou } from '../lib/config'
+import { MessageCircle } from 'lucide-react'
+import { useConfig, ou, linkWhatsapp } from '../lib/config'
 import { FAQ_SUPORTE } from '../lib/faq'
 import { dataHoraBR } from '../lib/formatos'
 import { Badge, Button, Card, Input, Select, Textarea } from '../components/UI'
@@ -69,6 +70,12 @@ export default function SuportePage() {
         <p className="text-sm text-zinc-400 mt-1">
           Contato: {ou(config?.empresa.email_suporte)}{config?.textos.horario_suporte ? ` · ${config.textos.horario_suporte}` : ''}
         </p>
+        {linkWhatsapp(config, '') && (
+          <a href={linkWhatsapp(config, `Olá! Preciso de ajuda com o R2 Fit Pro.${user?.email ? ` Meu e-mail no app: ${user.email}` : ''}`)!} target="_blank" rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-2 rounded-xl border border-green-500/40 bg-green-500/10 px-4 py-2.5 text-sm font-semibold text-green-300 hover:bg-green-500/20 transition">
+            <MessageCircle className="w-4 h-4" />Falar no WhatsApp
+          </a>
+        )}
       </div>
 
       <section aria-labelledby="faq-suporte">

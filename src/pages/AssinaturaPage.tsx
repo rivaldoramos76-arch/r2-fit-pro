@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckCircle2, CreditCard, QrCode, XCircle } from 'lucide-react'
+import { CheckCircle2, CreditCard, MessageCircle, QrCode, XCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useAcesso } from '../context/AcessoContext'
-import { useConfig } from '../lib/config'
+import { useConfig, linkWhatsapp } from '../lib/config'
 import { chamarApi, ErroApi } from '../lib/api'
 import { brl, dataBR, ROTULO_ESTADO } from '../lib/formatos'
 import { Badge, Button, Card, Spinner } from '../components/UI'
@@ -28,9 +28,11 @@ type Periodo = 'mensal' | 'anual'
 type Forma = 'cartao' | 'avulso'
 
 /** Aviso em destaque no meio da tela: erros e confirmações de pagamento não passam despercebidos. */
-function Popup({ tipo, texto, onFechar, acaoExtra }: {
+function Popup({ tipo, texto, onFechar, acaoExtra, whatsapp }: {
   tipo: 'erro' | 'ok'; texto: string; onFechar: () => void
   acaoExtra?: { rotulo: string; onClick: () => void }
+  /** Link para falar com o atendimento quando o pagamento não deu certo */
+  whatsapp?: string | null
 }) {
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onFechar() }
@@ -50,6 +52,12 @@ function Popup({ tipo, texto, onFechar, acaoExtra }: {
         <p id="popup-texto" className="mt-3 text-sm text-zinc-300 leading-relaxed">{texto}</p>
         <div className="mt-5 flex flex-col gap-2">
           {acaoExtra && <Button onClick={acaoExtra.onClick} className="w-full">{acaoExtra.rotulo}</Button>}
+          {erro && whatsapp && (
+            <a href={whatsapp} target="_blank" rel="noopener noreferrer"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-green-500/40 bg-green-500/10 px-4 py-2.5 text-sm font-semibold text-green-300 hover:bg-green-500/20 transition">
+              <MessageCircle className="w-4 h-4" />Falar com o atendimento no WhatsApp
+            </a>
+          )}
           <Button autoFocus variant={acaoExtra ? 'secondary' : 'primary'} onClick={onFechar} className="w-full">
             {erro ? (acaoExtra ? 'Tentar de novo' : 'Entendi') : 'Ok'}
           </Button>
@@ -204,6 +212,7 @@ export default function AssinaturaPage() {
 
       {erro && (
         <Popup tipo="erro" texto={erro} onFechar={() => { setErro(''); setSugerirOutraForma(false) }}
+          whatsapp={linkWhatsapp(config, `Olá! Tentei assinar o R2 Fit Pro e o pagamento não foi concluído. Meu e-mail no app: ${user?.email ?? ''}`)}
           acaoExtra={sugerirOutraForma ? { rotulo: 'Pagar com Pix, boleto ou outros', onClick: () => { setErro(''); setSugerirOutraForma(false); setPeriodo('mensal'); setForma('avulso') } } : undefined} />
       )}
       {aviso && !erro && <Popup tipo="ok" texto={aviso} onFechar={() => setAviso('')} />}
