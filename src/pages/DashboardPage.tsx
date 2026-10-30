@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Target, Dumbbell, Salad, ChevronRight, Pencil } from 'lucide-react'
+import { Plus, Target, Dumbbell, Salad, ChevronRight, Pencil, MessageCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import type { Dieta, Treino } from '../types'
@@ -12,6 +12,7 @@ import { REFEICOES, grupoRefeicao, hojeLocal } from '../lib/diario'
 import type { Refeicao } from '../lib/diario'
 import { AnelCalorias, BarraMacro, fmt } from '../components/nutricao/Graficos'
 import InstalarApp from '../components/InstalarApp'
+import { useNaoLidas } from '../lib/acompanhamento'
 import CartaoAgua from '../components/progresso/CartaoAgua'
 import GraficoPeso from '../components/progresso/GraficoPeso'
 import { exerciciosDoDia, historicoPeso } from '../lib/progresso'
@@ -33,6 +34,7 @@ export default function DashboardPage() {
   const [lastTreino, setLastTreino] = useState<Treino | null>(null)
   const [registros, setRegistros] = useState<RegistroAlimento[]>([])
   const [loading, setLoading] = useState(true)
+  const naoLidas = useNaoLidas(!!user)
 
   const greeting = () => {
     const h = new Date().getHours()
@@ -92,6 +94,18 @@ export default function DashboardPage() {
           <p className="font-semibold">Ative o R2 Fit Pro Premium</p>
           <p className="text-sm text-zinc-400 mt-1">Libere treinos com IA, contador com áudio, dietas personalizadas e contador de calorias.</p>
           <span className="inline-block mt-3 text-sm font-semibold text-green-400">Ver planos →</span>
+        </Link>
+      )}
+
+      {!!(naoLidas?.como_aluno || naoLidas?.como_personal) && (
+        <Link to={naoLidas!.como_aluno ? '/personal' : '/alunos'} className="flex items-center gap-3 rounded-2xl bg-green-500/10 border border-green-500/30 px-4 py-3 animate-fade-up">
+          <MessageCircle className="w-5 h-5 text-green-400 shrink-0" />
+          <span className="flex-1 text-sm text-green-100">
+            {naoLidas!.como_aluno
+              ? `Seu personal mandou ${naoLidas!.como_aluno === 1 ? 'uma mensagem' : `${naoLidas!.como_aluno} mensagens`}`
+              : `${naoLidas!.como_personal === 1 ? 'Uma mensagem nova' : `${naoLidas!.como_personal} mensagens novas`} dos seus alunos`}
+          </span>
+          <ChevronRight className="w-4 h-4 text-green-300" />
         </Link>
       )}
 

@@ -32,6 +32,9 @@ import PlanoWizardPage from './pages/PlanoWizardPage'
 import TreinoPlanoPage from './pages/TreinoPlanoPage'
 import TreinoDiaPage from './pages/TreinoDiaPage'
 import AdminPage from './pages/admin/AdminPage'
+import PersonalPage from './pages/PersonalPage'
+import AmigosPage from './pages/AmigosPage'
+import { ListaAlunos, PainelAluno } from './pages/AlunosPage'
 import { Spinner } from './components/UI'
 import WelcomeSplash from './components/WelcomeSplash'
 
@@ -71,6 +74,10 @@ function AppRoutes() {
       <Route path="/assinatura/retorno" element={<RotaPrivada><AssinaturaRetornoPage /></RotaPrivada>} />
       <Route path="/meta" element={<RotaPrivada><MetaPage /></RotaPrivada>} />
       <Route path="/pagamentos" element={<RotaPrivada><PagamentosPage /></RotaPrivada>} />
+      <Route path="/personal" element={<RotaPrivada><PersonalPage /></RotaPrivada>} />
+      <Route path="/convite/:codigo" element={<RotaPrivada><PersonalPage /></RotaPrivada>} />
+      <Route path="/amigos" element={<RotaPrivada><AmigosPage /></RotaPrivada>} />
+      <Route path="/amigo/:codigo" element={<RotaPrivada><AmigosPage /></RotaPrivada>} />
 
       {/* Premium */}
       <Route path="/dieta" element={<RotaPremium recurso="O plano alimentar"><DietPage /></RotaPremium>} />
@@ -79,6 +86,8 @@ function AppRoutes() {
       <Route path="/receitas/nova" element={<RotaPremium recurso="As receitas"><EditorReceita /></RotaPremium>} />
       <Route path="/receitas/:id" element={<RotaPremium recurso="As receitas"><EditorReceita /></RotaPremium>} />
       <Route path="/relatorio" element={<RotaPremium recurso="O relatório semanal"><RelatorioPage /></RotaPremium>} />
+      <Route path="/alunos" element={<RotaPremium recurso="O acompanhamento de alunos"><ListaAlunos /></RotaPremium>} />
+      <Route path="/alunos/:alunoId" element={<RotaPremium recurso="O acompanhamento de alunos"><PainelAluno /></RotaPremium>} />
       <Route path="/lembretes" element={<RotaPremium recurso="Os lembretes"><LembretesPage /></RotaPremium>} />
       <Route path="/peso" element={<RotaPremium recurso="O controle de peso"><PesoPage /></RotaPremium>} />
       <Route path="/calorias" element={<RotaPremium recurso="O diário alimentar"><CaloriasPage /></RotaPremium>} />

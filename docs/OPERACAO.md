@@ -121,9 +121,11 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 17. `20261031120000_lembretes.sql` — lembretes por notificação: horários (`lembretes`), aparelhos inscritos (`push_inscricoes`), chaves VAPID geradas no primeiro uso (`push_config`, só a chave de serviço lê) e a rotina `lembretes_rotina` no pg_cron a cada 5 minutos, que chama `r2-api/cron/lembretes`. Só toca o que ainda faz sentido: refeição não registrada, meta de água não batida, treino não feito, peso não registrado.
 18. `20261031130000_admin_confirmar_email.sql` — `admin_confirmar_email`: o administrador confirma manualmente o e-mail de um cliente (botão "Confirmar e-mail" na ficha do cliente), com auditoria.
 19. `20261031140000_asaas.sql` — `asaas_clientes` (cliente Asaas de cada usuário) e `asaas_config` (token e id do webhook), só acessíveis pelo backend; `billing_registrar_assinatura` e `billing_registrar_pagamento` aceitam `provider` (padrão `mercadopago`).
+20. `20261031150000_acompanhamento_personal.sql` — acompanhamento com personal: `personais` (código de convite), `acompanhamentos` (o que o aluno compartilha: treinos, diário, peso e se o personal pode enviar treinos/dietas/metas) e `acomp_mensagens` (recados e avisos). O personal nunca lê as tabelas do aluno: tudo passa pelas funções `acomp_*`, que conferem o vínculo ativo, o compartilhamento e o Premium do personal. Cada mensagem nova dispara a notificação no celular (`/r2-api/cron/acomp-aviso`). `treinos.enviado_por` e `dietas.enviado_por` marcam o que veio do personal.
+21. `20261031160000_amigos.sql` — amigos: `social_perfis` (código, apelido, privacidade), `amizades` (pedido e aceite) e `social_curtidas` (💪 nos treinos). Funções `social_*`: o feed mostra só treinos concluídos de amigos que deixaram "mostrar treinos" ligado; o ranking da semana conta treinos e dias com diário de quem deixou "entrar no ranking" ligado. Calorias, comida e peso nunca aparecem.
 
 ## Testes
-- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/Asaas/e-mails/lembretes (18) + meta diária, diário, busca, exercício, peso, receitas, relatório semanal, lembretes, foto do prato e cartões de compartilhar (21).
+- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/Asaas/e-mails/lembretes/avisos do personal (19) + meta diária, diário, busca, exercício, peso, receitas, relatório semanal, lembretes, foto do prato, cartões de compartilhar, alertas do personal e ranking de amigos (23).
 - `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
 - `tests/sql/nutricao.test.sql` — 17 verificações de RLS da meta diária e dos favoritos (resultado esperado: `TESTES_OK (17)`).
 - `tests/sql/admin_acesso.test.sql` — 16 verificações das ações do administrador e da edição no diário (resultado esperado: `TESTES_OK (16)`).
@@ -131,8 +133,15 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 - `tests/sql/progresso.test.sql` — 11 verificações de água, peso e exercício (resultado esperado: `TESTES_OK (11)`).
 - `tests/sql/receitas.test.sql` — 12 verificações das receitas salvas (resultado esperado: `TESTES_OK (12)`).
 - `tests/sql/lembretes.test.sql` — 15 verificações dos lembretes: RLS, aparelhos, chaves e a rotina de envio (resultado esperado: `TESTES_OK (15)`).
+- `tests/sql/acompanhamento.test.sql` — 30 verificações do acompanhamento com personal: convite, compartilhamento, envio de treino/dieta/meta, mensagens, estranhos sem acesso e encerramento (resultado esperado: `TESTES_OK (30)`).
+- `tests/sql/amigos.test.sql` — 21 verificações dos amigos: pedidos, feed só de amigos, privacidade, curtidas, ranking e exclusão (resultado esperado: `TESTES_OK (21)`).
 - `tests/sql/asaas.test.sql` — 9 verificações do Asaas: assinatura pendente até o pagamento, pagamento libera acesso, provedores separados, duplicata, cancelamento com período vigente, avulso, tabelas fechadas e limpeza ao excluir a conta (resultado esperado: `TESTES_OK (9)`).
-- `tests/e2e/ui.test.mjs` — 37 testes de interface (Playwright, celular e desktop) com API simulada.
+- `tests/e2e/ui.test.mjs` — 40 testes de interface (Playwright, celular e desktop) com API simulada.
+
+## Personal e amigos (desde 31/10/2026)
+- **Personal**: em `/personal` o usuário Premium ativa o modo personal e recebe um código (link `r2fitpro.com.br/convite/CÓDIGO`). O aluno (qualquer conta, mesmo sem Premium) aceita e escolhe o que compartilhar; pode mudar ou encerrar quando quiser. O personal acompanha em `/alunos` (lista com alertas: sem treinar há 4+ dias, diário parado, acima da meta) e `/alunos/:id` (resumo da semana, treinos, diário e mensagens). Para editar um treino do aluno, o app copia o treino para a conta do personal, que edita no editor normal e reenvia substituindo o original. Limites: 5 profissionais por aluno, 300 alunos por personal, 300 mensagens por dia.
+- **Amigos**: em `/amigos` (qualquer conta logada) cada um ativa o perfil, recebe um código (link `r2fitpro.com.br/amigo/CÓDIGO`) e adiciona amigos. Feed dos últimos 30 dias, 💪 nos treinos e ranking semanal. Limites: 300 amizades e 30 pedidos por dia.
+- Ainda não existe plano pago específico para personal: hoje o personal precisa do Premium comum e cada aluno paga o próprio acesso.
 
 ## Monitoramento e recuperação
 - Painel `/admin`: webhooks com erro, e-mails não enviados, falhas de cobrança, auditoria.

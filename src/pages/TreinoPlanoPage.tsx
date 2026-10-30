@@ -5,6 +5,7 @@ import { useTreino } from '../lib/treinoApi'
 import { descreverGrupos, proximoTreino } from '../lib/treinoModel'
 import type { Sessao } from '../lib/sessoes'
 import { Spinner } from '../components/UI'
+import EnviarParaAluno from '../components/acompanhamento/EnviarParaAluno'
 
 export default function TreinoPlanoPage() {
   const { id } = useParams<{ id: string }>()
@@ -57,10 +58,12 @@ export default function TreinoPlanoPage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold text-zinc-100 leading-tight">{plano.nome}</h1>
           <p className="text-sm text-zinc-500 mt-0.5">
-            {plano.origem === 'manual' ? 'Montado por você' : 'Gerado por IA'} · Treino {plano.divisao} · {plano.frequencia_semanal}x/semana
+            {treino.enviado_por ? 'Enviado pelo seu personal' : plano.origem === 'manual' ? 'Montado por você' : 'Gerado por IA'} · Treino {plano.divisao} · {plano.frequencia_semanal}x/semana
           </p>
         </div>
       </div>
+
+      <EnviarParaAluno treinoId={treino.id} />
 
       <div className="grid grid-cols-2 gap-2">
         <Link to={`/treino/${treino.id}/editar`} className="text-center text-sm font-semibold py-2.5 rounded-xl bg-zinc-800 text-zinc-200 border border-zinc-700 hover:bg-zinc-700">

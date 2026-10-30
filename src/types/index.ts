@@ -31,6 +31,8 @@ export interface Treino {
   frequencia_semanal: number
   plano: PlanoTreino
   created_at: string
+  /** Personal que enviou o treino (acompanhamento) */
+  enviado_por?: string | null
 }
 
 export interface SessaoTreino {

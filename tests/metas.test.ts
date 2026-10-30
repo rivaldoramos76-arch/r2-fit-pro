@@ -6,6 +6,8 @@ import { cartaoTreino, cartaoSemana, cartaoPeso, cartaoReceita, quebrarLinhas } 
 import { montarPrato, gramasHabituais } from '../src/lib/fotoPrato'
 import { comPadroes, proximoHorarioAgua, resumoDias, normalizarLembrete } from '../src/lib/lembretesBase'
 import { carregarTaco, buscarBase, medidasDe, paraAlimento } from '../src/lib/alimentosBase'
+import { alertasAluno, ordenarAlunos, normalizarCodigo, linkConvite, diasDesde, horaMensagem, type AlunoResumo } from '../src/lib/acompanhamentoBase'
+import { posicoesRanking, tempoRelativo, textoCurtidas } from '../src/lib/amigosBase'
 import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade, pesoDaQuantidade, alimentoEmPeso } from '../src/lib/diario'
 
 let ok = 0
@@ -296,6 +298,46 @@ await t('cartões de compartilhar: textos de treino, semana, peso e receita', ()
   // quebra de linhas por largura (1 unidade por letra)
   assert.deepEqual(quebrarLinhas('frango com batata doce', s => s.length, 12), ['frango com', 'batata doce'])
   assert.deepEqual(quebrarLinhas('um dois tres quatro cinco seis', s => s.length, 8, 2), ['um dois', 'tres…'])
+})
+
+await t('acompanhamento: alertas, ordem dos alunos, código e link de convite', () => {
+  const agora = new Date('2026-10-30T15:00:00Z')
+  const base: AlunoResumo = { id: 'a', aluno_id: 'u', nome: 'Bia', desde: '2026-10-01T10:00:00Z', ver_treinos: true, ver_diario: true, ver_peso: true, editar_planos: true,
+    ultimo_treino: '2026-10-29T20:00:00Z', treinos_7d: 3, dias_diario_7d: 6, kcal_hoje: 1500, meta_kcal: 1800, peso: null, nao_lidas: 0 }
+  assert.deepEqual(alertasAluno(base, agora), [])
+  const parado = { ...base, ultimo_treino: '2026-10-24T20:00:00Z' }
+  assert.deepEqual(alertasAluno(parado, agora).map(a => [a.texto, a.grave]), [['Não treina há 5 dias', false]])
+  assert.equal(alertasAluno({ ...base, ultimo_treino: '2026-10-20T10:00:00Z' }, agora)[0].grave, true)
+  assert.equal(alertasAluno({ ...base, ultimo_treino: null }, agora)[0].texto, 'Ainda não concluiu nenhum treino')
+  // aluno novo e dados não compartilhados não geram alerta de inatividade
+  assert.deepEqual(alertasAluno({ ...base, ultimo_treino: null, dias_diario_7d: 0, desde: '2026-10-29T10:00:00Z' }, agora), [])
+  assert.deepEqual(alertasAluno({ ...base, ver_treinos: false, ultimo_treino: null }, agora), [])
+  assert.equal(alertasAluno({ ...base, dias_diario_7d: 0 }, agora)[0].texto, 'Não registra o diário há uma semana')
+  assert.equal(alertasAluno({ ...base, kcal_hoje: 2200 }, agora)[0].texto, 'Passou 400 kcal da meta hoje')
+  const lista = [{ ...base, nome: 'Zeca' }, { ...parado, nome: 'Ana', ultimo_treino: '2026-10-10T10:00:00Z' }, { ...base, nome: 'Caio', nao_lidas: 2 }, { ...base, nome: 'Bia' }]
+  assert.deepEqual(ordenarAlunos(lista, agora).map(a => a.nome), ['Caio', 'Ana', 'Bia', 'Zeca'])
+  assert.equal(normalizarCodigo(' k7p-2qx9 '), 'K7P2QX')
+  assert.equal(linkConvite('https://r2fitpro.com.br/', 'K7P2QX'), 'https://r2fitpro.com.br/convite/K7P2QX')
+  assert.equal(diasDesde(null, agora), null); assert.equal(diasDesde('2026-10-28T15:00:00Z', agora), 2)
+  assert.match(horaMensagem('2026-10-30T13:05:00Z', agora), /^\d{2}:\d{2}$/)
+  assert.match(horaMensagem('2026-10-29T13:05:00Z', agora), /^ontem /)
+})
+
+await t('amigos: ranking com empate e medalhas, tempo relativo e quem curtiu', () => {
+  const l = (nome: string, treinos: number, dias: number, eu = false) => ({ user_id: nome, nome, eu, treinos, dias_diario: dias })
+  const r = posicoesRanking([l('Caio', 2, 5), l('Ana', 4, 3), l('Bia', 2, 5, true), l('Davi', 0, 0), l('Edu', 1, 7)])
+  assert.deepEqual(r.map(x => [x.nome, x.posicao, x.medalha]), [['Ana', 1, '🥇'], ['Bia', 2, '🥈'], ['Caio', 2, '🥈'], ['Edu', 4, null], ['Davi', 5, null]])
+  assert.equal(posicoesRanking([l('Zé', 0, 0)])[0].medalha, null)
+  const agora = new Date('2026-10-30T15:00:00Z')
+  assert.equal(tempoRelativo('2026-10-30T14:59:40Z', agora), 'agora')
+  assert.equal(tempoRelativo('2026-10-30T14:35:00Z', agora), 'há 25 min')
+  assert.equal(tempoRelativo('2026-10-30T10:00:00Z', agora), 'há 5 h')
+  assert.equal(tempoRelativo('2026-10-29T10:00:00Z', agora), 'ontem')
+  assert.equal(tempoRelativo('2026-10-25T10:00:00Z', agora), 'há 5 dias')
+  assert.equal(textoCurtidas(['Bia'], 1), 'Bia')
+  assert.equal(textoCurtidas(['Bia', 'Caio'], 2), 'Bia e Caio')
+  assert.equal(textoCurtidas(['Bia', 'Caio', 'Ana'], 5), 'Bia, Caio e mais 3')
+  assert.equal(textoCurtidas(null, 0), '')
 })
 
 console.log(`\n${ok} testes de metas e diário passaram`)

@@ -38,6 +38,24 @@ const DIETA = { id: 'd1', user_id: UID, nome: 'Plano Cutting', objetivo: 'Perda 
 const CLIENTE = { id: '99999999-2222-4333-8444-555555555555', nome: 'Maria Cliente', email: 'maria@teste.com', criado_em: '2026-10-25T10:00:00Z', ultimo_login: '2026-10-29T10:00:00Z', email_confirmado: false, estado: 'sem_assinatura', admin: false, total: 1 }
 const TREINO = { id: 't1', user_id: UID, nome: 'Treino teste', objetivo: 'Hipertrofia', nivel: 'Iniciante', frequencia_semanal: 3, created_at: '2026-10-20T00:00:00Z',
   plano: { versao: 2, dias: [{ id: 'd0', letra: 'A', dia: 'Treino A', exercicios: [{ id: 'e1', nome: 'Supino reto com barra', series: 2, tempo_execucao_segundos: 3, tempo_descanso_segundos: 2 }] }] } }
+const ALUNO_ID = '77777777-2222-4333-8444-555555555555'
+const ALUNOS = [
+  { id: 'v1', aluno_id: ALUNO_ID, nome: 'Bia Souza', desde: '2026-10-01T10:00:00Z', ver_treinos: true, ver_diario: true, ver_peso: true, editar_planos: true,
+    ultimo_treino: new Date(Date.now() - 6 * 86400000).toISOString(), treinos_7d: 0, dias_diario_7d: 5, kcal_hoje: 1350, meta_kcal: 1800, peso: { data: hojeISO, peso_kg: 68.4 }, nao_lidas: 2 },
+  { id: 'v2', aluno_id: '88888888-2222-4333-8444-555555555555', nome: 'Caio Lima', desde: '2026-10-05T10:00:00Z', ver_treinos: true, ver_diario: false, ver_peso: false, editar_planos: false,
+    ultimo_treino: new Date().toISOString(), treinos_7d: 4, dias_diario_7d: null, kcal_hoje: null, meta_kcal: null, peso: null, nao_lidas: 0 },
+]
+const DADOS_ALUNO = { id: 'v1', aluno_id: ALUNO_ID, nome: 'Bia Souza', desde: '2026-10-01T10:00:00Z', ver_treinos: true, ver_diario: true, ver_peso: true, editar_planos: true,
+  meta: { calorias: 1800, proteina_g: 120, carboidrato_g: 190, gordura_g: 60, agua_ml: 2500, meta_peso_kg: 65, somar_exercicio: false, personalizada: false, peso_kg: 70, objetivo: 'perder' },
+  alimentos: [{ data: hojeISO, refeicao: 'Almoço', nome: 'Arroz branco', quantidade: '150 g', calorias: 192, proteina_g: 4, carboidrato_g: 42, gordura_g: 0.3 },
+    { data: hojeISO, refeicao: 'Almoço', nome: 'Frango grelhado', quantidade: '120 g', calorias: 198, proteina_g: 38, carboidrato_g: 0, gordura_g: 4 }],
+  agua: [{ data: hojeISO, ml: 1500 }], exercicios: [], pesos: [{ data: isoDiasAtras(14), peso_kg: 69.6 }, { data: isoDiasAtras(7), peso_kg: 69.0 }, { data: hojeISO, peso_kg: 68.4 }],
+  treinos: [{ id: 'ta1', nome: 'Treino da Bia', objetivo: 'Emagrecimento', nivel: 'Iniciante', frequencia_semanal: 3, created_at: '2026-10-02T00:00:00Z', enviado_por_mim: false }],
+  sessoes: [{ treino_nome: 'Treino da Bia', dia_index: 0, data_inicio: new Date(Date.now() - 6 * 86400000).toISOString(), data_fim: new Date(Date.now() - 6 * 86400000 + 45 * 60000).toISOString(), concluido: true }] }
+const MENSAGENS = [
+  { id: 'm1', acompanhamento_id: 'v1', autor_id: ALUNO_ID, tipo: 'aviso', texto: 'Aceitou seu convite de acompanhamento 👋', ref_id: null, lida_em: null, created_at: '2026-10-01T10:00:00Z' },
+  { id: 'm2', acompanhamento_id: 'v1', autor_id: ALUNO_ID, tipo: 'texto', texto: 'Oi! Posso trocar o arroz por batata?', ref_id: null, lida_em: null, created_at: new Date(Date.now() - 3600000).toISOString() },
+]
 // Vozes de teste: tons curtos em WAV (o navegador reconhece o formato pelo conteúdo)
 function tomWav(seg = 0.3, sr = 16000) {
   const n = Math.round(seg * sr), b = Buffer.alloc(44 + n * 2)
@@ -47,11 +65,21 @@ function tomWav(seg = 0.3, sr = 16000) {
   return b
 }
 
+/** Espera a chamada simulada ser gravada (para atualizações otimistas na tela). */
+async function gravacao(page, tabela, ms = 5000) {
+  for (let i = 0; i < ms / 50; i++) {
+    const g = page.gravacoes.find(x => x.tabela === tabela)
+    if (g) return g
+    await new Promise(r => setTimeout(r, 50))
+  }
+  throw new Error(`chamada ${tabela} não feita`)
+}
+
 let ok = 0
 const erros = []
 const t = async (nome, f) => { try { await f(); ok++; console.log('✓', nome) } catch (e) { erros.push(nome); console.log('✗', nome, '\n   ', e.message.split('\n')[0]) } }
 
-async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, asaas = false, nutricao = false, treino = false, userAgent, viewport = { width: 390, height: 844 } } = {}) {
+async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, asaas = false, nutricao = false, treino = false, personal = false, amigos = false, userAgent, viewport = { width: 390, height: 844 } } = {}) {
   const chamadasBilling = []
   const gravacoes = []
   const ctx = await browser.newContext({ viewport, ...(userAgent ? { userAgent } : {}) })
@@ -68,6 +96,38 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
     if (p.startsWith('/auth/v1/user')) return json(usuario)
     if (p.startsWith('/auth/v1/token')) return json(sessao)
     if (p === '/rest/v1/rpc/meu_acesso') return acessoFalha ? json({ message: 'erro' }, 500) : json({ estado, premium, admin, teste_ate: testeAte })
+    if (amigos) {
+      const grava = nome => gravacoes.push({ tabela: nome, corpo: rota.request().postDataJSON() })
+      const ativo = gravacoes.some(g => g.tabela === 'social_ativar')
+      if (p === '/rest/v1/rpc/social_pendentes') return json(ativo ? 1 : 0)
+      if (p === '/rest/v1/rpc/social_amigos') return json(!ativo ? { perfil: null } : {
+        perfil: { codigo: 'M4R7QZ', apelido: 'Cliente', mostrar_treinos: true, entrar_ranking: true, nome: 'Cliente' },
+        amigos: [{ id: 'a1', user_id: 'u2', nome: 'Bruno', desde: '2026-10-20T10:00:00Z' }],
+        recebidos: gravacoes.some(g => g.tabela === 'social_responder') ? [] : [{ id: 'a2', nome: 'Carla', em: new Date().toISOString() }], enviados: [] })
+      if (p === '/rest/v1/rpc/social_ativar') { grava('social_ativar'); return json({ codigo: 'M4R7QZ', apelido: 'Cliente', mostrar_treinos: true, entrar_ranking: true, nome: 'Cliente' }) }
+      if (p === '/rest/v1/rpc/social_feed') return json([
+        { sessao_id: 's1', user_id: 'u2', nome: 'Bruno', eu: false, treino_nome: 'Treino A · Peito', dia_index: 0, data_fim: new Date(Date.now() - 25 * 60000).toISOString(), minutos: 48, exercicios: 6, curtidas: 1, curti: false, quem_curtiu: ['Carla'] },
+        { sessao_id: 's2', user_id: UID, nome: 'Cliente', eu: true, treino_nome: 'Treino B', dia_index: 1, data_fim: new Date(Date.now() - 26 * 3600000).toISOString(), minutos: 40, exercicios: 5, curtidas: 0, curti: false, quem_curtiu: null }])
+      if (p === '/rest/v1/rpc/social_ranking') return json([
+        { user_id: 'u2', nome: 'Bruno', eu: false, treinos: 4, dias_diario: 6 }, { user_id: UID, nome: 'Cliente', eu: true, treinos: 3, dias_diario: 7 }, { user_id: 'u3', nome: 'Carla', eu: false, treinos: 0, dias_diario: 0 }])
+      if (p.startsWith('/rest/v1/rpc/social_')) { grava(p.split('/').pop()); return json(p.endsWith('adicionar') ? { status: 'enviado', nome: 'Davi' } : null) }
+    }
+    if (personal) {
+      const grava = nome => gravacoes.push({ tabela: nome, corpo: rota.request().postDataJSON() })
+      if (p === '/rest/v1/rpc/acomp_nao_lidas') return json({ como_aluno: 0, como_personal: 2, personal: true })
+      if (p === '/rest/v1/rpc/acomp_meus_personais') return json(gravacoes.some(g => g.tabela === 'acomp_aceitar')
+        ? [{ id: 'v9', personal_id: 'pp', nome: 'Rafa Personal', cref: '123456-G/MG', desde: new Date().toISOString(), ver_treinos: true, ver_diario: true, ver_peso: false, editar_planos: true, nao_lidas: 0 }] : [])
+      if (p === '/rest/v1/rpc/acomp_ver_convite') { grava('acomp_ver_convite'); return json({ nome: 'Rafa Personal', cref: '123456-G/MG', proprio: false, ja_vinculado: false }) }
+      if (p === '/rest/v1/rpc/acomp_aceitar') { grava('acomp_aceitar'); return json('v9') }
+      if (p === '/rest/v1/personais') return json(gravacoes.some(g => g.tabela === 'acomp_ativar_personal') ? [{ codigo: 'K7P2QX', nome_exibicao: 'Cliente Teste', cref: null }] : [])
+      if (p === '/rest/v1/rpc/acomp_ativar_personal') { grava('acomp_ativar_personal'); return json({ codigo: 'K7P2QX', nome_exibicao: 'Cliente Teste', cref: null }) }
+      if (p === '/rest/v1/rpc/acomp_meus_alunos') return json(ALUNOS)
+      if (p === '/rest/v1/rpc/acomp_dados_aluno') return json(DADOS_ALUNO)
+      if (p === '/rest/v1/acomp_mensagens') return json([...MENSAGENS].reverse())
+      if (p === '/rest/v1/rpc/acomp_enviar_mensagem') { const c = rota.request().postDataJSON(); grava('acomp_enviar_mensagem'); return json({ id: 'm' + Date.now(), acompanhamento_id: c.p_id, autor_id: UID, tipo: 'texto', texto: c.p_texto, ref_id: null, lida_em: null, created_at: new Date().toISOString() }) }
+      if (p.startsWith('/rest/v1/rpc/acomp_')) { grava(p.split('/').pop()); return json(p.endsWith('enviar_treino') ? 'tn1' : null) }
+      if (p === '/rest/v1/treinos') return json([{ id: 'tp1', nome: 'ABC Hipertrofia' }])
+    }
     if (p === '/rest/v1/rpc/admin_metricas') return admin ? json({ usuarios_total: 3, usuarios_30d: 2, assinantes_ativos: 1, mrr_centavos: 1990, recebido_mes_centavos: 1990, recebido_total_centavos: 3980, pendente_centavos: 0, estornado_centavos: 0, projetado_proximo_mes_centavos: 1990, falhas_30d: 1, webhooks_erro_7d: 0, emails_pendentes: 2, tickets_abertos: 1, privacidade_abertas: 0, assinaturas_por_status: { ativa: 1 } }) : json({ message: 'Acesso negado' }, 400)
     if (p === '/rest/v1/app_config') return json(CONFIG)
     if (p === '/rest/v1/rpc/admin_usuarios') return admin ? json([CLIENTE]) : json({ message: 'Acesso negado' }, 400)
@@ -933,6 +993,109 @@ for (const [nomeDisp, viewport] of [['celular', { width: 390, height: 844 }], ['
     await ctx.close()
   })
 }
+
+await t('personal: aluno aceita convite pelo link, escolhe o que compartilhar e manda mensagem', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'sem_assinatura', personal: true })
+  await page.goto(BASE + '/convite/k7p2qx')
+  await page.getByText('Rafa Personal').waitFor()
+  await page.getByText('CREF 123456-G/MG').waitFor()
+  await page.getByRole('switch', { name: /Peso/ }).uncheck()
+  await page.screenshot({ path: `${SHOTS}/personal-convite.png`, fullPage: true })
+  await page.getByRole('button', { name: 'Aceitar convite' }).click()
+  await page.getByText(/Seu personal · CREF/).waitFor()
+  await page.waitForURL(/\/personal$/)
+  const aceite = page.gravacoes.find(g => g.tabela === 'acomp_aceitar').corpo
+  assert.equal(aceite.p_codigo, 'K7P2QX'); assert.equal(aceite.p_ver_peso, false); assert.equal(aceite.p_ver_treinos, true)
+  await page.getByRole('button', { name: /Mensagens/ }).click()
+  await page.getByText('Posso trocar o arroz por batata?').waitFor()
+  await page.getByLabel('Mensagem', { exact: true }).fill('Pode sim!')
+  await page.getByRole('button', { name: 'Enviar mensagem' }).click()
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="Mensagem"]')?.value === '')
+  await page.locator('div.bg-green-500', { hasText: 'Pode sim!' }).waitFor()
+  assert.equal(page.gravacoes.filter(g => g.tabela === 'acomp_enviar_mensagem').length, 1)
+  // Não Premium: o modo personal convida a assinar
+  await page.getByText('Você é personal?').waitFor()
+  await page.getByRole('link', { name: 'Premium' }).waitFor()
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('personal: ativa o modo personal, vê alunos com alertas e acompanha um aluno', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', personal: true })
+  await page.goto(BASE + '/personal')
+  await page.getByLabel('Nome que o aluno vai ver').fill('Rafa Personal')
+  await page.getByRole('button', { name: 'Ativar modo personal' }).click()
+  await page.getByTestId('codigo-personal').filter({ hasText: 'K7P2QX' }).waitFor()
+  await page.getByText(/\/convite\/K7P2QX/).waitFor()
+  assert.equal(page.gravacoes.find(g => g.tabela === 'acomp_ativar_personal').corpo.p_nome, 'Rafa Personal')
+  await page.getByRole('link', { name: /Meus alunos/ }).click()
+  await page.getByText('Bia Souza').waitFor()
+  await page.getByText('Não treina há 6 dias').waitFor()
+  // quem tem mensagem nova aparece primeiro
+  const nomes = await page.locator('ul li a span.font-semibold').allTextContents()
+  assert.deepEqual(nomes, ['Bia Souza', 'Caio Lima'])
+  await page.screenshot({ path: `${SHOTS}/personal-alunos.png`, fullPage: true })
+  await page.getByText('Bia Souza').click()
+  await page.getByText('Treinos concluídos').waitFor()
+  await page.getByText('Meta diária: 1.800 kcal').waitFor()
+  await page.screenshot({ path: `${SHOTS}/personal-aluno.png`, fullPage: true })
+  // ajustar a meta
+  await page.getByRole('button', { name: 'Ajustar' }).click()
+  await page.getByLabel('Calorias (kcal)').fill('1700')
+  await page.getByRole('button', { name: 'Salvar meta' }).click()
+  await page.getByText('Treinos concluídos').waitFor()
+  assert.equal(page.gravacoes.find(g => g.tabela === 'acomp_definir_meta').corpo.p_calorias, 1700)
+  // diário do dia
+  await page.getByRole('tab', { name: /Diário/ }).click()
+  await page.getByText('Frango grelhado').waitFor()
+  await page.getByText(/água 1\.500 ml/).waitFor()
+  // enviar um treino substituindo o do aluno
+  await page.getByRole('tab', { name: /Treinos/ }).click()
+  await page.getByLabel('Treino da sua conta').selectOption('tp1')
+  await page.getByLabel('No aluno').selectOption('ta1')
+  await page.getByRole('button', { name: 'Enviar treino' }).click()
+  await page.getByText('Treino atualizado. O aluno foi avisado.').waitFor()
+  const envio = page.gravacoes.find(g => g.tabela === 'acomp_enviar_treino').corpo
+  assert.equal(envio.p_origem, 'tp1'); assert.equal(envio.p_substituir, 'ta1'); assert.equal(envio.p_aluno, '77777777-2222-4333-8444-555555555555')
+  // mensagens
+  await page.getByRole('tab', { name: /Mensagens/ }).click()
+  await page.getByText('Posso trocar o arroz por batata?').waitFor()
+  // menu mostra "Meus alunos" com as mensagens novas
+  await page.goto(BASE + '/menu')
+  await page.getByRole('link', { name: /Meus alunos/ }).getByLabel('2 mensagem(ns) nova(s)').waitFor()
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('amigos: ativa, curte treino no feed, vê ranking e aceita pedido', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', amigos: true })
+  await page.goto(BASE + '/amigos')
+  await page.getByText('Comece a treinar com amigos').waitFor()
+  await page.getByLabel('Nome que seus amigos vão ver').fill('Cliente')
+  await page.getByRole('button', { name: 'Começar' }).click()
+  await page.getByText('Treino A · Peito').waitFor()
+  await page.getByText('Carla', { exact: true }).waitFor()
+  await page.screenshot({ path: `${SHOTS}/amigos-feed.png`, fullPage: true })
+  await page.getByRole('button', { name: 'Dar um 💪' }).first().click()
+  await page.getByRole('button', { name: 'Tirar o 💪' }).waitFor()
+  assert.deepEqual((await gravacao(page, 'social_curtir')).corpo, { p_sessao: 's1', p_curtir: true })
+  await page.getByRole('tab', { name: /Ranking/ }).click()
+  await page.getByText('Cliente (você)').waitFor()
+  const posicoes = await page.locator('ol li > span:first-child').allTextContents()
+  assert.deepEqual(posicoes, ['🥇', '🥈', '3º'])
+  await page.screenshot({ path: `${SHOTS}/amigos-ranking.png`, fullPage: true })
+  await page.getByRole('tab', { name: /Amigos/ }).click()
+  await page.getByTestId('codigo-amigo').filter({ hasText: 'M4R7QZ' }).waitFor()
+  await page.getByRole('button', { name: 'Aceitar Carla' }).click()
+  await page.waitForFunction(() => !document.querySelector('[aria-label="Aceitar Carla"]'))
+  assert.deepEqual((await gravacao(page, 'social_responder')).corpo, { p_id: 'a2', p_aceitar: true })
+  await page.getByLabel('Código do amigo').fill('davi22')
+  await page.getByRole('button', { name: 'Adicionar' }).click()
+  await page.getByText('Pedido enviado para Davi').waitFor()
+  assert.equal(page.gravacoes.find(g => g.tabela === 'social_adicionar').corpo.p_codigo, 'DAVI22')
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
 
 await t('falha de rede ao verificar acesso mostra erro e opção de tentar novamente', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, acessoFalha: true })

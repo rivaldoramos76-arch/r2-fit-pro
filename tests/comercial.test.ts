@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { mensagemAcomp } from '../supabase/functions/_shared/acompLogic'
 import { createHmac } from 'node:crypto'
 import {
   mapearStatusPagamento, paraCentavos, extrairPreapprovalId, normalizarPagamento, normalizarAssinatura,
@@ -214,6 +215,19 @@ await t('Asaas: cobranças, assinaturas e corpos das requisições', () => {
   assert.throws(() => corpoAssinaturaAsaas({ cliente: 'c', userId: uid, planoNome: 'x', precoCentavos: 300, site: 's' }))
   assert.deepEqual(lerEventoAsaas({ id: 'evt_1', event: 'PAYMENT_RECEIVED', payment: { id: 'pay_1' } }), { id: 'evt_1', evento: 'PAYMENT_RECEIVED', pagamentoId: 'pay_1', assinaturaId: null })
   assert.equal(tokenIgual('abc', 'abc'), true); assert.equal(tokenIgual('abc', 'abd'), false); assert.equal(tokenIgual(null, 'abc'), false); assert.equal(tokenIgual('', ''), false)
+})
+
+await t('acompanhamento: notificação certa para aluno e personal', () => {
+  const base = { id: 'm1', texto: 'Boa! Aumenta a carga semana que vem.', autorNome: 'Rafa', alunoId: 'al1', refId: null }
+  const aluno = mensagemAcomp({ ...base, tipo: 'texto', paraPersonal: false })
+  assert.equal(aluno.titulo, 'Rafa (seu personal)'); assert.equal(aluno.url, '/personal')
+  assert.equal(mensagemAcomp({ ...base, tipo: 'treino', paraPersonal: false, refId: 't9' }).url, '/treino/t9')
+  assert.equal(mensagemAcomp({ ...base, tipo: 'dieta', paraPersonal: false, refId: 'd9' }).url, '/dieta/d9')
+  assert.equal(mensagemAcomp({ ...base, tipo: 'meta', paraPersonal: false }).url, '/meta')
+  const personal = mensagemAcomp({ ...base, autorNome: 'Bia', tipo: 'texto', paraPersonal: true })
+  assert.equal(personal.titulo, 'Bia'); assert.equal(personal.url, '/alunos/al1'); assert.equal(personal.tag, 'r2-acomp-al1')
+  const longo = mensagemAcomp({ ...base, texto: 'x'.repeat(300), tipo: 'texto', paraPersonal: true })
+  assert.equal(longo.corpo.length, 140); assert.ok(longo.corpo.endsWith('…'))
 })
 
 console.log(`\n${ok} testes passaram`)

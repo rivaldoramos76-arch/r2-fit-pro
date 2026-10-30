@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Home, Dumbbell, Salad, Flame, User, Settings, CreditCard, Receipt, LifeBuoy, FileText, Shield, Info, LogOut, LayoutDashboard, ChevronRight, Sparkles, Target, Scale, ChefHat, BarChart3, Bell,
+  Home, Dumbbell, Salad, Flame, User, Settings, CreditCard, Receipt, LifeBuoy, FileText, Shield, Info, LogOut, LayoutDashboard, ChevronRight, Sparkles, Target, Scale, ChefHat, BarChart3, Bell, UserCheck, Users, HeartHandshake,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -8,8 +8,10 @@ import { useAcesso } from '../context/AcessoContext'
 import { Badge } from '../components/UI'
 import { brl, diasRestantes, ROTULO_ESTADO } from '../lib/formatos'
 import { useConfig } from '../lib/config'
+import { useNaoLidas } from '../lib/acompanhamento'
+import { usePedidosAmizade } from '../lib/amigos'
 
-type Item = { href: string; label: string; icon: LucideIcon }
+type Item = { href: string; label: string; icon: LucideIcon; badge?: number; badgeRotulo?: string }
 const GRUPOS: { titulo: string; itens: Item[] }[] = [
   { titulo: 'App', itens: [
     { href: '/dashboard', label: 'Início', icon: Home },
@@ -21,6 +23,8 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
     { href: '/receitas', label: 'Receitas', icon: ChefHat },
     { href: '/relatorio', label: 'Relatório da semana', icon: BarChart3 },
     { href: '/lembretes', label: 'Lembretes', icon: Bell },
+    { href: '/amigos', label: 'Amigos', icon: HeartHandshake },
+    { href: '/personal', label: 'Personal', icon: UserCheck },
   ] },
   { titulo: 'Conta', itens: [
     { href: '/perfil', label: 'Perfil', icon: User },
@@ -45,6 +49,15 @@ export default function MenuPage() {
   const semAcesso = ['sem_assinatura', 'expirada', 'pagamento_pendente', 'teste'].includes(estado)
   const diasTeste = diasRestantes(testeAte)
   const plano = config?.plano
+  const naoLidas = useNaoLidas(!!user)
+  const pedidos = usePedidosAmizade(!!user)
+  const grupos = GRUPOS.map(g => g.titulo !== 'App' ? g : {
+    ...g,
+    itens: [
+      ...g.itens.map(i => (i.href === '/personal' ? { ...i, badge: naoLidas?.como_aluno } : i.href === '/amigos' ? { ...i, badge: pedidos, badgeRotulo: `${pedidos} pedido(s) de amizade` } : i)),
+      ...(naoLidas?.personal ? [{ href: '/alunos', label: 'Meus alunos', icon: Users, badge: naoLidas.como_personal }] : []),
+    ],
+  })
 
   const sair = async () => {
     await signOut()
@@ -82,14 +95,15 @@ export default function MenuPage() {
         </Link>
       )}
 
-      {GRUPOS.map(g => (
+      {grupos.map(g => (
         <nav key={g.titulo} aria-label={g.titulo}>
           <h2 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold mb-2 px-1">{g.titulo}</h2>
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl divide-y divide-zinc-800">
-            {g.itens.map(({ href, label, icon: Icon }) => (
+            {g.itens.map(({ href, label, icon: Icon, badge, badgeRotulo }: Item) => (
               <Link key={href} to={href} className="flex items-center gap-3 px-4 py-3.5 hover:bg-zinc-800/60 first:rounded-t-2xl last:rounded-b-2xl">
                 <Icon className="w-5 h-5 text-zinc-400" strokeWidth={1.8} />
                 <span className="flex-1 text-sm">{label}</span>
+                {!!badge && <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center" aria-label={badgeRotulo ?? `${badge} mensagem(ns) nova(s)`}>{badge}</span>}
                 <ChevronRight className="w-4 h-4 text-zinc-600" />
               </Link>
             ))}
