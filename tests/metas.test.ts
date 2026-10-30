@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { taxaBasal, gastoDiario, calcularMeta, distribuirMacros, idadeEm, caloriasDosMacros, CALORIAS_MINIMAS, ajustarPorCalorias, ajustarPorMacro, percentuais } from '../src/lib/metas'
 import { ATIVIDADES, caloriasExercicio, metaAguaSugerida, resumoPeso, restanteDia } from '../src/lib/exercicios'
 import { porcaoReceita, receitaComoItem, totaisIngredientes, inicioSemana, resumoSemana } from '../src/lib/relatorio'
+import { cartaoTreino, cartaoSemana, cartaoPeso, cartaoReceita, quebrarLinhas } from '../src/lib/cartoesBase'
 import { montarPrato, gramasHabituais } from '../src/lib/fotoPrato'
 import { comPadroes, proximoHorarioAgua, resumoDias, normalizarLembrete } from '../src/lib/lembretesBase'
 import { carregarTaco, buscarBase, medidasDe, paraAlimento } from '../src/lib/alimentosBase'
@@ -277,6 +278,24 @@ await t('foto do prato: valores da TACO, gramas ajustáveis e quantidade de cost
   // Valor muito diferente do que a IA viu: item trocado na busca, fica com a IA
   const trocado = montarPrato([{ nome: 'Arroz', busca: 'arroz branco cozido', gramas: 100, quantidade: '', calorias: 900, proteina_g: 0, carboidrato_g: 0, gordura_g: 0 }], taco, new Map())
   assert.equal(trocado[0].fonte, 'ia')
+})
+
+await t('cartões de compartilhar: textos de treino, semana, peso e receita', () => {
+  const tr = cartaoTreino({ dia: 'Treino A', foco: 'Peito e tríceps', exercicios: 6, series: 18, minutos: 52 })
+  assert.equal(tr.etiqueta, 'TREINO CONCLUÍDO'); assert.deepEqual(tr.stats.map(s => s.valor), ['6', '18', '52'])
+  assert.equal(cartaoTreino({ dia: 'B', exercicios: 3, series: 9, minutos: null }).stats.length, 2)
+  const se = cartaoSemana({ diasRegistrados: 5, diasNaMeta: 4, mediaCalorias: 1987.4, treinos: 1, variacaoPeso: -0.8 })
+  assert.equal(se.destaque, '4/5'); assert.equal(se.stats[0].valor, '1.987'); assert.equal(se.stats[1].rotulo, 'treino'); assert.equal(se.stats[2].valor, '-0,8')
+  const pe = cartaoPeso({ inicial: 84.2, atual: 81.9, dias: 30, meta: 78 })
+  assert.equal(pe.destaque, '−2,3 kg'); assert.equal(pe.subtitulo, 'em 30 dias'); assert.match(pe.texto, /2,3 kg/)
+  assert.equal(cartaoPeso({ inicial: 70, atual: 70, dias: 3 }).destaque, 'Peso mantido')
+  assert.equal(cartaoPeso({ inicial: 60, atual: 61.5, dias: 10 }).destaque, '+1,5 kg')
+  const re = cartaoReceita({ nome: 'Frango com batata-doce', calorias: 412, proteina_g: 38.4, carboidrato_g: 40, gordura_g: 9.6 })
+  assert.equal(re.subtitulo, '412 kcal por porção'); assert.equal(re.stats[0].valor, '38 g')
+  assert.ok([tr, se, pe, re].every(c => c.texto.includes('r2fitpro.com.br')))
+  // quebra de linhas por largura (1 unidade por letra)
+  assert.deepEqual(quebrarLinhas('frango com batata doce', s => s.length, 12), ['frango com', 'batata doce'])
+  assert.deepEqual(quebrarLinhas('um dois tres quatro cinco seis', s => s.length, 8, 2), ['um dois', 'tres…'])
 })
 
 console.log(`\n${ok} testes de metas e diário passaram`)

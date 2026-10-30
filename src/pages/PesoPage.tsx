@@ -9,6 +9,8 @@ import type { PontoPeso } from '../lib/exercicios'
 import { hojeLocal, somarDias } from '../lib/diario'
 import { Button, Input, Spinner } from '../components/UI'
 import GraficoPeso from '../components/progresso/GraficoPeso'
+import CompartilharCartao from '../components/CompartilharCartao'
+import { cartaoPeso } from '../lib/cartoesBase'
 
 const PERIODOS = [['30', '30 dias'], ['90', '90 dias'], ['365', '1 ano'], ['tudo', 'Tudo']] as const
 const kg = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
@@ -48,6 +50,13 @@ export default function PesoPage() {
     return pontos.filter(p => p.data >= desde)
   }, [pontos, periodo])
   const resumo = resumoPeso(visiveis, meta?.meta_peso_kg)
+  const cartao = useMemo(() => {
+    if (visiveis.length < 2) return null
+    const ord = [...visiveis].sort((a, b) => a.data.localeCompare(b.data))
+    const [p, u] = [ord[0], ord[ord.length - 1]]
+    const dias = Math.round((new Date(u.data).getTime() - new Date(p.data).getTime()) / 86400000)
+    return cartaoPeso({ inicial: p.peso_kg, atual: u.peso_kg, dias, meta: meta?.meta_peso_kg })
+  }, [visiveis, meta?.meta_peso_kg])
 
   const salvar = async () => {
     const v = Number(novo.replace(',', '.'))
@@ -119,6 +128,7 @@ export default function PesoPage() {
                 : null}
             </div>
           )}
+          {cartao && <CompartilharCartao cartao={cartao} rotulo="Compartilhar minha evolução" className="w-full animate-fade-up" />}
         </>
       )}
 

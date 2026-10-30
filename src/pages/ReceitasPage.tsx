@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import { listarReceitas, buscarReceita, salvarReceita, apagarReceita } from '../lib/receitasApi'
 import type { Receita } from '../lib/receitasApi'
 import { porcaoReceita, totaisIngredientes } from '../lib/relatorio'
+import CompartilharCartao from '../components/CompartilharCartao'
+import { cartaoReceita } from '../lib/cartoesBase'
 import type { Alimento } from '../lib/diario'
 import { numeroBR } from '../lib/diario'
 import { Button, Input, Spinner, Textarea } from '../components/UI'
@@ -149,6 +151,11 @@ export function EditorReceita() {
         </div>
         <p className="text-[11px] text-zinc-500 mt-2">Receita inteira: {fmt(total.calorias)} kcal{pesoFinal ? ` · cada porção ≈ ${fmt(Math.round(pesoFinal / porcoes))} g · 100 g = ${fmt(Math.round(total.calorias * 100 / pesoFinal))} kcal` : ''}</p>
       </section>
+
+      {id && nome.trim() && ingredientes.length > 0 && (
+        <CompartilharCartao cartao={cartaoReceita({ nome: nome.trim(), calorias: porcao.calorias, proteina_g: porcao.proteina_g, carboidrato_g: porcao.carboidrato_g, gordura_g: porcao.gordura_g })}
+          rotulo="Compartilhar receita" className="w-full" />
+      )}
 
       <section aria-label="Ingredientes" className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
         <h2 className="px-4 pt-3.5 pb-2 font-semibold text-zinc-100">Ingredientes ({ingredientes.length})</h2>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BarChart3, ChevronLeft, ChevronRight, Flame, Droplet, Scale, Dumbbell, Trophy, Utensils } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -9,6 +9,8 @@ import { hojeLocal, somarDias } from '../lib/diario'
 import { metaAguaSugerida } from '../lib/exercicios'
 import { Spinner } from '../components/UI'
 import { BarraMacro, fmt } from '../components/nutricao/Graficos'
+import CompartilharCartao from '../components/CompartilharCartao'
+import { cartaoSemana } from '../lib/cartoesBase'
 
 const DIA_CURTO = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
 const dataBR = (iso: string) => { const [, m, d] = iso.split('-'); return `${d}/${m}` }
@@ -70,6 +72,10 @@ export default function RelatorioPage() {
   const [resumo, setResumo] = useState<Resumo | null>(null)
   const fim = somarDias(inicio, 6)
   const semanaAtual = inicio === inicioSemana(hojeLocal())
+  const cartao = useMemo(() => resumo && resumo.diasRegistrados > 0 ? cartaoSemana({
+    diasRegistrados: resumo.diasRegistrados, diasNaMeta: resumo.diasNaMeta, mediaCalorias: resumo.mediaCalorias,
+    treinos: resumo.treinosConcluidos, variacaoPeso: resumo.peso?.variacao ?? null,
+  }) : null, [resumo])
 
   useEffect(() => {
     if (!user || carregandoMeta) return
@@ -138,6 +144,8 @@ export default function RelatorioPage() {
               {resumo.alimentoMaisRegistrado && <p className="text-sm text-zinc-300 flex items-center gap-2"><Utensils className="w-4 h-4 text-green-400 shrink-0" />Mais registrado: <b>{resumo.alimentoMaisRegistrado.nome}</b> ({resumo.alimentoMaisRegistrado.vezes}×)</p>}
             </section>
           )}
+
+          {cartao && <CompartilharCartao cartao={cartao} rotulo="Compartilhar minha semana" className="w-full animate-fade-up" />}
 
           {resumo.diasRegistrados === 0 && (
             <div className="text-center text-sm text-zinc-400 py-4">Nenhum alimento registrado nesta semana. <Link to="/calorias" className="text-green-400 font-semibold">Abrir o diário →</Link></div>

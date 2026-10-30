@@ -6,6 +6,8 @@ import { descreverGrupos, equipamentosCobertos, type ExercicioPlano, type PlanoT
 import { desmarcarExercicio, novaSessao, sessaoAtual, type Sessao } from '../lib/sessoes'
 import ExercicioPicker, { ExercicioForm } from '../components/treino/ExercicioPicker'
 import { Spinner } from '../components/UI'
+import CompartilharCartao from '../components/CompartilharCartao'
+import { cartaoTreino } from '../lib/cartoesBase'
 
 function mmss(seg: number) {
   return `${String(Math.floor(seg / 60)).padStart(2, '0')}:${String(seg % 60).padStart(2, '0')}`
@@ -103,6 +105,12 @@ export default function TreinoDiaPage() {
   const feitos = new Set(Object.keys(sessao?.series_realizadas ?? {}))
   const concluidos = exercicios.filter(e => feitos.has(e.id)).length
   const sessaoFinalizada = !!sessao?.concluido && exercicios.length > 0
+  const minutos = sessao?.data_inicio && sessao?.data_fim
+    ? Math.round((new Date(sessao.data_fim).getTime() - new Date(sessao.data_inicio).getTime()) / 60000) : null
+  const cartao = cartaoTreino({
+    dia: treinoDia.dia, foco: treinoDia.foco || descreverGrupos(treinoDia.grupos), exercicios: exercicios.length,
+    series: exercicios.reduce((s, e) => s + e.series, 0), minutos: minutos && minutos > 0 && minutos < 300 ? minutos : treinoDia.duracao_estimada_min,
+  })
 
   const atualizarExercicios = async (fn: (lista: ExercicioPlano[]) => ExercicioPlano[]) => {
     const plano: PlanoTreino = {
@@ -161,6 +169,7 @@ export default function TreinoDiaPage() {
             {treinoDia.duracao_estimada_min} min estimados · {exercicios.reduce((s, e) => s + e.series, 0)} séries
             {sessaoFinalizada && sessao?.data_fim && ` · finalizado em ${new Date(sessao.data_fim).toLocaleDateString('pt-BR')}`}
           </p>
+          {sessaoFinalizada && cartao && <CompartilharCartao cartao={cartao} rotulo="Compartilhar treino" className="w-full mt-3" />}
           {(sessaoFinalizada || concluidos > 0) && (
             <button onClick={recomecar} className="mt-3 text-xs font-semibold text-green-400 hover:text-green-300">
               ↻ Começar nova sessão deste treino
