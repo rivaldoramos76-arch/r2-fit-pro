@@ -35,7 +35,7 @@ const DIETA = { id: 'd1', user_id: UID, nome: 'Plano Cutting', objetivo: 'Perda 
   plano: { nome: 'Plano Cutting', objetivo: 'Perda de gordura', calorias_dia: 600, macros: { proteina_g: 150, carboidrato_g: 180, gordura_g: 60 }, dicas: ['Beba água'],
     refeicoes: [{ nome: 'Café da manhã', horario: '07:00', calorias: 300, alimentos: [{ nome: 'Ovos mexidos', quantidade: '3 ovos', calorias: 210 }, { nome: 'Pão integral', quantidade: '1 fatia', calorias: 90 }] },
       { nome: 'Almoço', horario: '12:30', calorias: 300, alimentos: [{ nome: 'Frango grelhado', quantidade: '150 g', calorias: 300 }] }] } }
-const CLIENTE = { id: '99999999-2222-4333-8444-555555555555', nome: 'Maria Cliente', email: 'maria@teste.com', criado_em: '2026-10-25T10:00:00Z', ultimo_login: '2026-10-29T10:00:00Z', email_confirmado: true, estado: 'sem_assinatura', admin: false, total: 1 }
+const CLIENTE = { id: '99999999-2222-4333-8444-555555555555', nome: 'Maria Cliente', email: 'maria@teste.com', criado_em: '2026-10-25T10:00:00Z', ultimo_login: '2026-10-29T10:00:00Z', email_confirmado: false, estado: 'sem_assinatura', admin: false, total: 1 }
 const TREINO = { id: 't1', user_id: UID, nome: 'Treino teste', objetivo: 'Hipertrofia', nivel: 'Iniciante', frequencia_semanal: 3, created_at: '2026-10-20T00:00:00Z',
   plano: { versao: 2, dias: [{ id: 'd0', letra: 'A', dia: 'Treino A', exercicios: [{ id: 'e1', nome: 'Supino reto com barra', series: 2, tempo_execucao_segundos: 3, tempo_descanso_segundos: 2 }] }] } }
 // Vozes de teste: tons curtos em WAV (o navegador reconhece o formato pelo conteúdo)
@@ -76,6 +76,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       gravacoes.push({ tabela: 'alimentos_base', corpo: d })
       return json({ id: 'ab1', nome: d.nome, marca: d.marca, codigo_barras: d.codigo_barras, fonte: d.fonte, kcal: d.kcal, proteina: d.proteina, carboidrato: d.carboidrato, gordura: d.gordura, porcao_rotulo: d.porcao_rotulo, porcao_g: d.porcao_g })
     }
+    if (p === '/rest/v1/rpc/admin_confirmar_email') { gravacoes.push({ tabela: 'admin_confirmar_email', corpo: rota.request().postDataJSON() }); return json(null) }
     if (p === '/rest/v1/rpc/admin_gerenciar_acesso') { gravacoes.push({ tabela: 'admin_gerenciar_acesso', corpo: rota.request().postDataJSON() }); return json({ estado: 'ativa', acesso_ate: '2099-12-31T23:59:59Z' }) }
     if (p === '/rest/v1/profiles') {
       const perfil = { id: UID, nome: 'Cliente Teste', email: usuario.email, telefone: null, data_nascimento: null, avatar_url: null, created_at: '2026-10-01T00:00:00Z', versao_termos: '2026-10-22', aceite_termos_em: '2026-10-01T00:00:00Z', marketing_opt_in: false }
@@ -843,6 +844,11 @@ for (const [nomeDisp, viewport] of [['celular', { width: 390, height: 844 }], ['
     const acao = page.gravacoes.find(x => x.tabela === 'admin_gerenciar_acesso')
     assert.equal(acao?.corpo?.p_acao, 'cortesia'); assert.equal(acao?.corpo?.p_user, CLIENTE.id)
     await page.screenshot({ path: `${SHOTS}/admin-cliente-${nomeDisp}.png` })
+    // E-mail não confirmado: o admin confirma manualmente
+    page.once('dialog', d => d.accept())
+    await ficha.getByRole('button', { name: 'Confirmar e-mail' }).click()
+    await ficha.getByText(/E-mail confirmado/).waitFor()
+    assert.equal(page.gravacoes.find(x => x.tabela === 'admin_confirmar_email')?.corpo?.p_user, CLIENTE.id)
     // Apagar conta: só libera o botão com o e-mail do cliente digitado
     await ficha.getByRole('button', { name: 'Apagar esta conta' }).click()
     const apagar = ficha.getByRole('button', { name: 'Apagar definitivamente' })

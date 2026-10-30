@@ -110,6 +110,7 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 15. `20261030170000_receitas.sql` — receitas salvas (`receitas`: ingredientes + rendimento em porções), com RLS (criar e editar exigem Premium; ver e apagar continuam liberados para o dono).
 16. `20261031090000_receitas_peso_final.sql` — peso final da receita pronta (`receitas.peso_final_g`, opcional), para registrar a receita no diário em gramas.
 17. `20261031120000_lembretes.sql` — lembretes por notificação: horários (`lembretes`), aparelhos inscritos (`push_inscricoes`), chaves VAPID geradas no primeiro uso (`push_config`, só a chave de serviço lê) e a rotina `lembretes_rotina` no pg_cron a cada 5 minutos, que chama `r2-api/cron/lembretes`. Só toca o que ainda faz sentido: refeição não registrada, meta de água não batida, treino não feito, peso não registrado.
+18. `20261031130000_admin_confirmar_email.sql` — `admin_confirmar_email`: o administrador confirma manualmente o e-mail de um cliente (botão "Confirmar e-mail" na ficha do cliente), com auditoria.
 
 ## Testes
 - `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails/lembretes (16) + meta diária, diário, busca, exercício, peso, receitas, relatório semanal e lembretes (19).

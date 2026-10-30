@@ -71,6 +71,17 @@ export default function Cliente({ resumo, onClose, onAlterado }: { resumo: Resum
     await carregar(); onAlterado()
   }
 
+  const [emailConfirmado, setEmailConfirmado] = useState(resumo.email_confirmado)
+  const confirmarEmail = async () => {
+    if (!confirm(`Confirmar o e-mail ${resumo.email} manualmente? Use quando o cliente não recebe o e-mail de confirmação.`)) return
+    setErro(''); setAviso(''); setExecutando(true)
+    const { error } = await supabase.rpc('admin_confirmar_email', { p_user: resumo.id })
+    setExecutando(false)
+    if (error) { setErro(msgErro(error)); return }
+    setEmailConfirmado(true); setAviso('E-mail confirmado. O cliente já pode entrar com a senha que cadastrou.')
+    onAlterado()
+  }
+
   const apagarConta = async () => {
     setErro(''); setApagando(true)
     try {
@@ -158,7 +169,11 @@ export default function Cliente({ resumo, onClose, onAlterado }: { resumo: Resum
             <dl className="text-sm grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
               <dt className="text-zinc-500">Cadastro</dt><dd>{dataHoraBR(resumo.criado_em)}</dd>
               <dt className="text-zinc-500">Último acesso</dt><dd>{dataHoraBR(resumo.ultimo_login)}</dd>
-              <dt className="text-zinc-500">E-mail</dt><dd>{resumo.email_confirmado ? 'confirmado' : <span className="text-yellow-400">não confirmado</span>}</dd>
+              <dt className="text-zinc-500">E-mail</dt><dd>{emailConfirmado ? 'confirmado' : (
+                <span className="flex flex-wrap items-center gap-2"><span className="text-yellow-400">não confirmado</span>
+                  <button type="button" onClick={confirmarEmail} disabled={executando} className="text-xs font-semibold text-green-400 underline disabled:opacity-50">Confirmar e-mail</button>
+                </span>
+              )}</dd>
               <dt className="text-zinc-500">Telefone</dt><dd>{perfil?.telefone ?? '—'}</dd>
               <dt className="text-zinc-500">Nascimento</dt><dd>{dataBR(perfil?.data_nascimento)}</dd>
               <dt className="text-zinc-500">Uso</dt><dd>{uso.treinos} treino(s) · {uso.dietas} dieta(s) · {uso.alimentos} alimento(s) no diário</dd>
