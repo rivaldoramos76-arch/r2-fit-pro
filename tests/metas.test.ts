@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { taxaBasal, gastoDiario, calcularMeta, distribuirMacros, idadeEm, caloriasDosMacros, CALORIAS_MINIMAS, ajustarPorCalorias, ajustarPorMacro, percentuais } from '../src/lib/metas'
 import { ATIVIDADES, caloriasExercicio, metaAguaSugerida, resumoPeso, restanteDia } from '../src/lib/exercicios'
 import { porcaoReceita, receitaComoItem, totaisIngredientes, inicioSemana, resumoSemana } from '../src/lib/relatorio'
+import { montarPrato, gramasHabituais } from '../src/lib/fotoPrato'
 import { comPadroes, proximoHorarioAgua, resumoDias, normalizarLembrete } from '../src/lib/lembretesBase'
 import { carregarTaco, buscarBase, medidasDe, paraAlimento } from '../src/lib/alimentosBase'
 import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade, pesoDaQuantidade, alimentoEmPeso } from '../src/lib/diario'
@@ -255,6 +256,27 @@ await t('lembretes: sugestões desligadas, horários de água e dias', () => {
   assert.deepEqual(normalizarLembrete({ tipo: 'peso', horario: '07:00', dias: [3, 1, 1], ativo: true })?.dias, [1, 3])
   assert.equal(normalizarLembrete({ tipo: 'peso', horario: '7h', dias: [1], ativo: true }), null)
   assert.equal(normalizarLembrete({ tipo: 'peso', horario: '07:00', dias: [], ativo: true }), null)
+})
+
+await t('foto do prato: valores da TACO, gramas ajustáveis e quantidade de costume', async () => {
+  const taco = await carregarTaco()
+  const ia = [
+    { nome: 'Arroz branco', busca: 'arroz branco cozido', gramas: 120, quantidade: '4 colheres', calorias: 160, proteina_g: 3, carboidrato_g: 34, gordura_g: 0.3 },
+    { nome: 'Feijão', busca: 'feijão carioca cozido', gramas: 100, quantidade: '1 concha', calorias: 80, proteina_g: 5, carboidrato_g: 14, gordura_g: 0.5 },
+    { nome: 'Molho especial da casa', busca: 'molho especial da casa', gramas: 30, quantidade: '2 colheres', calorias: 90, proteina_g: 0, carboidrato_g: 3, gordura_g: 9 },
+    { nome: 'Pudim', quantidade: '1 fatia', calorias: 250, proteina_g: 5, carboidrato_g: 40, gordura_g: 8 },
+  ]
+  const hab = gramasHabituais([{ nome: 'Feijão, carioca, cozido', quantidade: '150 g' }, { nome: 'Feijão, carioca, cozido', quantidade: '130 g' }, { nome: 'Feijão, carioca, cozido', quantidade: '1 concha' }])
+  assert.equal(hab.get('feijao, carioca, cozido'), 140)
+  const prato = montarPrato(ia, taco, hab)
+  assert.equal(prato[0].nome, 'Arroz, tipo 1, cozido'); assert.equal(prato[0].quantidade, '120 g'); assert.equal(prato[0].fonte, 'taco')
+  assert.ok(Math.abs(prato[0].calorias - 154) <= 2, `arroz 120 g pela TACO (${prato[0].calorias})`)
+  assert.equal(prato[1].quantidade, '140 g', 'usa a quantidade de costume'); assert.equal(prato[1].habitual, true)
+  assert.equal(prato[2].fonte, 'ia', 'sem item na TACO fica a estimativa da IA'); assert.equal(prato[2].quantidade, '30 g')
+  assert.equal(prato[3].fonte, 'ia'); assert.equal(prato[3].quantidade, '1 fatia', 'sem gramas mantém a porção da IA')
+  // Valor muito diferente do que a IA viu: item trocado na busca, fica com a IA
+  const trocado = montarPrato([{ nome: 'Arroz', busca: 'arroz branco cozido', gramas: 100, quantidade: '', calorias: 900, proteina_g: 0, carboidrato_g: 0, gordura_g: 0 }], taco, new Map())
+  assert.equal(trocado[0].fonte, 'ia')
 })
 
 console.log(`\n${ok} testes de metas e diário passaram`)

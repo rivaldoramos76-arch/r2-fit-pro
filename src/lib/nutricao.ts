@@ -70,6 +70,13 @@ export async function alimentosRecentes(userId: string): Promise<Alimento[]> {
   return recentesUnicos(((rows as (Alimento & { created_at: string })[]) ?? []).map(normalizar))
 }
 
+/** Últimos registros (nome e quantidade) para aprender as quantidades de costume da pessoa. */
+export async function registrosParaHabito(userId: string): Promise<{ nome: string; quantidade: string | null }[]> {
+  const { data: rows } = await supabase.from('food_logs').select('nome, quantidade')
+    .eq('user_id', userId).order('created_at', { ascending: false }).limit(300)
+  return (rows as { nome: string; quantidade: string | null }[]) ?? []
+}
+
 export async function listarFavoritos(userId: string): Promise<Favorito[]> {
   const { data: rows } = await supabase.from('alimentos_favoritos').select('*').eq('user_id', userId).order('nome')
   return ((rows as Favorito[]) ?? []).map(normalizar)

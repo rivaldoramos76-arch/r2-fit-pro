@@ -6,10 +6,12 @@ import { listarReceitas } from '../../lib/receitasApi'
 import type { Receita } from '../../lib/receitasApi'
 import { porcaoReceita, receitaComoItem } from '../../lib/relatorio'
 import { estimarAlimentoTexto, analisarImagemAlimento } from '../../lib/foodAI'
+import { montarPrato, gramasHabituais, type ItemPrato } from '../../lib/fotoPrato'
+import { carregarTaco } from '../../lib/alimentosBase'
 import type { FoodEstimate } from '../../lib/foodAI'
 import { REFEICOES, chaveAlimento, grupoRefeicao } from '../../lib/diario'
 import type { Alimento, Refeicao } from '../../lib/diario'
-import { alimentosRecentes, listarFavoritos, favoritar, desfavoritar, registrarAlimentos, atualizarRegistro } from '../../lib/nutricao'
+import { alimentosRecentes, listarFavoritos, favoritar, desfavoritar, registrarAlimentos, atualizarRegistro, registrosParaHabito } from '../../lib/nutricao'
 import type { Favorito, RegistroAlimento } from '../../lib/nutricao'
 import { Button, Spinner, Textarea } from '../UI'
 import { fmt } from './Graficos'
@@ -271,7 +273,7 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
       )}
 
       {aba === 'texto' && <AbaTexto inicial={busca} salvando={salvando} favPorChave={favPorChave} alternarFavorito={alternarFavorito} onSalvar={itens => adicionar(itens, 'texto', true)} />}
-      {aba === 'foto' && <AbaFoto salvando={salvando} onSalvar={itens => adicionar(itens, 'foto', true)} />}
+      {aba === 'foto' && <AbaFoto userId={userId} salvando={salvando} onSalvar={itens => adicionar(itens, 'foto', true)} />}
       {erro && <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-xl p-3"><p className="text-red-400 text-sm">{erro}</p></div>}
     </Folha>
   )
@@ -308,6 +310,12 @@ function Estimativa({ itens, onEditar, favPorChave, alternarFavorito }: {
               <button type="button" onClick={() => setEditando(editando === i ? null : i)} className="flex-1 min-w-0 text-left">
                 <span className="flex justify-between gap-2 text-sm"><span className="text-zinc-100 truncate">{a.nome}</span><span className="text-zinc-300 shrink-0">{fmt(a.calorias)} kcal</span></span>
                 <span className="block text-xs text-zinc-500">{a.quantidade} · {macros(a)}</span>
+                {(a as ItemPrato).fonte && (
+                  <span className="flex gap-1 mt-1">
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${(a as ItemPrato).fonte === 'taco' ? 'bg-green-500/15 text-green-400' : 'bg-violet-500/15 text-violet-300'}`}>{(a as ItemPrato).fonte === 'taco' ? 'TACO' : 'estimado pela IA'}</span>
+                    {(a as ItemPrato).habitual && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300">sua quantidade de costume</span>}
+                  </span>
+                )}
               </button>
               <button type="button" onClick={() => setEditando(editando === i ? null : i)} aria-label={`Editar ${a.nome}`} className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 shrink-0"><Pencil className="w-4 h-4" /></button>
               {favPorChave && alternarFavorito && <Estrela ativa={favPorChave.has(chaveAlimento(a))} onClick={() => alternarFavorito(a)} />}
@@ -365,7 +373,7 @@ function AbaTexto({ inicial, salvando, onSalvar, favPorChave, alternarFavorito }
   )
 }
 
-function AbaFoto({ salvando, onSalvar }: { salvando: boolean; onSalvar: (i: FoodEstimate[]) => void }) {
+function AbaFoto({ userId, salvando, onSalvar }: { userId: string; salvando: boolean; onSalvar: (i: FoodEstimate[]) => void }) {
   const ref = useRef<HTMLInputElement>(null)
   const [img, setImg] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(false)
@@ -391,9 +399,12 @@ function AbaFoto({ salvando, onSalvar }: { salvando: boolean; onSalvar: (i: Food
     if (!img) return
     setErro(''); setCarregando(true); setPreview([])
     try {
-      const r = await analisarImagemAlimento(img)
+      // A IA separa os itens e estima os gramas; os valores vêm da TACO e das quantidades de costume
+      const [r, taco, hist] = await Promise.all([
+        analisarImagemAlimento(img), carregarTaco().catch(() => []), registrosParaHabito(userId).catch(() => []),
+      ])
       if (r.length === 0) setErro('A IA não identificou alimentos. Tire outra foto.')
-      else setPreview(r)
+      else setPreview(montarPrato(r, taco, gramasHabituais(hist)))
     } catch (e) { setErro(e instanceof Error ? e.message : 'Erro ao analisar') } finally { setCarregando(false) }
   }
   return (

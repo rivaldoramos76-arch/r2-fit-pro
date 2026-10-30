@@ -148,7 +148,11 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       : { status: 0 }) }))
   await ctx.route('**/api/ai', r => {
     const corpo = JSON.stringify(r.request().postDataJSON())
-    const resposta = corpo.includes('educador físico')
+    const resposta = corpo.includes('estima pratos por foto')
+      ? { alimentos: [
+        { nome: 'Arroz branco', busca: 'arroz branco cozido', gramas: 120, quantidade: '4 colheres', calorias: 160, proteina_g: 3, carboidrato_g: 34, gordura_g: 0.3 },
+        { nome: 'Molho da casa', busca: 'molho da casa', gramas: 30, quantidade: '2 colheres', calorias: 90, proteina_g: 0, carboidrato_g: 3, gordura_g: 9 }] }
+      : corpo.includes('educador físico')
       ? { nome: 'Corrida 5 km', duracao_min: 30, calorias: 390 }
       : corpo.includes('tabelas nutricionais')
       ? { nome: 'Barra de cereal', kcal: 400, proteina: 6, carboidrato: 70, gordura: 10, porcao_rotulo: 'unidade (25 g)', porcao_g: 25 }
@@ -489,6 +493,33 @@ await t('código de barras: produto encontrado e produto novo lido pela foto do 
   await folha.getByText('Barra de cereal de banana').first().waitFor()
   const rot = page.gravacoes.find(x => x.tabela === 'alimentos_base' && x.corpo.fonte === 'rotulo')
   assert.equal(rot?.corpo?.codigo_barras, '7899999999999'); assert.equal(rot?.corpo?.porcao_g, 25)
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('foto do prato: itens separados, valores da TACO e gramas ajustáveis', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/calorias')
+  await page.getByRole('button', { name: 'Adicionar alimento' }).first().click()
+  const folha = page.getByRole('dialog').first()
+  await folha.getByRole('tab', { name: 'Foto' }).click()
+  const jpeg = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64')
+  await folha.locator('input[type=file]').first().setInputFiles({ name: 'prato.jpg', mimeType: 'image/jpeg', buffer: jpeg })
+  await folha.getByRole('button', { name: /Analisar com IA/ }).click()
+  await folha.getByText('Arroz, tipo 1, cozido').waitFor()
+  await folha.getByText('TACO', { exact: true }).waitFor()
+  await folha.getByText('estimado pela IA').waitFor()
+  // Ajusta o arroz para 150 g
+  await folha.getByRole('button', { name: 'Editar Arroz, tipo 1, cozido' }).click()
+  await folha.getByLabel('Quantidade').fill('150')
+  await folha.getByRole('button', { name: 'Pronto' }).click()
+  await page.screenshot({ path: `${SHOTS}/foto-prato.png` })
+  await folha.getByRole('button', { name: /^Adicionar/ }).last().click()
+  await page.waitForTimeout(300)
+  const log = page.gravacoes.filter(x => x.tabela === 'food_logs' && x.metodo === 'POST').pop()
+  const arroz = log?.corpo?.find(i => i.nome === 'Arroz, tipo 1, cozido')
+  assert.equal(arroz?.quantidade, '150 g'); assert.equal(arroz?.origem, 'foto'); assert.ok(Math.abs(arroz?.calorias - 192) <= 3, `arroz 150 g (${arroz?.calorias})`)
+  assert.equal(log?.corpo?.find(i => i.nome === 'Molho da casa')?.quantidade, '30 g')
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })

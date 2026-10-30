@@ -113,7 +113,7 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 18. `20261031130000_admin_confirmar_email.sql` — `admin_confirmar_email`: o administrador confirma manualmente o e-mail de um cliente (botão "Confirmar e-mail" na ficha do cliente), com auditoria.
 
 ## Testes
-- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails/lembretes (16) + meta diária, diário, busca, exercício, peso, receitas, relatório semanal e lembretes (19).
+- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails/lembretes (16) + meta diária, diário, busca, exercício, peso, receitas, relatório semanal, lembretes e foto do prato (20).
 - `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
 - `tests/sql/nutricao.test.sql` — 17 verificações de RLS da meta diária e dos favoritos (resultado esperado: `TESTES_OK (17)`).
 - `tests/sql/admin_acesso.test.sql` — 16 verificações das ações do administrador e da edição no diário (resultado esperado: `TESTES_OK (16)`).
@@ -121,7 +121,7 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 - `tests/sql/progresso.test.sql` — 11 verificações de água, peso e exercício (resultado esperado: `TESTES_OK (11)`).
 - `tests/sql/receitas.test.sql` — 12 verificações das receitas salvas (resultado esperado: `TESTES_OK (12)`).
 - `tests/sql/lembretes.test.sql` — 15 verificações dos lembretes: RLS, aparelhos, chaves e a rotina de envio (resultado esperado: `TESTES_OK (15)`).
-- `tests/e2e/ui.test.mjs` — 35 testes de interface (Playwright, celular e desktop) com API simulada.
+- `tests/e2e/ui.test.mjs` — 36 testes de interface (Playwright, celular e desktop) com API simulada.
 
 ## Monitoramento e recuperação
 - Painel `/admin`: webhooks com erro, e-mails não enviados, falhas de cobrança, auditoria.

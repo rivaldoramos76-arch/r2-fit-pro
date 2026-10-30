@@ -56,18 +56,25 @@ export async function estimarAlimentoTexto(descricao: string): Promise<FoodEstim
   return parseJson(resp.choices[0]?.message?.content)
 }
 
+const PROMPT_FOTO = `Você é um nutricionista que estima pratos por foto, com base em porções típicas no Brasil.
+Separe o prato em itens (cada alimento visível separadamente: arroz, feijão, carne, salada, molho etc.).
+Para cada item, estime o peso em gramas olhando o tamanho no prato (use o prato, talheres e copos como referência) e os macros dessa quantidade.
+Em "busca", escreva um nome curto e genérico como na Tabela TACO (ex.: "arroz branco cozido", "feijão carioca cozido", "peito de frango grelhado", "alface", "batata frita").
+Responda SEMPRE em JSON:
+{"alimentos": [{"nome": string, "busca": string, "gramas": number, "quantidade": string, "calorias": number, "proteina_g": number, "carboidrato_g": number, "gordura_g": number, "observacao": string (opcional)}]}`
+
 export async function analisarImagemAlimento(base64DataUrl: string): Promise<FoodEstimate[]> {
   const resp = await chatCompletion({
     model: 'gpt-4o',
     response_format: { type: 'json_object' },
-    temperature: 0.3,
+    temperature: 0.2,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: PROMPT_FOTO },
       {
         role: 'user',
         content: [
-          { type: 'text', text: 'Identifique cada alimento visível neste prato e estime os macronutrientes de cada um, com base nas porções que você consegue estimar visualmente.' },
-          { type: 'image_url', image_url: { url: base64DataUrl, detail: 'low' } },
+          { type: 'text', text: 'Separe este prato em itens e estime os gramas de cada um.' },
+          { type: 'image_url', image_url: { url: base64DataUrl, detail: 'high' } },
         ],
       },
     ],
