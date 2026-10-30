@@ -11,11 +11,12 @@ export function mpModoTeste(): boolean {
 }
 
 // deno-lint-ignore no-explicit-any
-export async function mp<T = any>(metodo: string, caminho: string, corpo?: unknown, idempotencia?: string): Promise<T> {
+export async function mp<T = any>(metodo: string, caminho: string, corpo?: unknown, idempotencia?: string, extras?: Record<string, string>): Promise<T> {
   const token = Deno.env.get('MP_ACCESS_TOKEN')
   if (!token) throw new ErroHttp(503, 'Pagamentos ainda não configurados. Tente novamente mais tarde.', 'mp_nao_configurado')
   const headers: Record<string, string> = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   if (idempotencia) headers['X-Idempotency-Key'] = idempotencia
+  if (extras) Object.assign(headers, extras)
   let resp: Response
   try {
     resp = await fetch(BASE + caminho, {

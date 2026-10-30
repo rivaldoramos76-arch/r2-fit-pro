@@ -4,6 +4,7 @@ import {
   mapearStatusPagamento, paraCentavos, extrairPreapprovalId, normalizarPagamento, normalizarAssinatura,
   corpoCriarAssinatura, parseAssinaturaHeader, montarManifesto, validarAssinaturaWebhook, lerNotificacao,
   chaveEvento, elegivelArrependimento, corpoAssinaturaCartao, corpoPreferenciaAvulsa, lerCompraAvulsa,
+  motivoRecusaCartao,
 } from '../supabase/functions/_shared/mpLogic'
 import { renderizarEmail } from '../supabase/functions/_shared/emailTemplates'
 import { traduzirErroAuth } from '../src/lib/formatos'
@@ -149,6 +150,15 @@ await t('erros do Supabase Auth são traduzidos corretamente', () => {
   assert.match(traduzirErroAuth('Password should be at least 8 characters.'), /Senha fraca/)
   assert.match(traduzirErroAuth('Password is known to be weak and easy to guess'), /Senha fraca/)
   assert.equal(traduzirErroAuth('Invalid login credentials'), 'E-mail ou senha incorretos.')
+})
+
+await t('recusa do cartão: mensagem pelo motivo do Mercado Pago', () => {
+  assert.match(motivoRecusaCartao('cc_rejected_high_risk')!, /análise de segurança/)
+  assert.match(motivoRecusaCartao('cc_rejected_insufficient_amount')!, /limite/)
+  assert.match(motivoRecusaCartao('cc_rejected_bad_filled_security_code')!, /incorreto/)
+  assert.match(motivoRecusaCartao('cc_rejected_other_reason')!, /banco emissor/)
+  assert.equal(motivoRecusaCartao('accredited'), null)
+  assert.equal(motivoRecusaCartao(null), null)
 })
 
 console.log(`\n${ok} testes passaram`)

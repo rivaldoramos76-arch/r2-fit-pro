@@ -3,11 +3,32 @@
 import { corsHeaders, json, ErroHttp, log } from '../_shared/http.ts'
 import { clienteAdmin, usuarioAutenticado, rpc, auditar } from '../_shared/supa.ts'
 import { mp, mpConfigurado, mpModoTeste } from '../_shared/mp.ts'
-import { corpoCriarAssinatura, corpoAssinaturaCartao, corpoPreferenciaAvulsa, elegivelArrependimento } from '../_shared/mpLogic.ts'
+import { corpoCriarAssinatura, corpoAssinaturaCartao, corpoPreferenciaAvulsa, elegivelArrependimento, motivoRecusaCartao } from '../_shared/mpLogic.ts'
 import { sincronizarUsuario, registrarPagamentoDoUsuario } from '../_shared/sync.ts'
 import { processarFilaEmails, siteUrl } from '../_shared/email.ts'
 
 interface PlanoVenda { nome: string; preco_centavos: number; preco_anual_centavos?: number | null; parcelas_max_anual?: number; vendas_ativas?: boolean }
+
+/** Identificação do aparelho (security.js do Mercado Pago), enviada no header X-meli-session-id. */
+// deno-lint-ignore no-explicit-any
+function dispositivo(corpo: any): Record<string, string> | undefined {
+  const id = typeof corpo?.device_id === 'string' ? corpo.device_id.trim() : ''
+  return /^[\w.:-]{1,200}$/.test(id) ? { 'X-meli-session-id': id } : undefined
+}
+
+/** Motivo da recusa: a validação do cartão gera um pagamento recusado com o status_detail. */
+async function motivoRecusa(userId: string): Promise<string | null> {
+  for (const espera of [0, 1500]) {
+    if (espera) await new Promise(r => setTimeout(r, espera))
+    try {
+      // deno-lint-ignore no-explicit-any
+      const r = await mp<any>('GET', `/v1/payments/search?external_reference=${encodeURIComponent(userId)}&sort=date_created&criteria=desc&limit=1`)
+      const p = r?.results?.[0]
+      if (p?.status === 'rejected' && Date.now() - new Date(p.date_created).getTime() < 5 * 60_000) return motivoRecusaCartao(p.status_detail)
+    } catch (e) { log('warn', 'motivo_recusa', { erro: String(e) }); return null }
+  }
+  return null
+}
 
 // deno-lint-ignore no-explicit-any
 async function planoParaVenda(admin: any, user: { email_confirmed_at?: string | null }): Promise<PlanoVenda> {
@@ -39,10 +60,18 @@ export async function handleBilling(req: Request): Promise<Response> {
       const plano = await planoParaVenda(admin, user)
       const estado = await rpc<string>(admin, 'estado_acesso', { uid: user.id })
       if (['ativa', 'tolerancia', 'admin'].includes(estado)) throw new ErroHttp(409, 'Você já possui acesso Premium ativo.')
-      const pre = await mp('POST', '/preapproval', corpoAssinaturaCartao({
-        userId: user.id, email: user.email!, planoNome: plano.nome, precoCentavos: plano.preco_centavos,
-        voltarPara: `${siteUrl()}/assinatura/retorno`, cardTokenId: String(corpo?.card_token_id ?? ''),
-      }), crypto.randomUUID())
+      // deno-lint-ignore no-explicit-any
+      let pre: any
+      try {
+        pre = await mp('POST', '/preapproval', corpoAssinaturaCartao({
+          userId: user.id, email: user.email!, planoNome: plano.nome, precoCentavos: plano.preco_centavos,
+          voltarPara: `${siteUrl()}/assinatura/retorno`, cardTokenId: String(corpo?.card_token_id ?? ''),
+        }), crypto.randomUUID(), dispositivo(corpo))
+      } catch (e) {
+        const motivo = e instanceof ErroHttp && e.codigo === 'mp_erro' ? await motivoRecusa(user.id) : null
+        if (motivo) throw new ErroHttp(400, motivo, 'cartao_recusado')
+        throw e
+      }
       await rpc(admin, 'billing_registrar_assinatura', { p: {
         provider_subscription_id: String(pre.id), user_id: user.id, provider_status: pre.status ?? 'authorized',
         preco_centavos: plano.preco_centavos, plano_nome: plano.nome, proxima_cobranca: pre.next_payment_date ?? null,
@@ -63,7 +92,7 @@ export async function handleBilling(req: Request): Promise<Response> {
       if (!sub) throw new ErroHttp(404, 'Nenhuma assinatura com renovação automática encontrada.')
       const token = String(corpo?.card_token_id ?? '')
       if (!token || token.length > 200) throw new ErroHttp(400, 'Cartão inválido.')
-      await mp('PUT', `/preapproval/${encodeURIComponent(sub.provider_subscription_id!)}`, { card_token_id: token })
+      await mp('PUT', `/preapproval/${encodeURIComponent(sub.provider_subscription_id!)}`, { card_token_id: token }, undefined, dispositivo(corpo))
       await auditar(admin, user.id, 'assinatura.cartao_trocado', sub.id, {})
       return json(req, { ok: true })
     }

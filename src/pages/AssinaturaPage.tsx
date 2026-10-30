@@ -133,25 +133,25 @@ export default function AssinaturaPage() {
     }
   }
 
-  const assinarComCartao = async ({ token }: { token: string }) => {
+  const assinarComCartao = async ({ token, device_id }: { token: string; device_id?: string }) => {
     setErro('')
     try {
-      await chamarApi('billing', { acao: 'assinar_cartao', card_token_id: token })
+      await chamarApi('billing', { acao: 'assinar_cartao', card_token_id: token, device_id })
       navigate('/assinatura/retorno?origem=cartao')
     } catch (e) {
       const msg = e instanceof ErroApi ? e.message : 'Não foi possível concluir a assinatura.'
       setSugerirOutraForma(true)
-      setErro(/CC_VAL_433|validation/i.test(msg)
-        ? 'O cartão não foi aceito para cobrança automática. Use um cartão de crédito (débito não é aceito na renovação automática), confira os dados ou escolha Pix, boleto ou outros.'
+      setErro(e instanceof ErroApi && e.codigo === 'cartao_recusado' ? msg : /CC_VAL_433|validation/i.test(msg)
+        ? 'O Mercado Pago não aprovou este cartão para a renovação automática. Isso pode ser a análise de segurança dele ou um cartão de débito (não aceito na renovação). Tente outro cartão de crédito ou pague com Pix, boleto ou outros.'
         : `${msg} Confira os dados do cartão ou escolha outra forma de pagamento.`)
       throw e
     }
   }
 
-  const trocarCartao = async ({ token }: { token: string }) => {
+  const trocarCartao = async ({ token, device_id }: { token: string; device_id?: string }) => {
     setErro(''); setAviso('')
     try {
-      await chamarApi('billing', { acao: 'trocar_cartao', card_token_id: token })
+      await chamarApi('billing', { acao: 'trocar_cartao', card_token_id: token, device_id })
       setTrocandoCartao(false)
       setAviso('Cartão atualizado. As próximas cobranças serão feitas no novo cartão.')
     } catch (e) {

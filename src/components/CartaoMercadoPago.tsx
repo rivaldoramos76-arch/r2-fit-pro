@@ -6,14 +6,26 @@ import { Spinner } from './UI'
 // o app nunca vê nem armazena o número do cartão.
 
 const SDK_URL = 'https://sdk.mercadopago.com/js/v2'
+// Identificação do aparelho recomendada pelo Mercado Pago: reduz recusas pelo antifraude
+const SEGURANCA_URL = 'https://www.mercadopago.com/v2/security.js'
 
-interface DadosCartao { token: string; payment_method_id?: string; issuer_id?: string }
+interface DadosCartao { token: string; payment_method_id?: string; issuer_id?: string; device_id?: string }
 
 declare global {
   interface Window {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     MercadoPago?: any
+    MP_DEVICE_SESSION_ID?: string
   }
+}
+
+function carregarSeguranca() {
+  if (document.querySelector(`script[src="${SEGURANCA_URL}"]`)) return
+  const s = document.createElement('script')
+  s.src = SEGURANCA_URL
+  s.async = true
+  s.setAttribute('view', 'checkout')
+  document.head.appendChild(s)
 }
 
 let carregando: Promise<void> | null = null
@@ -48,6 +60,7 @@ export default function CartaoMercadoPago({ publicKey, valorCentavos, email, onT
     let vivo = true
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let controle: any = null
+    carregarSeguranca()
     carregarSdk().then(async () => {
       if (!vivo) return
       const mp = new window.MercadoPago(publicKey, { locale: 'pt-BR' })
@@ -60,7 +73,7 @@ export default function CartaoMercadoPago({ publicKey, valorCentavos, email, onT
         },
         callbacks: {
           onReady: () => { if (vivo) setEstado('pronto') },
-          onSubmit: (dados: DadosCartao) => onTokenRef.current(dados),
+          onSubmit: (dados: DadosCartao) => onTokenRef.current({ ...dados, device_id: window.MP_DEVICE_SESSION_ID }),
           onError: () => { if (vivo) setEstado(e => (e === 'carregando' ? 'erro' : e)) },
         },
       })

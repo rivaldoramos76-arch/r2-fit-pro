@@ -112,6 +112,21 @@ export function corpoAssinaturaCartao(opts: {
   return { ...corpoCriarAssinatura(opts), card_token_id: opts.cardTokenId, status: 'authorized' }
 }
 
+/** Mensagem clara para a recusa do cartão, a partir do status_detail do pagamento no Mercado Pago. */
+export function motivoRecusaCartao(statusDetalhe: string | null | undefined): string | null {
+  const d = statusDetalhe ?? ''
+  if (d === 'cc_rejected_high_risk' || d === 'cc_rejected_blacklist') {
+    return 'O Mercado Pago recusou o pagamento na análise de segurança dele. Não é falta de limite nem problema no cartão, e o banco não chega a ser consultado. Isso costuma acontecer com contas novas: pague com Pix, boleto ou outros (pode ser o mesmo cartão por lá) ou tente o cartão de novo mais tarde.'
+  }
+  if (d === 'cc_rejected_insufficient_amount') return 'O cartão não tem limite disponível para esta cobrança. Tente outro cartão ou pague com Pix, boleto ou outros.'
+  if (d.startsWith('cc_rejected_bad_filled')) return 'Algum dado do cartão está incorreto (número, validade, código de segurança ou nome). Confira e tente de novo.'
+  if (d === 'cc_rejected_call_for_authorize') return 'O banco pediu para você autorizar esta cobrança. Ligue ou abra o app do banco, autorize e tente de novo.'
+  if (d === 'cc_rejected_card_disabled') return 'O cartão está bloqueado ou inativo. Desbloqueie no app do banco ou use outro cartão.'
+  if (d === 'cc_rejected_duplicated_payment') return 'Já existe um pagamento igual feito agora há pouco. Aguarde alguns minutos antes de tentar de novo.'
+  if (d.startsWith('cc_rejected')) return 'O banco emissor recusou o cartão. Tente outro cartão ou pague com Pix, boleto ou outros.'
+  return null
+}
+
 /** Preferência do Checkout Pro para comprar 1 ou 12 meses de acesso, aceitando todos os meios de pagamento. */
 export function corpoPreferenciaAvulsa(opts: {
   userId: string; email: string; planoNome: string; periodo: PeriodoAvulso; precoCentavos: number
