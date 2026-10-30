@@ -55,8 +55,8 @@ export function AcessoProvider({ children }: { children: ReactNode }) {
   }, [recarregar])
 
   // Rede de segurança da liberação automática: com pagamento pendente, o próprio app
-  // reconsulta o Mercado Pago ao abrir e ao voltar para a aba (ex.: depois de pagar o Pix
-  // no app do banco), caso a notificação do Mercado Pago tenha atrasado ou se perdido.
+  // reconsulta a plataforma de pagamento ao abrir e ao voltar para a aba (ex.: depois de pagar o Pix
+  // no app do banco), caso a notificação do pagamento tenha atrasado ou se perdido.
   const ultimaConsulta = useRef(0)
   useEffect(() => {
     if (!uid || estado !== 'pagamento_pendente' || carregadoPara !== uid) return

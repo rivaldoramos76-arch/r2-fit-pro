@@ -7,8 +7,8 @@
 | Frontend | React 19 + Vite 6 + Tailwind 4 | Vercel (`prj_tfPw3HACgrbAYglRlsfpShVKKrH0`) |
 | IA (proxy seguro) | Vercel Function `api/ai.js` | Vercel — usa `OPENAI_API_KEY` (ou `VITE_OPENAI_API_KEY`) só no servidor |
 | Banco, Auth, Storage | Supabase (`pzmhlxhdqghamyxgegwq`, us-east-1) | RLS em todas as tabelas |
-| Cobrança, webhook, conta | Supabase Edge Function `r2-api` | `/functions/v1/r2-api/{billing,conta,webhook/mercadopago,saude}` |
-| Pagamentos | Mercado Pago Assinaturas (preapproval sem plano) | BRL, mensal, cartão |
+| Cobrança, webhook, conta | Supabase Edge Function `r2-api` | `/functions/v1/r2-api/{billing,conta,webhook/asaas,webhook/mercadopago,saude}` |
+| Pagamentos | **Asaas** (desde 31/10/2026): assinatura no cartão e avulso por Pix/boleto/cartão. Mercado Pago só para assinaturas antigas | BRL |
 | E-mails transacionais | Resend (via fila `email_outbox`) | Verificação/recuperação de senha: Supabase Auth |
 
 ### Regras de acesso (fonte única: `public.estado_acesso`)
@@ -23,6 +23,15 @@ criado exclusivamente por `billing_registrar_pagamento` com pagamento aprovado c
 - Assinaturas, pagamentos, webhooks, auditoria: escrita apenas pelo backend (service role).
 
 ## Configuração pendente (responsável)
+
+### 0. Asaas (forma de pagamento atual, desde 31/10/2026)
+- Motivo da troca: o Mercado Pago recusava cartões válidos (`cc_rejected_high_risk`) de vários clientes. O Asaas cobra cartão de qualquer banco e Pix sem exigir conta do comprador.
+- Secret `ASAAS_API_KEY` (começa com `$aact_`; chaves com `_hmlg_` usam o sandbox) nas Edge Functions. Com ela presente, `/billing config` devolve `provedor: 'asaas'` e o app usa o Asaas; sem ela, volta ao Mercado Pago.
+- Webhook cadastrado automaticamente por `POST /r2-api/cron/asaas-webhook` (token de uso único em `cron_tokens`): URL `.../r2-api/webhook/asaas`, 18 eventos de cobrança e assinatura, envio sequencial, token próprio em `asaas_config.webhook_token` conferido no cabeçalho `asaas-access-token`. Cadastrado em 31/10/2026 (id `88480a18-6a6d-442f-8179-13843bf3ad21`). Rodar de novo atualiza o mesmo webhook.
+- O webhook responde 200 mesmo quando o processamento falha (o Asaas pausa a fila após erros seguidos); o evento fica com status `erro` no painel e o app reconsulta o Asaas ao abrir (`sincronizar`).
+- Fluxo: na primeira compra o cliente informa o CPF (exigido pelo Asaas) e o app cria o cliente (`asaas_clientes`). Mensal recorrente → assinatura `CREDIT_CARD` e o cliente paga na fatura segura do Asaas. Avulso (1 ou 12 meses) → cobrança `UNDEFINED` (Pix, boleto ou cartão), referência `<user>:avulso:<meses>`.
+- Cancelar apaga a assinatura no Asaas; "Desistir e pedir reembolso" estorna a cobrança (`/payments/{id}/refund`). Excluir a conta apaga a assinatura.
+- Limitação: troca de cartão da assinatura Asaas ainda não tem tela no app — o cliente cancela e assina de novo, ou fala com o suporte.
 
 ### 1. Mercado Pago (obrigatório para vender)
 1. Crie/acesse a conta em https://www.mercadopago.com.br/developers → *Suas integrações* → criar aplicação (produto: Assinaturas).
@@ -111,9 +120,10 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 16. `20261031090000_receitas_peso_final.sql` — peso final da receita pronta (`receitas.peso_final_g`, opcional), para registrar a receita no diário em gramas.
 17. `20261031120000_lembretes.sql` — lembretes por notificação: horários (`lembretes`), aparelhos inscritos (`push_inscricoes`), chaves VAPID geradas no primeiro uso (`push_config`, só a chave de serviço lê) e a rotina `lembretes_rotina` no pg_cron a cada 5 minutos, que chama `r2-api/cron/lembretes`. Só toca o que ainda faz sentido: refeição não registrada, meta de água não batida, treino não feito, peso não registrado.
 18. `20261031130000_admin_confirmar_email.sql` — `admin_confirmar_email`: o administrador confirma manualmente o e-mail de um cliente (botão "Confirmar e-mail" na ficha do cliente), com auditoria.
+19. `20261031140000_asaas.sql` — `asaas_clientes` (cliente Asaas de cada usuário) e `asaas_config` (token e id do webhook), só acessíveis pelo backend; `billing_registrar_assinatura` e `billing_registrar_pagamento` aceitam `provider` (padrão `mercadopago`).
 
 ## Testes
-- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails/lembretes (16) + meta diária, diário, busca, exercício, peso, receitas, relatório semanal, lembretes, foto do prato e cartões de compartilhar (21).
+- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/Asaas/e-mails/lembretes (18) + meta diária, diário, busca, exercício, peso, receitas, relatório semanal, lembretes, foto do prato e cartões de compartilhar (21).
 - `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
 - `tests/sql/nutricao.test.sql` — 17 verificações de RLS da meta diária e dos favoritos (resultado esperado: `TESTES_OK (17)`).
 - `tests/sql/admin_acesso.test.sql` — 16 verificações das ações do administrador e da edição no diário (resultado esperado: `TESTES_OK (16)`).
@@ -121,7 +131,8 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 - `tests/sql/progresso.test.sql` — 11 verificações de água, peso e exercício (resultado esperado: `TESTES_OK (11)`).
 - `tests/sql/receitas.test.sql` — 12 verificações das receitas salvas (resultado esperado: `TESTES_OK (12)`).
 - `tests/sql/lembretes.test.sql` — 15 verificações dos lembretes: RLS, aparelhos, chaves e a rotina de envio (resultado esperado: `TESTES_OK (15)`).
-- `tests/e2e/ui.test.mjs` — 36 testes de interface (Playwright, celular e desktop) com API simulada.
+- `tests/sql/asaas.test.sql` — 9 verificações do Asaas: assinatura pendente até o pagamento, pagamento libera acesso, provedores separados, duplicata, cancelamento com período vigente, avulso, tabelas fechadas e limpeza ao excluir a conta (resultado esperado: `TESTES_OK (9)`).
+- `tests/e2e/ui.test.mjs` — 37 testes de interface (Playwright, celular e desktop) com API simulada.
 
 ## Monitoramento e recuperação
 - Painel `/admin`: webhooks com erro, e-mails não enviados, falhas de cobrança, auditoria.

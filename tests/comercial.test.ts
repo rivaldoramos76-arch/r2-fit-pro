@@ -8,6 +8,7 @@ import {
 } from '../supabase/functions/_shared/mpLogic'
 import { renderizarEmail } from '../supabase/functions/_shared/emailTemplates'
 import { mensagemLembrete, lerInscricao } from '../supabase/functions/_shared/lembretesLogic'
+import { cpfValido, dataSP, refAvulso, lerReferencia, mapearStatusAsaas, normalizarPagamentoAsaas, normalizarAssinaturaAsaas, corpoAssinaturaAsaas, corpoCobrancaAvulsaAsaas, lerEventoAsaas, tokenIgual } from '../supabase/functions/_shared/asaasLogic'
 import { traduzirErroAuth } from '../src/lib/formatos'
 
 let ok = 0
@@ -172,6 +173,47 @@ await t('lembretes: mensagem por tipo e validação da inscrição do aparelho',
   assert.equal(lerInscricao({ ...boa, endpoint: 'http://inseguro.com/x' }), null)
   assert.equal(lerInscricao({ ...boa, keys: { p256dh: 'curto', auth: 'x' } }), null)
   assert.equal(lerInscricao(null), null)
+})
+
+await t('Asaas: CPF, referências e status', () => {
+  assert.equal(cpfValido('529.982.247-25'), true)
+  assert.equal(cpfValido('52998224724'), false)
+  assert.equal(cpfValido('111.111.111-11'), false)
+  assert.equal(cpfValido('123'), false)
+  assert.equal(dataSP(0, new Date('2026-10-30T02:00:00Z')), '2026-10-29', 'data no fuso de São Paulo')
+  const uid = '11111111-2222-4333-8444-555555555555'
+  assert.deepEqual(lerReferencia(refAvulso(uid, 12)), { userId: uid, avulso: true, meses: 12 })
+  assert.deepEqual(lerReferencia(uid), { userId: uid, avulso: false, meses: 1 })
+  assert.deepEqual(lerReferencia('lixo:avulso:5'), { userId: null, avulso: false, meses: 1 })
+  assert.equal(mapearStatusAsaas('CONFIRMED'), 'aprovado'); assert.equal(mapearStatusAsaas('RECEIVED'), 'aprovado')
+  assert.equal(mapearStatusAsaas('PENDING'), 'pendente'); assert.equal(mapearStatusAsaas('OVERDUE'), 'recusado')
+  assert.equal(mapearStatusAsaas('REFUNDED'), 'estornado'); assert.equal(mapearStatusAsaas('CHARGEBACK_REQUESTED'), 'em_disputa')
+  assert.equal(mapearStatusAsaas('PENDING', 'PAYMENT_CREDIT_CARD_CAPTURE_REFUSED'), 'recusado')
+  assert.equal(mapearStatusAsaas('PENDING', 'PAYMENT_DELETED'), 'cancelado')
+})
+
+await t('Asaas: cobranças, assinaturas e corpos das requisições', () => {
+  const uid = '11111111-2222-4333-8444-555555555555'
+  const av = normalizarPagamentoAsaas({ id: 'pay_1', status: 'RECEIVED', value: 199, billingType: 'PIX', externalReference: refAvulso(uid, 12), confirmedDate: '2026-10-30', invoiceUrl: 'https://asaas.com/i/1' })
+  assert.equal(av.provider, 'asaas'); assert.equal(av.avulso, true); assert.equal(av.meses, 12); assert.equal(av.user_id, uid)
+  assert.equal(av.valor_centavos, 19900); assert.equal(av.metodo, 'pix'); assert.equal(av.pago_em, '2026-10-30T12:00:00-03:00'); assert.equal(av.status, 'aprovado')
+  const rec = normalizarPagamentoAsaas({ id: 'pay_2', status: 'PENDING', value: 19.9, billingType: 'CREDIT_CARD', subscription: 'sub_9' }, 'PAYMENT_CREDIT_CARD_CAPTURE_REFUSED')
+  assert.equal(rec.provider_subscription_id, 'sub_9'); assert.equal(rec.avulso, false); assert.equal(rec.status, 'recusado'); assert.equal(rec.status_detalhe, 'cartao_recusado')
+  const est = normalizarPagamentoAsaas({ id: 'pay_3', status: 'REFUNDED', value: 19.9, externalReference: refAvulso(uid, 1) })
+  assert.equal(est.valor_estornado_centavos, 1990)
+  const sub = normalizarAssinaturaAsaas({ id: 'sub_9', status: 'ACTIVE', value: 19.9, externalReference: uid, nextDueDate: '2026-11-30', description: 'R2 Fit Pro Premium' })
+  assert.equal(sub.provider_status, 'active'); assert.equal(sub.preco_centavos, 1990); assert.equal(sub.user_id, uid)
+  assert.equal(normalizarAssinaturaAsaas({ id: 'sub_9', status: 'INACTIVE' }).provider_status, 'cancelled')
+  assert.equal(normalizarAssinaturaAsaas({ id: 'sub_9' }, true).provider_status, 'cancelled')
+  const agora = new Date('2026-10-30T15:00:00Z')
+  const ca = corpoAssinaturaAsaas({ cliente: 'cus_1', userId: uid, planoNome: 'R2 Fit Pro Premium', precoCentavos: 1990, site: 'https://r2fitpro.com.br', agora })
+  assert.equal(ca.billingType, 'CREDIT_CARD'); assert.equal(ca.cycle, 'MONTHLY'); assert.equal(ca.value, 19.9); assert.equal(ca.nextDueDate, '2026-10-30'); assert.equal(ca.externalReference, uid)
+  assert.equal(ca.callback.successUrl, 'https://r2fitpro.com.br/assinatura/retorno?origem=asaas')
+  const cv = corpoCobrancaAvulsaAsaas({ cliente: 'cus_1', userId: uid, planoNome: 'R2 Fit Pro Premium', meses: 12, precoCentavos: 19900, site: 'https://r2fitpro.com.br', agora })
+  assert.equal(cv.billingType, 'UNDEFINED'); assert.equal(cv.dueDate, '2026-11-01'); assert.equal(cv.externalReference, refAvulso(uid, 12)); assert.match(cv.description, /12 meses/)
+  assert.throws(() => corpoAssinaturaAsaas({ cliente: 'c', userId: uid, planoNome: 'x', precoCentavos: 300, site: 's' }))
+  assert.deepEqual(lerEventoAsaas({ id: 'evt_1', event: 'PAYMENT_RECEIVED', payment: { id: 'pay_1' } }), { id: 'evt_1', evento: 'PAYMENT_RECEIVED', pagamentoId: 'pay_1', assinaturaId: null })
+  assert.equal(tokenIgual('abc', 'abc'), true); assert.equal(tokenIgual('abc', 'abd'), false); assert.equal(tokenIgual(null, 'abc'), false); assert.equal(tokenIgual('', ''), false)
 })
 
 console.log(`\n${ok} testes passaram`)

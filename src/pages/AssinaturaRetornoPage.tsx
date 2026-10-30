@@ -7,7 +7,7 @@ import { Spinner } from '../components/UI'
 import type { EstadoAcesso } from '../lib/formatos'
 
 // Página de retorno do checkout. O acesso só é considerado liberado quando o
-// servidor confirma o pagamento junto ao Mercado Pago — nunca pelo simples retorno.
+// servidor confirma o pagamento junto à plataforma de pagamento — nunca pelo simples retorno.
 export default function AssinaturaRetornoPage() {
   const [params] = useSearchParams()
   const { recarregar } = useAcesso()
@@ -38,9 +38,9 @@ export default function AssinaturaRetornoPage() {
   }, [params, recarregar, statusMp])
 
   const telas = {
-    verificando: { icon: <Spinner size="lg" />, titulo: 'Confirmando seu pagamento…', texto: 'Estamos consultando o Mercado Pago. Isso leva poucos segundos.' },
+    verificando: { icon: <Spinner size="lg" />, titulo: 'Confirmando seu pagamento…', texto: 'Estamos consultando a plataforma de pagamento. Isso leva poucos segundos.' },
     aprovado: { icon: <CheckCircle2 className="w-14 h-14 text-green-400" />, titulo: 'Acesso Premium liberado!', texto: 'Pagamento confirmado. Todos os recursos Premium já estão liberados.' },
-    pendente: { icon: <Clock className="w-14 h-14 text-yellow-400" />, titulo: 'Pagamento em processamento', texto: statusMp === 'pending' || statusMp === 'in_process' ? 'Se você pagou com boleto, a compensação leva até 3 dias úteis. Pix costuma ser aprovado em instantes. Assim que o Mercado Pago confirmar, o acesso é liberado automaticamente e você recebe um e-mail.' : 'Ainda não recebemos a confirmação do Mercado Pago. Assim que for aprovado, o acesso é liberado automaticamente e você recebe um e-mail.' },
+    pendente: { icon: <Clock className="w-14 h-14 text-yellow-400" />, titulo: 'Pagamento em processamento', texto: statusMp === 'pending' || statusMp === 'in_process' ? 'Se você pagou com boleto, a compensação leva até 3 dias úteis. Pix costuma ser aprovado em instantes. Assim que o pagamento for confirmado, o acesso é liberado automaticamente e você recebe um e-mail.' : 'Ainda não recebemos a confirmação do pagamento. Assim que for aprovado, o acesso é liberado automaticamente e você recebe um e-mail.' },
     falha: { icon: <XCircle className="w-14 h-14 text-red-400" />, titulo: 'Pagamento não concluído', texto: 'O pagamento foi recusado ou cancelado. Nenhuma cobrança foi confirmada. Você pode tentar de novo com outro cartão, Pix ou boleto.' },
   }
   const t = telas[resultado]

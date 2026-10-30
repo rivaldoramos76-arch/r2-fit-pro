@@ -12,7 +12,7 @@ export default function Paywall({ recurso }: { recurso: string }) {
     ? 'Pagamento pendente'
     : estado === 'expirada' ? 'Sua assinatura expirou' : 'Recurso Premium'
   const texto = estado === 'pagamento_pendente'
-    ? 'Assim que o Mercado Pago confirmar o pagamento, o acesso é liberado automaticamente.'
+    ? 'Assim que o pagamento for confirmado, o acesso é liberado automaticamente.'
     : `${recurso} faz parte do ${config?.plano.nome ?? 'plano Premium'}. Seus treinos, dietas e registros continuam salvos e podem ser exportados em Configurações.`
   return (
     <div className="flex flex-col items-center text-center py-10 px-4">

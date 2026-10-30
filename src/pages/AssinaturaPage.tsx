@@ -6,8 +6,8 @@ import { useAuth } from '../context/AuthContext'
 import { useAcesso } from '../context/AcessoContext'
 import { useConfig, linkWhatsapp } from '../lib/config'
 import { chamarApi, ErroApi } from '../lib/api'
-import { brl, dataBR, ROTULO_ESTADO } from '../lib/formatos'
-import { Badge, Button, Card, Spinner } from '../components/UI'
+import { brl, cpfValido, dataBR, mascaraCpf, ROTULO_ESTADO } from '../lib/formatos'
+import { Badge, Button, Card, Input, Spinner } from '../components/UI'
 import CartaoMercadoPago from '../components/CartaoMercadoPago'
 
 interface Assinatura {
@@ -96,6 +96,11 @@ export default function AssinaturaPage() {
   const [confirmarCancelamento, setConfirmarCancelamento] = useState(false)
   const [pedirReembolso, setPedirReembolso] = useState(false)
   const [pagamentosConfigurados, setPagamentosConfigurados] = useState<boolean | null>(null)
+  // Asaas: o CPF é pedido só na primeira compra (o cliente fica salvo no Asaas)
+  const [provedor, setProvedor] = useState<'asaas' | 'mercadopago' | null>(null)
+  const [asaasCliente, setAsaasCliente] = useState(false)
+  const [cpf, setCpf] = useState('')
+  const [erroCpf, setErroCpf] = useState('')
 
   const carregar = useCallback(async () => {
     if (!user) return
@@ -114,8 +119,11 @@ export default function AssinaturaPage() {
 
   useEffect(() => {
     carregar()
-    chamarApi<{ pagamentos_configurados: boolean; public_key: string | null }>('billing', { acao: 'config' })
-      .then(r => { setPagamentosConfigurados(r.pagamentos_configurados); setPublicKey(r.public_key) })
+    chamarApi<{ pagamentos_configurados: boolean; public_key: string | null; provedor?: 'asaas' | 'mercadopago'; asaas_cliente?: boolean }>('billing', { acao: 'config' })
+      .then(r => {
+        setPagamentosConfigurados(r.pagamentos_configurados); setPublicKey(r.public_key)
+        setProvedor(r.provedor ?? 'mercadopago'); setAsaasCliente(Boolean(r.asaas_cliente))
+      })
       .catch(() => setPagamentosConfigurados(null))
   }, [carregar])
 
@@ -127,6 +135,20 @@ export default function AssinaturaPage() {
       window.location.href = r.url
     } catch (e) {
       setErro(e instanceof ErroApi ? e.message : 'Não foi possível iniciar o pagamento.')
+      setProcessando(null)
+    }
+  }
+
+  // Asaas: abre a fatura segura (cartão com renovação automática, ou Pix/boleto/cartão no avulso)
+  const pagarAsaas = async (acao: 'asaas_assinar' | 'asaas_avulso', p?: Periodo) => {
+    if (!asaasCliente && !cpfValido(cpf)) { setErroCpf('Informe um CPF válido para emitir a cobrança.'); return }
+    setErro(''); setErroCpf(''); setProcessando('checkout')
+    try {
+      const r = await chamarApi<{ url: string }>('billing', { acao, periodo: p, cpf: asaasCliente ? undefined : cpf })
+      window.location.href = r.url
+    } catch (e) {
+      if (e instanceof ErroApi && ['cpf_necessario', 'cpf_invalido'].includes(e.codigo ?? '')) { setAsaasCliente(false); setErroCpf(e.message) }
+      else setErro(e instanceof ErroApi ? e.message : 'Não foi possível abrir a página de pagamento.')
       setProcessando(null)
     }
   }
@@ -177,7 +199,7 @@ export default function AssinaturaPage() {
       setConfirmarCancelamento(false)
       await Promise.all([carregar(), recarregar()])
       setAviso(r.aviso ?? (r.reembolsado
-        ? 'Reembolso integral solicitado ao Mercado Pago. O acesso Premium foi encerrado.'
+        ? 'Reembolso integral solicitado. O acesso Premium foi encerrado.'
         : 'Assinatura cancelada. Não haverá novas cobranças e seu acesso continua até o fim do período pago.'))
     } catch (e) {
       setErro(e instanceof ErroApi ? e.message : 'Não foi possível cancelar agora. Tente novamente ou fale com o suporte.')
@@ -272,7 +294,7 @@ export default function AssinaturaPage() {
             <p className="mt-3"><span className="text-3xl font-bold">{brl(plano.preco_centavos)}</span><span className="text-zinc-400">/mês</span></p>
           ) : (
             <p className="mt-3"><span className="text-3xl font-bold">{brl(precoAnual)}</span><span className="text-zinc-400"> por 12 meses</span>
-              {(plano.parcelas_max_anual ?? 12) > 1 && <span className="block text-xs text-zinc-400 mt-1">ou em até {plano.parcelas_max_anual ?? 12}x no cartão</span>}</p>
+              {(plano.parcelas_max_anual ?? 12) > 1 && provedor !== 'asaas' && <span className="block text-xs text-zinc-400 mt-1">ou em até {plano.parcelas_max_anual ?? 12}x no cartão</span>}</p>
           )}
           {!renovacaoAvulsa && (
             <ul className="text-sm text-zinc-400 mt-3 list-disc pl-5 flex flex-col gap-1">
@@ -294,18 +316,34 @@ export default function AssinaturaPage() {
                     className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left ${forma === 'cartao' ? 'border-green-500 bg-green-500/10' : 'border-zinc-700 bg-zinc-800/50'}`}>
                     <CreditCard className="w-5 h-5 mt-0.5 text-green-400 shrink-0" />
                     <span><span className="block text-sm font-semibold">Cartão de crédito</span>
-                      <span className="block text-xs text-zinc-400">Renovação automática todo mês. Não precisa de conta no Mercado Pago.</span></span>
+                      <span className="block text-xs text-zinc-400">Renovação automática todo mês. {provedor === 'asaas' ? 'Você digita o cartão na página segura de pagamento, sem precisar de conta.' : 'Não precisa de conta no Mercado Pago.'}</span></span>
                   </button>
                   <button type="button" role="radio" aria-checked={forma === 'avulso'} onClick={() => setForma('avulso')}
                     className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left ${forma === 'avulso' ? 'border-green-500 bg-green-500/10' : 'border-zinc-700 bg-zinc-800/50'}`}>
                     <QrCode className="w-5 h-5 mt-0.5 text-green-400 shrink-0" />
-                    <span><span className="block text-sm font-semibold">Pix, boleto, débito ou outros</span>
+                    <span><span className="block text-sm font-semibold">{provedor === 'asaas' ? 'Pix, boleto ou cartão' : 'Pix, boleto, débito ou outros'}</span>
                       <span className="block text-xs text-zinc-400">Paga 1 mês por vez, sem renovação automática. Avisamos antes de vencer.</span></span>
                   </button>
                 </div>
               )}
 
-              {formaEfetiva === 'cartao' ? (
+              {provedor === 'asaas' ? (
+                <>
+                  {!asaasCliente && (
+                    <Input label="CPF do pagador" inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={cpf}
+                      onChange={e => { setCpf(mascaraCpf(e.target.value)); setErroCpf('') }} error={erroCpf}
+                      hint="Exigido para emitir a cobrança. Pedimos só na primeira vez." />
+                  )}
+                  <Button size="lg" className="w-full" loading={processando === 'checkout'}
+                    onClick={() => formaEfetiva === 'cartao' ? pagarAsaas('asaas_assinar') : pagarAsaas('asaas_avulso', periodo === 'anual' && temAnual ? 'anual' : 'mensal')}>
+                    {formaEfetiva === 'cartao' ? `Assinar por ${brl(plano.preco_centavos)}/mês`
+                      : periodo === 'anual' && temAnual ? `Pagar ${brl(precoAnual)} — 12 meses` : `Pagar ${brl(plano.preco_centavos)} — 1 mês`}
+                  </Button>
+                  <p className="text-xs text-zinc-500 text-center">
+                    {formaEfetiva === 'cartao' ? 'Abre a página segura de pagamento para você digitar o cartão. Depois volta para o app.' : 'Abre a página segura de pagamento: escolha Pix, boleto ou cartão. Depois volta para o app.'}
+                  </p>
+                </>
+              ) : formaEfetiva === 'cartao' ? (
                 publicKey && user?.email ? (
                   <>
                     <CartaoMercadoPago publicKey={publicKey} valorCentavos={plano.preco_centavos} email={user.email} onToken={assinarComCartao} />
@@ -330,7 +368,7 @@ export default function AssinaturaPage() {
             {formaEfetiva === 'cartao'
               ? 'Cobrança mensal recorrente no cartão, renovada automaticamente até o cancelamento. Cancele quando quiser;'
               : 'Pagamento único, sem renovação automática;'} em até {plano.arrependimento_dias} dias da contratação o reembolso é integral.
-            Pagamentos processados pelo Mercado Pago. Ao assinar você concorda com os <Link to="/termos" className="underline">Termos de Uso</Link>.
+            Pagamentos processados pelo {provedor === 'asaas' ? 'Asaas' : 'Mercado Pago'}. Ao assinar você concorda com os <Link to="/termos" className="underline">Termos de Uso</Link>.
           </p>
         </Card>
       )}
@@ -360,7 +398,7 @@ export default function AssinaturaPage() {
             <div className="flex flex-col gap-3">
               <h2 className="font-semibold text-red-300">{avulso ? 'Confirmar reembolso' : 'Confirmar cancelamento'}</h2>
               {avulso ? (
-                <p className="text-sm text-zinc-300">Você está dentro do prazo de {plano?.arrependimento_dias} dias: o valor pago é devolvido integralmente pelo Mercado Pago e o acesso Premium termina imediatamente. Seus treinos, dietas e registros continuam salvos.</p>
+                <p className="text-sm text-zinc-300">Você está dentro do prazo de {plano?.arrependimento_dias} dias: o valor pago é devolvido integralmente e o acesso Premium termina imediatamente. Seus treinos, dietas e registros continuam salvos.</p>
               ) : (<>
               <p className="text-sm text-zinc-300">
                 Não haverá novas cobranças.{assinatura?.periodo_atual_fim && Date.parse(assinatura.periodo_atual_fim) > Date.now()

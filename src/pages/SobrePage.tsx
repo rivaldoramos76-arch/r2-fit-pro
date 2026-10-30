@@ -19,7 +19,7 @@ export default function SobrePage() {
           <p>Suporte: {ou(e?.email_suporte)}{config?.textos.horario_suporte ? ` (${config.textos.horario_suporte})` : ''}</p>
         </Secao>
         <Secao titulo="Tecnologia e parceiros">
-          <p>Hospedagem: Vercel · Banco de dados e autenticação: Supabase · Inteligência artificial: OpenAI · Pagamentos: Mercado Pago.</p>
+          <p>Hospedagem: Vercel · Banco de dados e autenticação: Supabase · Inteligência artificial: OpenAI · Pagamentos: Asaas (e Mercado Pago para assinaturas anteriores).</p>
         </Secao>
         <Secao titulo="Documentos">
           <p><Link to="/termos" className="text-green-400 underline">Termos de Uso</Link> · <Link to="/privacidade" className="text-green-400 underline">Política de Privacidade</Link> · <Link to="/suporte" className="text-green-400 underline">Ajuda e Suporte</Link></p>

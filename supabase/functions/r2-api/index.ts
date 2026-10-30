@@ -1,5 +1,6 @@
 // Edge Function "r2-api": ponto único do backend do R2 Fit Pro.
 //   POST /r2-api/webhook/mercadopago  → notificações do Mercado Pago (assinatura HMAC)
+//   POST /r2-api/webhook/asaas        → eventos do Asaas (cabeçalho asaas-access-token)
 //   POST /r2-api/billing               → checkout, sincronização, cancelamento (JWT do usuário)
 //   POST /r2-api/conta                 → exclusão de conta (JWT do usuário + reautenticação)
 //   POST /r2-api/admin                 → ações do painel admin com chave de serviço (JWT de admin)
@@ -12,11 +13,14 @@ import { handleConta } from './conta.ts'
 import { handleCron } from './cron.ts'
 import { handleAdmin } from './admin.ts'
 import { handleLembretes, handleCronLembretes } from './lembretes.ts'
+import { handleWebhookAsaas, handleCronAsaasWebhook } from './asaas.ts'
 import { corsHeaders, json } from '../_shared/http.ts'
 
 Deno.serve((req) => {
   const caminho = new URL(req.url).pathname.replace(/^.*\/r2-api/, '')
   if (caminho.startsWith('/webhook/mercadopago')) return handleWebhook(req)
+  if (caminho.startsWith('/webhook/asaas')) return handleWebhookAsaas(req)
+  if (caminho.startsWith('/cron/asaas-webhook')) return handleCronAsaasWebhook(req)
   if (caminho.startsWith('/billing')) return handleBilling(req)
   if (caminho.startsWith('/conta')) return handleConta(req)
   if (caminho.startsWith('/cron/emails')) return handleCron(req)

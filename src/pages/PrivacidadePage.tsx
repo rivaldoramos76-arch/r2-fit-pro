@@ -19,7 +19,7 @@ export default function PrivacidadePage() {
           <ul className="list-disc pl-5 flex flex-col gap-1">
             <li><b>Cadastro:</b> nome, e-mail, senha (armazenada de forma criptografada pelo provedor de autenticação, nunca em texto puro), telefone e data de nascimento (opcionais) e foto de perfil (opcional).</li>
             <li><b>Dados de saúde e hábitos informados por você:</b> peso, altura, idade, sexo, objetivo, nível de atividade, restrições alimentares, treinos, histórico de execução, dietas, refeições e fotos de pratos enviadas para estimativa de calorias. Esses dados podem ser considerados <b>dados pessoais sensíveis</b>.</li>
-            <li><b>Assinatura e pagamentos:</b> situação da assinatura, valores, datas e identificadores das transações. <b>Não recebemos nem armazenamos dados de cartão</b>, que são tratados diretamente pelo Mercado Pago.</li>
+            <li><b>Assinatura e pagamentos:</b> situação da assinatura, valores, datas e identificadores das transações. <b>Não recebemos nem armazenamos dados de cartão</b>, que são tratados diretamente pela plataforma de pagamento (Asaas ou Mercado Pago). Para emitir a cobrança, o CPF informado é enviado ao Asaas.</li>
             <li><b>Uso e segurança:</b> registros técnicos (data/hora de acesso, endereço IP tratado pelos provedores, eventos de erro) e preferências de notificações e áudio.</li>
           </ul>
         </Secao>
@@ -38,7 +38,7 @@ export default function PrivacidadePage() {
             <li><b>Supabase</b> — banco de dados, autenticação e armazenamento de arquivos (servidores nos EUA).</li>
             <li><b>Vercel</b> — hospedagem do aplicativo (infraestrutura global).</li>
             <li><b>OpenAI</b> — processamento por inteligência artificial dos dados enviados para gerar treinos, dietas e estimativas de calorias (EUA). Enviamos apenas o necessário para cada solicitação.</li>
-            <li><b>Mercado Pago</b> — processamento de pagamentos e assinaturas.</li>
+            <li><b>Asaas</b> e <b>Mercado Pago</b> — processamento de pagamentos e assinaturas.</li>
             <li><b>Provedor de e-mail transacional</b> (Resend) — envio de e-mails do serviço.</li>
           </ul>
           <p>Algumas dessas empresas tratam dados fora do Brasil. A transferência internacional ocorre com base nas hipóteses do art. 33 da LGPD, incluindo cláusulas contratuais dos provedores. Não vendemos seus dados pessoais.</p>

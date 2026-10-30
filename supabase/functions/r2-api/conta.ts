@@ -2,16 +2,19 @@
 import { corsHeaders, json, ErroHttp, log } from '../_shared/http.ts'
 import { clienteAdmin, usuarioAutenticado, auditar } from '../_shared/supa.ts'
 import { mp, mpConfigurado } from '../_shared/mp.ts'
+import { asaas } from '../_shared/asaas.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.49.4'
 
 /** Exclui a conta: cancela cobranças futuras, registra o pedido (LGPD), apaga arquivos e o usuário.
  *  Dados pessoais saem em cascata; registros financeiros ficam anonimizados (user_id nulo). */
 export async function excluirUsuario(admin: SupabaseClient, alvo: { id: string; email: string | null }, autorId: string, motivo: string) {
   // Interrompe cobranças futuras antes de excluir
-  const { data: subs } = await admin.from('subscriptions').select('id, provider_subscription_id, status')
+  const { data: subs } = await admin.from('subscriptions').select('id, provider, provider_subscription_id, status')
     .eq('user_id', alvo.id).in('status', ['ativa', 'inadimplente', 'pendente']).neq('modalidade', 'teste')
   for (const s of subs ?? []) {
-    if (s.provider_subscription_id) {
+    if (s.provider_subscription_id && s.provider === 'asaas') {
+      await asaas('DELETE', `/subscriptions/${encodeURIComponent(s.provider_subscription_id)}`)
+    } else if (s.provider_subscription_id) {
       if (!mpConfigurado()) throw new ErroHttp(409, 'Não foi possível cancelar a assinatura no Mercado Pago agora. Tente mais tarde.')
       await mp('PUT', `/preapproval/${encodeURIComponent(s.provider_subscription_id)}`, { status: 'cancelled' })
     }
