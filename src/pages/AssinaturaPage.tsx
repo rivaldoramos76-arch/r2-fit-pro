@@ -28,9 +28,10 @@ type Periodo = 'mensal' | 'anual'
 type Forma = 'cartao' | 'avulso'
 
 /** Aviso em destaque no meio da tela: erros e confirmações de pagamento não passam despercebidos. */
-function Popup({ tipo, texto, onFechar, acaoExtra, whatsapp }: {
+function Popup({ tipo, texto, onFechar, acaoExtra, acaoExtra2, whatsapp }: {
   tipo: 'erro' | 'ok'; texto: string; onFechar: () => void
   acaoExtra?: { rotulo: string; onClick: () => void }
+  acaoExtra2?: { rotulo: string; onClick: () => void }
   /** Link para falar com o atendimento quando o pagamento não deu certo */
   whatsapp?: string | null
 }) {
@@ -52,6 +53,7 @@ function Popup({ tipo, texto, onFechar, acaoExtra, whatsapp }: {
         <p id="popup-texto" className="mt-3 text-sm text-zinc-300 leading-relaxed">{texto}</p>
         <div className="mt-5 flex flex-col gap-2">
           {acaoExtra && <Button onClick={acaoExtra.onClick} className="w-full">{acaoExtra.rotulo}</Button>}
+          {acaoExtra2 && <Button variant="secondary" onClick={acaoExtra2.onClick} className="w-full">{acaoExtra2.rotulo}</Button>}
           {erro && whatsapp && (
             <a href={whatsapp} target="_blank" rel="noopener noreferrer"
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-green-500/40 bg-green-500/10 px-4 py-2.5 text-sm font-semibold text-green-300 hover:bg-green-500/20 transition">
@@ -213,7 +215,8 @@ export default function AssinaturaPage() {
       {erro && (
         <Popup tipo="erro" texto={erro} onFechar={() => { setErro(''); setSugerirOutraForma(false) }}
           whatsapp={linkWhatsapp(config, `Olá! Tentei assinar o R2 Fit Pro e o pagamento não foi concluído. Meu e-mail no app: ${user?.email ?? ''}`)}
-          acaoExtra={sugerirOutraForma ? { rotulo: 'Pagar com Pix, boleto ou outros', onClick: () => { setErro(''); setSugerirOutraForma(false); setPeriodo('mensal'); setForma('avulso') } } : undefined} />
+          acaoExtra={sugerirOutraForma ? { rotulo: 'Pagar com Pix, boleto ou outros', onClick: () => { setErro(''); setSugerirOutraForma(false); setPeriodo('mensal'); setForma('avulso') } } : undefined}
+          acaoExtra2={sugerirOutraForma ? { rotulo: 'Assinar pela página do Mercado Pago', onClick: () => { setSugerirOutraForma(false); assinar() } } : undefined} />
       )}
       {aviso && !erro && <Popup tipo="ok" texto={aviso} onFechar={() => setAviso('')} />}
 
@@ -304,7 +307,12 @@ export default function AssinaturaPage() {
 
               {formaEfetiva === 'cartao' ? (
                 publicKey && user?.email ? (
-                  <CartaoMercadoPago publicKey={publicKey} valorCentavos={plano.preco_centavos} email={user.email} onToken={assinarComCartao} />
+                  <>
+                    <CartaoMercadoPago publicKey={publicKey} valorCentavos={plano.preco_centavos} email={user.email} onToken={assinarComCartao} />
+                    <button type="button" onClick={assinar} disabled={processando === 'checkout'} className="text-sm text-green-400 underline text-center disabled:opacity-50">
+                      Prefere assinar pela página do Mercado Pago? (com a sua conta Mercado Pago)
+                    </button>
+                  </>
                 ) : (
                   <Button onClick={assinar} loading={processando === 'checkout'} size="lg" className="w-full">Assinar com Mercado Pago</Button>
                 )

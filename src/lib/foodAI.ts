@@ -8,6 +8,10 @@ export interface FoodEstimate {
   carboidrato_g: number
   gordura_g: number
   observacao?: string
+  /** Peso estimado em gramas (análise de foto) */
+  gramas?: number
+  /** Nome curto para buscar na tabela TACO (análise de foto) */
+  busca?: string
 }
 
 const SYSTEM_PROMPT = `Você é um nutricionista especializado em estimativa calórica.
@@ -31,6 +35,8 @@ function parseJson(content: string | null | undefined): FoodEstimate[] {
       carboidrato_g: Number(a.carboidrato_g ?? 0),
       gordura_g: Number(a.gordura_g ?? 0),
       observacao: a.observacao ? String(a.observacao) : undefined,
+      gramas: Number(a.gramas) > 0 ? Math.round(Number(a.gramas)) : undefined,
+      busca: a.busca ? String(a.busca).slice(0, 80) : undefined,
     }))
   } catch {
     return []
