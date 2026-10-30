@@ -7,7 +7,7 @@ export class ErroApi extends Error {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function chamarApi<T = any>(rota: 'billing' | 'conta' | 'admin', corpo: Record<string, unknown>): Promise<T> {
+export async function chamarApi<T = any>(rota: 'billing' | 'conta' | 'admin' | 'lembretes', corpo: Record<string, unknown>): Promise<T> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new ErroApi('Sua sessão expirou. Faça login novamente.', 'sem_sessao', 401)

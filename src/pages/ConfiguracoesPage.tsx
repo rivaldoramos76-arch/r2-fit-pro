@@ -73,7 +73,7 @@ export default function ConfiguracoesPage() {
     setExportando(true)
     try {
       const uid = user!.id
-      const tabelas = ['profiles', 'user_settings', 'treinos', 'sessoes_treino', 'dietas', 'food_logs', 'metas_nutricionais', 'alimentos_favoritos', 'registros_agua', 'registros_peso', 'exercicios_registro', 'receitas', 'subscriptions', 'payments', 'support_tickets', 'privacy_requests'] as const
+      const tabelas = ['profiles', 'user_settings', 'treinos', 'sessoes_treino', 'dietas', 'food_logs', 'metas_nutricionais', 'alimentos_favoritos', 'registros_agua', 'registros_peso', 'exercicios_registro', 'receitas', 'lembretes', 'subscriptions', 'payments', 'support_tickets', 'privacy_requests'] as const
       const resultado: Record<string, unknown> = { exportado_em: new Date().toISOString(), conta: { id: uid, email: user!.email, criada_em: user!.created_at } }
       for (const t of tabelas) {
         const coluna = t === 'profiles' ? 'id' : 'user_id'

@@ -7,6 +7,7 @@ import {
   motivoRecusaCartao,
 } from '../supabase/functions/_shared/mpLogic'
 import { renderizarEmail } from '../supabase/functions/_shared/emailTemplates'
+import { mensagemLembrete, lerInscricao } from '../supabase/functions/_shared/lembretesLogic'
 import { traduzirErroAuth } from '../src/lib/formatos'
 
 let ok = 0
@@ -159,6 +160,18 @@ await t('recusa do cartão: mensagem pelo motivo do Mercado Pago', () => {
   assert.match(motivoRecusaCartao('cc_rejected_other_reason')!, /banco emissor/)
   assert.equal(motivoRecusaCartao('accredited'), null)
   assert.equal(motivoRecusaCartao(null), null)
+})
+
+await t('lembretes: mensagem por tipo e validação da inscrição do aparelho', () => {
+  assert.equal(mensagemLembrete('almoco')?.url, '/calorias')
+  assert.equal(mensagemLembrete('treino')?.url, '/treino')
+  assert.equal(mensagemLembrete('agua')?.tag, 'r2-agua')
+  assert.equal(mensagemLembrete('outro'), null)
+  const boa = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc123def', keys: { p256dh: 'B'.repeat(87), auth: 'a1b2c3d4e5f6g7h8i9j0kw' } }
+  assert.deepEqual(lerInscricao(boa), { endpoint: boa.endpoint, p256dh: boa.keys.p256dh, auth: boa.keys.auth })
+  assert.equal(lerInscricao({ ...boa, endpoint: 'http://inseguro.com/x' }), null)
+  assert.equal(lerInscricao({ ...boa, keys: { p256dh: 'curto', auth: 'x' } }), null)
+  assert.equal(lerInscricao(null), null)
 })
 
 console.log(`\n${ok} testes passaram`)

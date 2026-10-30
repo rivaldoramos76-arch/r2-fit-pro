@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Home, Dumbbell, Salad, Flame, User, Settings, CreditCard, Receipt, LifeBuoy, FileText, Shield, Info, LogOut, LayoutDashboard, ChevronRight, Sparkles, Target, Scale, ChefHat, BarChart3,
+  Home, Dumbbell, Salad, Flame, User, Settings, CreditCard, Receipt, LifeBuoy, FileText, Shield, Info, LogOut, LayoutDashboard, ChevronRight, Sparkles, Target, Scale, ChefHat, BarChart3, Bell,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -20,6 +20,7 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
     { href: '/peso', label: 'Peso', icon: Scale },
     { href: '/receitas', label: 'Receitas', icon: ChefHat },
     { href: '/relatorio', label: 'Relatório da semana', icon: BarChart3 },
+    { href: '/lembretes', label: 'Lembretes', icon: Bell },
   ] },
   { titulo: 'Conta', itens: [
     { href: '/perfil', label: 'Perfil', icon: User },

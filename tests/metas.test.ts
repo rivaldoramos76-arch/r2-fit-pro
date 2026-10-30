@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { taxaBasal, gastoDiario, calcularMeta, distribuirMacros, idadeEm, caloriasDosMacros, CALORIAS_MINIMAS, ajustarPorCalorias, ajustarPorMacro, percentuais } from '../src/lib/metas'
 import { ATIVIDADES, caloriasExercicio, metaAguaSugerida, resumoPeso, restanteDia } from '../src/lib/exercicios'
 import { porcaoReceita, receitaComoItem, totaisIngredientes, inicioSemana, resumoSemana } from '../src/lib/relatorio'
+import { comPadroes, proximoHorarioAgua, resumoDias, normalizarLembrete } from '../src/lib/lembretesBase'
 import { carregarTaco, buscarBase, medidasDe, paraAlimento } from '../src/lib/alimentosBase'
 import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade, pesoDaQuantidade, alimentoEmPeso } from '../src/lib/diario'
 
@@ -235,6 +236,25 @@ await t('relatório semanal: segunda-feira, médias, dias na meta e peso', () =>
   assert.deepEqual(r.alimentoMaisRegistrado, { nome: 'Arroz', vezes: 3 })
   assert.equal(r.melhorDia, '2026-10-26')
   assert.equal(r.dias.length, 7); assert.equal(r.dias[6].calorias, 0)
+})
+
+await t('lembretes: sugestões desligadas, horários de água e dias', () => {
+  const lista = comPadroes([])
+  assert.equal(lista.length, 9)
+  assert.ok(lista.every(l => !l.ativo), 'sugestões começam desligadas')
+  assert.deepEqual(lista.map(l => l.tipo).slice(0, 4), ['cafe', 'almoco', 'lanche', 'jantar'])
+  // tipo já configurado não recebe sugestão
+  const salvos = comPadroes([{ id: 'x', tipo: 'agua', horario: '09:00', dias: [0, 1, 2, 3, 4, 5, 6], ativo: true }])
+  assert.equal(salvos.filter(l => l.tipo === 'agua').length, 1)
+  assert.equal(proximoHorarioAgua(salvos), '11:00')
+  assert.equal(proximoHorarioAgua([]), '10:00')
+  assert.equal(proximoHorarioAgua([{ tipo: 'agua', horario: '21:30', dias: [1], ativo: true }]), '22:30')
+  assert.equal(resumoDias([1, 2, 3, 4, 5]), 'seg a sex')
+  assert.equal(resumoDias([0, 1, 2, 3, 4, 5, 6]), 'todos os dias')
+  assert.equal(resumoDias([5, 1, 3]), 'seg, qua, sex')
+  assert.deepEqual(normalizarLembrete({ tipo: 'peso', horario: '07:00', dias: [3, 1, 1], ativo: true })?.dias, [1, 3])
+  assert.equal(normalizarLembrete({ tipo: 'peso', horario: '7h', dias: [1], ativo: true }), null)
+  assert.equal(normalizarLembrete({ tipo: 'peso', horario: '07:00', dias: [], ativo: true }), null)
 })
 
 console.log(`\n${ok} testes de metas e diário passaram`)

@@ -25,6 +25,7 @@ import MetaPage from './pages/MetaPage'
 import PesoPage from './pages/PesoPage'
 import { ListaReceitas, EditorReceita } from './pages/ReceitasPage'
 import RelatorioPage from './pages/RelatorioPage'
+import LembretesPage from './pages/LembretesPage'
 import WorkoutPage from './pages/WorkoutPage'
 import WorkoutTimerPage from './pages/WorkoutTimerPage'
 import PlanoWizardPage from './pages/PlanoWizardPage'
@@ -78,6 +79,7 @@ function AppRoutes() {
       <Route path="/receitas/nova" element={<RotaPremium recurso="As receitas"><EditorReceita /></RotaPremium>} />
       <Route path="/receitas/:id" element={<RotaPremium recurso="As receitas"><EditorReceita /></RotaPremium>} />
       <Route path="/relatorio" element={<RotaPremium recurso="O relatório semanal"><RelatorioPage /></RotaPremium>} />
+      <Route path="/lembretes" element={<RotaPremium recurso="Os lembretes"><LembretesPage /></RotaPremium>} />
       <Route path="/peso" element={<RotaPremium recurso="O controle de peso"><PesoPage /></RotaPremium>} />
       <Route path="/calorias" element={<RotaPremium recurso="O diário alimentar"><CaloriasPage /></RotaPremium>} />
       <Route path="/treino" element={<RotaPremium recurso="Os treinos"><WorkoutPage /></RotaPremium>} />

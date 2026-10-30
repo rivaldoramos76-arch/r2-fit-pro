@@ -4,11 +4,14 @@
 //   POST /r2-api/conta                 → exclusão de conta (JWT do usuário + reautenticação)
 //   POST /r2-api/admin                 → ações do painel admin com chave de serviço (JWT de admin)
 //   POST /r2-api/cron/emails           → fila de e-mails (pg_cron, token de uso único)
+//   POST /r2-api/lembretes             → notificações: inscrever aparelho, teste (JWT do usuário)
+//   POST /r2-api/cron/lembretes        → envio dos lembretes vencidos (pg_cron, token de uso único)
 import { handleBilling } from './billing.ts'
 import { handleWebhook } from './webhook.ts'
 import { handleConta } from './conta.ts'
 import { handleCron } from './cron.ts'
 import { handleAdmin } from './admin.ts'
+import { handleLembretes, handleCronLembretes } from './lembretes.ts'
 import { corsHeaders, json } from '../_shared/http.ts'
 
 Deno.serve((req) => {
@@ -18,6 +21,8 @@ Deno.serve((req) => {
   if (caminho.startsWith('/conta')) return handleConta(req)
   if (caminho.startsWith('/cron/emails')) return handleCron(req)
   if (caminho.startsWith('/admin')) return handleAdmin(req)
+  if (caminho.startsWith('/cron/lembretes')) return handleCronLembretes(req)
+  if (caminho.startsWith('/lembretes')) return handleLembretes(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
   if (caminho === '/saude' || caminho === '/saude/') return json(req, { ok: true, servico: 'r2-api' })
   return json(req, { erro: 'Rota não encontrada' }, 404)

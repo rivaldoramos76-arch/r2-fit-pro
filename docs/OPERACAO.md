@@ -109,16 +109,18 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 14. `20261030160000_agua_peso_exercicio.sql` — água (`registros_agua`), peso (`registros_peso`, um por dia) e exercício (`exercicios_registro`), com RLS (criar exige Premium) e metas de água e de peso em `metas_nutricionais`.
 15. `20261030170000_receitas.sql` — receitas salvas (`receitas`: ingredientes + rendimento em porções), com RLS (criar e editar exigem Premium; ver e apagar continuam liberados para o dono).
 16. `20261031090000_receitas_peso_final.sql` — peso final da receita pronta (`receitas.peso_final_g`, opcional), para registrar a receita no diário em gramas.
+17. `20261031120000_lembretes.sql` — lembretes por notificação: horários (`lembretes`), aparelhos inscritos (`push_inscricoes`), chaves VAPID geradas no primeiro uso (`push_config`, só a chave de serviço lê) e a rotina `lembretes_rotina` no pg_cron a cada 5 minutos, que chama `r2-api/cron/lembretes`. Só toca o que ainda faz sentido: refeição não registrada, meta de água não batida, treino não feito, peso não registrado.
 
 ## Testes
-- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails (15) + meta diária, diário, busca, exercício, peso, receitas e relatório semanal (18).
+- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/e-mails/lembretes (16) + meta diária, diário, busca, exercício, peso, receitas, relatório semanal e lembretes (19).
 - `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
 - `tests/sql/nutricao.test.sql` — 17 verificações de RLS da meta diária e dos favoritos (resultado esperado: `TESTES_OK (17)`).
 - `tests/sql/admin_acesso.test.sql` — 16 verificações das ações do administrador e da edição no diário (resultado esperado: `TESTES_OK (16)`).
 - `tests/sql/alimentos_base.test.sql` — 11 verificações do banco compartilhado de alimentos (resultado esperado: `TESTES_OK (11)`).
 - `tests/sql/progresso.test.sql` — 11 verificações de água, peso e exercício (resultado esperado: `TESTES_OK (11)`).
 - `tests/sql/receitas.test.sql` — 12 verificações das receitas salvas (resultado esperado: `TESTES_OK (12)`).
-- `tests/e2e/ui.test.mjs` — 34 testes de interface (Playwright, celular e desktop) com API simulada.
+- `tests/sql/lembretes.test.sql` — 15 verificações dos lembretes: RLS, aparelhos, chaves e a rotina de envio (resultado esperado: `TESTES_OK (15)`).
+- `tests/e2e/ui.test.mjs` — 35 testes de interface (Playwright, celular e desktop) com API simulada.
 
 ## Monitoramento e recuperação
 - Painel `/admin`: webhooks com erro, e-mails não enviados, falhas de cobrança, auditoria.

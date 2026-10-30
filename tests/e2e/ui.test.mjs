@@ -23,6 +23,10 @@ const registro = (refeicao, nome, quantidade, calorias, i) => ({ id: 'f' + i, us
 const REGISTROS = [registro('Café da manhã', 'Pão francês', '1 unidade (50 g)', 135, 1), registro('Lanche da tarde', 'Banana prata', '1 unidade', 89, 2)]
 const isoDiasAtras = n => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const PESOS = [{ id: 'p1', data: isoDiasAtras(20), peso_kg: 84.1 }, { id: 'p2', data: isoDiasAtras(10), peso_kg: 83.4 }, { id: 'p3', data: isoDiasAtras(2), peso_kg: 82.6 }]
+const LEMBRETES = [
+  { id: 'l1', tipo: 'almoco', horario: '12:30:00', dias: [0, 1, 2, 3, 4, 5, 6], ativo: true },
+  { id: 'l2', tipo: 'agua', horario: '09:00:00', dias: [0, 1, 2, 3, 4, 5, 6], ativo: true },
+]
 const RECEITA = { id: 'r1', nome: 'Frango com arroz', porcoes: 4, peso_final_g: 1200, modo_preparo: null, updated_at: '2026-10-28T00:00:00Z', ingredientes: [
   { nome: 'Frango', quantidade: '500 g', calorias: 800, proteina_g: 150, carboidrato_g: 0, gordura_g: 18 },
   { nome: 'Arroz', quantidade: '300 g', calorias: 384, proteina_g: 7.5, carboidrato_g: 84.3, gordura_g: 0.6 }] }
@@ -78,6 +82,18 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? perfil : [perfil])
     }
     if (p === '/rest/v1/user_settings') return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? { notificacoes: {}, audio: { volume: 0.8, mudo: false } } : [])
+    if (nutricao && p === '/rest/v1/lembretes') {
+      const metodo = rota.request().method()
+      if (metodo !== 'GET') { let corpo = null; try { corpo = rota.request().postDataJSON() } catch { /* DELETE sem corpo */ } gravacoes.push({ tabela: 'lembretes', metodo, corpo, url: rota.request().url() }); return json([]) }
+      return json(LEMBRETES)
+    }
+    if (p.startsWith('/functions/v1/r2-api/lembretes')) {
+      const corpo = rota.request().postDataJSON()
+      gravacoes.push({ tabela: 'r2-api/lembretes', corpo })
+      if (corpo.acao === 'chave') return json({ chave: 'BDd3_hVL9fZi9Ybo2UUzA284WG5FZR30_95YeZJsiApwXKpNcF1rRPF3foIiBHXRdJI2Qhumhf6_LFTeZaNndIo' })
+      if (corpo.acao === 'testar') return json({ enviados: 1, falhas: 0 })
+      return json({ ok: true })
+    }
     if (nutricao && p === '/rest/v1/receitas') {
       const metodo = rota.request().method()
       if (metodo !== 'GET') { const corpo = rota.request().postDataJSON(); gravacoes.push({ tabela: 'receitas', metodo, corpo }); return json({ id: 'r9', ...corpo }) }
@@ -242,7 +258,7 @@ await t('usuário sem assinatura: paywall nos recursos Premium e CTA no início'
 await t('usuário sem assinatura acessa conta, menu, assinatura e pagamentos', async () => {
   const { ctx, page } = await contexto(browser, { logado: true })
   await page.goto(BASE + '/menu')
-  for (const item of ['Início', 'Meus Treinos', 'Dieta', 'Diário alimentar', 'Meta diária', 'Peso', 'Receitas', 'Relatório da semana', 'Perfil', 'Configurações', 'Minha Assinatura', 'Pagamentos e Faturas', 'Ajuda e Suporte', 'Termos de Uso', 'Política de Privacidade', 'Sobre o aplicativo']) {
+  for (const item of ['Início', 'Meus Treinos', 'Dieta', 'Diário alimentar', 'Meta diária', 'Peso', 'Receitas', 'Relatório da semana', 'Lembretes', 'Perfil', 'Configurações', 'Minha Assinatura', 'Pagamentos e Faturas', 'Ajuda e Suporte', 'Termos de Uso', 'Política de Privacidade', 'Sobre o aplicativo']) {
     await page.getByRole('main').getByRole('link', { name: item, exact: true }).waitFor()
   }
   await page.getByRole('button', { name: 'Sair da conta' }).waitFor()
@@ -587,6 +603,57 @@ await t('receitas: montar com ingredientes da busca e adicionar ao diário por p
   await page.waitForTimeout(300)
   const prato = page.gravacoes.filter(x => x.tabela === 'food_logs' && x.metodo === 'POST').pop()?.corpo?.[0]
   assert.equal(prato?.quantidade, '150 g'); assert.ok(Math.abs(prato?.calorias - 148) <= 1, `150 g ≈ 148 kcal (${prato?.calorias})`); assert.equal(prato?.origem, 'receita')
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('lembretes: ativar notificações, teste e salvar horários', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await ctx.grantPermissions(['notifications'], { origin: BASE })
+  // Serviço de notificações simulado (o navegador de teste não fala com o FCM)
+  await page.addInitScript(() => {
+    let inscricao = null
+    PushManager.prototype.getSubscription = async () => inscricao
+    PushManager.prototype.subscribe = async () => {
+      inscricao = { endpoint: 'https://fcm.googleapis.com/fcm/send/teste123', unsubscribe: async () => { inscricao = null; return true },
+        toJSON: () => ({ endpoint: 'https://fcm.googleapis.com/fcm/send/teste123', keys: { p256dh: 'B'.repeat(87), auth: 'a'.repeat(22) } }) }
+      return inscricao
+    }
+  })
+  await page.goto(BASE + '/lembretes')
+  await page.getByRole('heading', { name: 'Lembretes' }).waitFor()
+  const refeicoes = page.getByRole('region', { name: 'Refeições' })
+  assert.equal(await refeicoes.getByRole('switch', { name: 'Almoço' }).getAttribute('aria-checked'), 'true')
+  assert.equal(await refeicoes.getByLabel('Horário: Almoço').inputValue(), '12:30')
+  assert.equal(await refeicoes.getByRole('switch', { name: 'Café da manhã' }).getAttribute('aria-checked'), 'false')
+  // Ativar neste aparelho e enviar teste
+  await page.getByRole('button', { name: 'Ativar notificações' }).click()
+  await page.getByText('Notificações ativas neste aparelho').waitFor()
+  const insc = page.gravacoes.find(g => g.tabela === 'r2-api/lembretes' && g.corpo.acao === 'inscrever')
+  assert.equal(insc?.corpo?.inscricao?.endpoint, 'https://fcm.googleapis.com/fcm/send/teste123')
+  await page.getByRole('button', { name: 'Enviar teste' }).click()
+  await page.getByText(/Notificação de teste enviada/).waitFor()
+  // Ajustar horários
+  await refeicoes.getByRole('switch', { name: 'Café da manhã' }).click()
+  await refeicoes.getByLabel('Horário: Café da manhã').fill('08:00')
+  const agua = page.getByRole('region', { name: 'Água' })
+  await agua.getByRole('button', { name: 'Remover horário da água 1' }).click()
+  await agua.getByRole('button', { name: 'Adicionar horário' }).click()
+  const treino = page.getByRole('region', { name: 'Treino' })
+  await treino.getByRole('switch', { name: 'Hora do treino' }).click()
+  await treino.getByRole('button', { name: 'sáb' }).click()
+  await treino.getByText('seg, ter, qua, qui, sex, sáb').waitFor()
+  await page.screenshot({ path: `${SHOTS}/lembretes.png`, fullPage: true })
+  await page.getByRole('button', { name: 'Salvar lembretes' }).click()
+  await page.getByText(/^Lembretes salvos/).waitFor()
+  const del = page.gravacoes.find(g => g.tabela === 'lembretes' && g.metodo === 'DELETE')
+  assert.match(decodeURIComponent(del?.url ?? ''), /id=in\.\("?l2"?\)/, 'apagou o horário de água removido')
+  const linhas = page.gravacoes.filter(g => g.tabela === 'lembretes' && g.metodo === 'POST').flatMap(g => g.corpo)
+  const cafe = linhas.find(l => l.tipo === 'cafe')
+  assert.equal(cafe?.horario, '08:00'); assert.equal(cafe?.ativo, true); assert.equal(cafe?.id, undefined); assert.ok(cafe?.fuso)
+  assert.deepEqual(linhas.find(l => l.tipo === 'treino')?.dias, [1, 2, 3, 4, 5, 6])
+  assert.equal(linhas.find(l => l.id === 'l1')?.horario, '12:30', 'atualiza o almoço já salvo')
+  assert.ok(linhas.some(l => l.tipo === 'agua' && l.ativo && !l.id), 'novo horário de água')
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
