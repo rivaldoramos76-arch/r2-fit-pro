@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { taxaBasal, gastoDiario, calcularMeta, distribuirMacros, idadeEm, caloriasDosMacros, CALORIAS_MINIMAS, ajustarPorCalorias, ajustarPorMacro, percentuais } from '../src/lib/metas'
 import { ATIVIDADES, caloriasExercicio, metaAguaSugerida, resumoPeso, restanteDia } from '../src/lib/exercicios'
-import { porcaoReceita, totaisIngredientes, inicioSemana, resumoSemana } from '../src/lib/relatorio'
+import { porcaoReceita, receitaComoItem, totaisIngredientes, inicioSemana, resumoSemana } from '../src/lib/relatorio'
 import { carregarTaco, buscarBase, medidasDe, paraAlimento } from '../src/lib/alimentosBase'
 import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade } from '../src/lib/diario'
 
@@ -180,6 +180,25 @@ await t('receita: totais e valores por porção', () => {
   const p = porcaoReceita('Frango com arroz', ing, 4)
   assert.deepEqual(p, { nome: 'Frango com arroz', quantidade: '1 porção', calorias: 296, proteina_g: 39.4, carboidrato_g: 21.1, gordura_g: 4.7 })
   assert.equal(porcaoReceita('X', ing, 0).calorias, 1184, 'rendimento inválido vira 1 porção')
+})
+
+await t('receita com peso final: registrar em gramas no diário', () => {
+  const ing = [
+    { nome: 'Frango', quantidade: '500 g', calorias: 800, proteina_g: 150, carboidrato_g: 0, gordura_g: 18 },
+    { nome: 'Arroz', quantidade: '300 g', calorias: 384, proteina_g: 7.5, carboidrato_g: 84.3, gordura_g: 0.6 },
+  ]
+  const r = { id: 'r1', nome: 'Sopa de frango', ingredientes: ing, porcoes: 4, peso_final_g: 1400 }
+  assert.equal(receitaComoItem({ ...r, peso_final_g: null }), null, 'sem peso continua por porção')
+  assert.equal(porcaoReceita(r.nome, ing, 4, 1400).quantidade, '1 porção (350 g)')
+  const item = receitaComoItem(r)!
+  assert.equal(item.kcal, 84.6) // 1184 kcal / 1400 g × 100
+  const medidas = medidasDe(item)
+  assert.deepEqual(medidas.map(m => m.rotulo), ['porção', 'gramas'], 'sempre em gramas, mesmo com nome de sopa')
+  assert.equal(paraAlimento(item, medidas[0]).quantidade, '1 porção (350 g)')
+  assert.equal(paraAlimento(item, medidas[0]).calorias, 296)
+  const prato = ajustarQuantidade(paraAlimento(item, medidas[1]), 300)
+  assert.equal(prato.quantidade, '300 g')
+  assert.ok(Math.abs(prato.calorias - 254) <= 1, `300 g ≈ 254 kcal (${prato.calorias})`)
 })
 
 await t('relatório semanal: segunda-feira, médias, dias na meta e peso', () => {

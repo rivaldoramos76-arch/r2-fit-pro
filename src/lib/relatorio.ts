@@ -1,5 +1,6 @@
 // Receitas (por porção) e relatório semanal. Sem dependências de runtime; testado em tests/metas.test.ts.
 import type { Alimento } from './diario'
+import type { ItemBase } from './alimentosBase'
 import { somarDias } from './diario'
 
 const um = (n: number) => Math.round(n * 10) / 10
@@ -13,14 +14,29 @@ export function totaisIngredientes(ingredientes: Alimento[]) {
   }), { calorias: 0, proteina_g: 0, carboidrato_g: 0, gordura_g: 0 })
 }
 
-/** Uma porção da receita como alimento do diário ("1 porção"). */
-export function porcaoReceita(nome: string, ingredientes: Alimento[], porcoes: number): Alimento {
+/** Uma porção da receita como alimento do diário ("1 porção", com o peso se a receita tiver peso final). */
+export function porcaoReceita(nome: string, ingredientes: Alimento[], porcoes: number, pesoFinalG?: number | null): Alimento {
   const t = totaisIngredientes(ingredientes)
   const p = porcoes > 0 ? porcoes : 1
+  const gramas = pesoFinalG && pesoFinalG > 0 ? Math.round(pesoFinalG / p) : null
   return {
-    nome, quantidade: '1 porção',
+    nome, quantidade: gramas ? `1 porção (${gramas} g)` : '1 porção',
     calorias: Math.round(t.calorias / p), proteina_g: um(t.proteina_g / p),
     carboidrato_g: um(t.carboidrato_g / p), gordura_g: um(t.gordura_g / p),
+  }
+}
+
+/** Receita com peso final vira um item "por 100 g", para registrar em gramas no diário. */
+export function receitaComoItem(r: { id: string; nome: string; ingredientes: Alimento[]; porcoes: number; peso_final_g: number | null }): ItemBase | null {
+  if (!r.peso_final_g || r.peso_final_g <= 0) return null
+  const t = totaisIngredientes(r.ingredientes)
+  const f = 100 / r.peso_final_g
+  const p = r.porcoes > 0 ? r.porcoes : 1
+  return {
+    id: `receita-${r.id}`, nome: r.nome, fonte: 'receita',
+    detalhe: `Receita · ${Math.round(r.peso_final_g).toLocaleString('pt-BR')} g pronta`,
+    kcal: um(t.calorias * f), proteina: um(t.proteina_g * f), carboidrato: um(t.carboidrato_g * f), gordura: um(t.gordura_g * f),
+    porcaoG: r.peso_final_g / p, porcaoRotulo: 'porção',
   }
 }
 

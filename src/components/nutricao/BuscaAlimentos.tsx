@@ -11,7 +11,7 @@ import { Button, Input, Spinner } from '../UI'
 import { fmt } from './Graficos'
 import LeitorCodigo from './LeitorCodigo'
 
-const ROTULO_FONTE: Record<ItemBase['fonte'], string> = { taco: 'TACO', off: 'Produto', ia: 'IA', rotulo: 'Rótulo' }
+const ROTULO_FONTE: Record<ItemBase['fonte'], string> = { taco: 'TACO', off: 'Produto', ia: 'IA', rotulo: 'Rótulo', receita: 'Receita' }
 
 /** Guarda no banco compartilhado sem travar a pessoa se falhar (ex.: limite diário). */
 async function guardar(item: Omit<ItemBase, 'id' | 'detalhe'>, fallback: ItemBase): Promise<ItemBase> {

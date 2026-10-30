@@ -7,7 +7,7 @@ export interface ItemBase {
   nome: string
   /** Texto curto abaixo do nome (categoria, marca) */
   detalhe: string
-  fonte: 'taco' | 'off' | 'rotulo' | 'ia'
+  fonte: 'taco' | 'off' | 'rotulo' | 'ia' | 'receita'
   /** Valores por 100 g (ou 100 ml) */
   kcal: number
   proteina: number
@@ -152,7 +152,8 @@ const REGRAS: [RegExp, Medida[]][] = [
 const LIQUIDO = /^(leite\b(?!.*\b(po|condensado|em po)\b)|suco|refrigerante|bebida|cerveja|vinho|agua|cha\b|cafe, infusao|cafe com leite|caldo|energetico|isotonico|kefir|achocolatado liquido|leite fermentado)/
 const CREMOSO = /^(iogurte|acai|sopa|vitamina|mingau|creme|coalhada|smoothie)/
 export type TipoMedida = 'solido' | 'liquido' | 'cremoso'
-export function tipoMedida(item: Pick<ItemBase, 'nome' | 'detalhe' | 'porcaoRotulo'>): TipoMedida {
+export function tipoMedida(item: Pick<ItemBase, 'nome' | 'detalhe' | 'porcaoRotulo'> & { fonte?: ItemBase['fonte'] }): TipoMedida {
+  if (item.fonte === 'receita') return 'solido' // o peso final é informado em gramas
   const nome = semAcento(item.nome)
   if (CREMOSO.test(nome)) return 'cremoso'
   if (LIQUIDO.test(nome) || /^bebidas/i.test(item.detalhe) || /\bml\b/i.test(item.porcaoRotulo ?? '')) return 'liquido'

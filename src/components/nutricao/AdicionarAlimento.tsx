@@ -4,7 +4,7 @@ import { X, Search, Star, Plus, Check, Sparkles, Camera, ChevronLeft, ChevronRig
 import { Link } from 'react-router-dom'
 import { listarReceitas } from '../../lib/receitasApi'
 import type { Receita } from '../../lib/receitasApi'
-import { porcaoReceita } from '../../lib/relatorio'
+import { porcaoReceita, receitaComoItem } from '../../lib/relatorio'
 import { estimarAlimentoTexto, analisarImagemAlimento } from '../../lib/foodAI'
 import type { FoodEstimate } from '../../lib/foodAI'
 import { REFEICOES, chaveAlimento, grupoRefeicao } from '../../lib/diario'
@@ -146,7 +146,7 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
     const medidas = base ? medidasDe(base) : []
     return (
       <Folha titulo={titulo} onClose={onClose}
-        rodape={<Button size="lg" className="w-full" loading={salvando} onClick={async () => { await adicionar([final], base ? 'busca' : aba === 'favoritos' ? 'favorito' : 'recente', false); fecharDetalhe() }}>{ingrediente ? 'Adicionar à receita' : `Adicionar a ${refeicao}`}</Button>}>
+        rodape={<Button size="lg" className="w-full" loading={salvando} onClick={async () => { await adicionar([final], aba === 'receitas' ? 'receita' : base ? 'busca' : aba === 'favoritos' ? 'favorito' : 'recente', false); fecharDetalhe() }}>{ingrediente ? 'Adicionar à receita' : `Adicionar a ${refeicao}`}</Button>}>
         <div className="flex items-start gap-2 animate-fade-up">
           <div className="flex-1 min-w-0">
             <p className="text-xl font-bold text-zinc-50">{final.nome}</p>
@@ -175,7 +175,7 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
     )
   }
 
-  const lista = (itens: Alimento[] | null, origem: string, vazio: ReactNode) => itens === null ? <div className="flex justify-center py-8"><Spinner /></div>
+  const lista = (itens: Alimento[] | null, origem: string, vazio: ReactNode, abrirItem: (a: Alimento, i: number) => void = abrir) => itens === null ? <div className="flex justify-center py-8"><Spinner /></div>
     : itens.length === 0 ? vazio : (
       <ul className="flex flex-col gap-2">
         {itens.map((a, idx) => {
@@ -184,7 +184,7 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
           return (
             <li key={k} className="animate-fade-up" style={{ animationDelay: `${Math.min(idx, 10) * 30}ms` }}>
               <div className="flex items-center gap-1 bg-zinc-800/40 hover:bg-zinc-800/80 border border-zinc-800 rounded-2xl pr-1.5 transition">
-                <button type="button" onClick={() => abrir(a)} className="flex-1 min-w-0 text-left pl-3.5 py-2">
+                <button type="button" onClick={() => abrirItem(a, idx)} className="flex-1 min-w-0 text-left pl-3.5 py-2">
                   <span className="block text-sm font-semibold text-zinc-100 truncate">{a.nome}</span>
                   <span className="flex items-center gap-1 text-xs text-zinc-500 min-w-0"><span className="truncate">{fmt(a.calorias)} kcal · {a.quantidade || '1 porção'}</span><ChevronRight className="w-3.5 h-3.5 shrink-0" /></span>
                 </button>
@@ -259,7 +259,11 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
                 <p className="text-zinc-300 font-semibold">Nenhuma receita ainda</p>
                 <p className="text-sm text-zinc-500 mt-1">Monte uma receita com os ingredientes e o rendimento. O app calcula as calorias por porção.</p>
               </div>
-            ) : lista(receitas.map(r => porcaoReceita(r.nome, r.ingredientes, r.porcoes)), 'receita', null)}
+            ) : lista(receitas.map(r => porcaoReceita(r.nome, r.ingredientes, r.porcoes, r.peso_final_g)), 'receita', null, (a, i) => {
+              // Com peso final, abre com as medidas (porção ou gramas)
+              const item = receitaComoItem(receitas[i])
+              if (item) abrirBase(item); else abrir(a)
+            })}
           <Link to="/receitas/nova" onClick={onClose} className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-700 py-3 text-sm font-semibold text-green-400 hover:border-green-500/50">
             <Plus className="w-4 h-4" />Criar receita
           </Link>

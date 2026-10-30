@@ -34,6 +34,11 @@ BEGIN
   ok := FALSE; BEGIN INSERT INTO public.receitas (user_id, nome, ingredientes) VALUES (b, 'X', '{"a":1}');
   EXCEPTION WHEN check_violation THEN ok := TRUE; END;
   IF NOT ok THEN RAISE EXCEPTION 'FALHA 4: ingredientes fora de lista aceito'; END IF; n := n + 1;
+  UPDATE public.receitas SET peso_final_g = 1400 WHERE id = rid RETURNING peso_final_g INTO v;
+  IF v IS DISTINCT FROM 1400 THEN RAISE EXCEPTION 'FALHA 4b: peso final'; END IF; n := n + 1;
+  ok := FALSE; BEGIN UPDATE public.receitas SET peso_final_g = 0 WHERE id = rid;
+  EXCEPTION WHEN check_violation THEN ok := TRUE; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALHA 4c: peso final 0 aceito'; END IF; n := n + 1;
   ok := FALSE; BEGIN INSERT INTO public.receitas (user_id, nome) VALUES (a, 'Em nome de A');
   EXCEPTION WHEN insufficient_privilege THEN ok := TRUE; END;
   IF NOT ok THEN RAISE EXCEPTION 'FALHA 5: B criou receita em nome de A'; END IF; n := n + 1;

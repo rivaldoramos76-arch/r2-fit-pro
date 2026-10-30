@@ -5,21 +5,23 @@ export interface Receita {
   id: string
   nome: string
   porcoes: number
+  /** Peso da receita pronta, em gramas (opcional) */
+  peso_final_g: number | null
   ingredientes: Alimento[]
   modo_preparo: string | null
   updated_at?: string
 }
 
-const normalizar = (r: Receita): Receita => ({ ...r, porcoes: Number(r.porcoes), ingredientes: Array.isArray(r.ingredientes) ? r.ingredientes : [] })
+const normalizar = (r: Receita): Receita => ({ ...r, porcoes: Number(r.porcoes), peso_final_g: r.peso_final_g == null ? null : Number(r.peso_final_g), ingredientes: Array.isArray(r.ingredientes) ? r.ingredientes : [] })
 
 export async function listarReceitas(userId: string): Promise<Receita[]> {
-  const { data, error } = await supabase.from('receitas').select('id, nome, porcoes, ingredientes, modo_preparo, updated_at').eq('user_id', userId).order('nome')
+  const { data, error } = await supabase.from('receitas').select('id, nome, porcoes, peso_final_g, ingredientes, modo_preparo, updated_at').eq('user_id', userId).order('nome')
   if (error) throw new Error(error.message)
   return ((data as Receita[]) ?? []).map(normalizar)
 }
 
 export async function buscarReceita(id: string): Promise<Receita | null> {
-  const { data } = await supabase.from('receitas').select('id, nome, porcoes, ingredientes, modo_preparo').eq('id', id).maybeSingle()
+  const { data } = await supabase.from('receitas').select('id, nome, porcoes, peso_final_g, ingredientes, modo_preparo').eq('id', id).maybeSingle()
   return data ? normalizar(data as Receita) : null
 }
 
@@ -28,9 +30,9 @@ export async function salvarReceita(userId: string, r: Omit<Receita, 'id'> & { i
     nome: i.nome, quantidade: i.quantidade, calorias: Math.round(i.calorias),
     proteina_g: i.proteina_g, carboidrato_g: i.carboidrato_g, gordura_g: i.gordura_g,
   }))
-  const corpo = { user_id: userId, nome: r.nome.trim(), porcoes: r.porcoes, ingredientes, modo_preparo: r.modo_preparo?.trim() || null }
+  const corpo = { user_id: userId, nome: r.nome.trim(), porcoes: r.porcoes, peso_final_g: r.peso_final_g || null, ingredientes, modo_preparo: r.modo_preparo?.trim() || null }
   const q = r.id ? supabase.from('receitas').update(corpo).eq('id', r.id) : supabase.from('receitas').insert(corpo)
-  const { data, error } = await q.select('id, nome, porcoes, ingredientes, modo_preparo').single()
+  const { data, error } = await q.select('id, nome, porcoes, peso_final_g, ingredientes, modo_preparo').single()
   if (error) throw new Error(error.message)
   return normalizar(data as Receita)
 }

@@ -37,14 +37,14 @@ export function ListaReceitas() {
         ) : (
           <ul className="flex flex-col gap-2">
             {lista.map((r, i) => {
-              const p = porcaoReceita(r.nome, r.ingredientes, r.porcoes)
+              const p = porcaoReceita(r.nome, r.ingredientes, r.porcoes, r.peso_final_g)
               return (
                 <li key={r.id} className="animate-fade-up" style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}>
                   <Link to={`/receitas/${r.id}`} className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl px-4 py-3 transition">
                     <span className="w-10 h-10 rounded-xl bg-green-500/15 flex items-center justify-center shrink-0"><ChefHat className="w-5 h-5 text-green-400" /></span>
                     <span className="flex-1 min-w-0">
                       <span className="block font-semibold text-zinc-100 truncate">{r.nome}</span>
-                      <span className="block text-xs text-zinc-500">{fmt(p.calorias)} kcal por porção · rende {numeroBR(r.porcoes)} · {r.ingredientes.length} ingrediente(s)</span>
+                      <span className="block text-xs text-zinc-500">{fmt(p.calorias)} kcal por porção · rende {numeroBR(r.porcoes)}{r.peso_final_g ? ` · ${numeroBR(r.peso_final_g)} g` : ''} · {r.ingredientes.length} ingrediente(s)</span>
                     </span>
                     <ChevronRight className="w-5 h-5 text-zinc-600" />
                   </Link>
@@ -66,6 +66,7 @@ export function EditorReceita() {
   const [nome, setNome] = useState('')
   const [porcoes, setPorcoes] = useState(4)
   const [porcoesTxt, setPorcoesTxt] = useState<string | null>(null)
+  const [pesoTxt, setPesoTxt] = useState('')
   const [ingredientes, setIngredientes] = useState<Alimento[]>([])
   const [preparo, setPreparo] = useState('')
   const [adicionando, setAdicionando] = useState(false)
@@ -77,21 +78,24 @@ export function EditorReceita() {
   useEffect(() => {
     if (!id) return
     buscarReceita(id).then(r => {
-      if (r) { setNome(r.nome); setPorcoes(r.porcoes); setIngredientes(r.ingredientes); setPreparo(r.modo_preparo ?? '') }
+      if (r) { setNome(r.nome); setPorcoes(r.porcoes); setPesoTxt(r.peso_final_g ? numeroBR(r.peso_final_g) : ''); setIngredientes(r.ingredientes); setPreparo(r.modo_preparo ?? '') }
       setCarregando(false)
     })
   }, [id])
 
   const adicionar = useCallback((novos: Alimento[]) => setIngredientes(l => [...l, ...novos]), [])
   const total = totaisIngredientes(ingredientes)
-  const porcao = porcaoReceita(nome || 'Receita', ingredientes, porcoes)
+  const pesoNum = Number(pesoTxt.replace(/\./g, '').replace(',', '.'))
+  const pesoFinal = pesoTxt.trim() && pesoNum > 0 ? pesoNum : null
+  const porcao = porcaoReceita(nome || 'Receita', ingredientes, porcoes, pesoFinal)
 
   const salvar = async () => {
     if (!nome.trim()) { setErro('Dê um nome para a receita.'); return }
     if (!ingredientes.length) { setErro('Adicione pelo menos um ingrediente.'); return }
+    if (pesoTxt.trim() && !(pesoNum > 0 && pesoNum <= 50000)) { setErro('Peso final inválido: use gramas, até 50.000 g.'); return }
     setErro(''); setSalvando(true)
     try {
-      await salvarReceita(user!.id, { id, nome, porcoes, ingredientes, modo_preparo: preparo })
+      await salvarReceita(user!.id, { id, nome, porcoes, peso_final_g: pesoFinal, ingredientes, modo_preparo: preparo })
       navigate('/receitas')
     } catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível salvar'); setSalvando(false) }
   }
@@ -124,6 +128,15 @@ export function EditorReceita() {
             <button type="button" onClick={() => setPorcoes(p => Math.min(100, p + 1))} aria-label="Mais uma porção" className="w-10 h-10 rounded-xl bg-zinc-900 flex items-center justify-center active:scale-95"><Plus className="w-4 h-4" /></button>
           </div>
         </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="peso-final" className="text-sm font-medium text-zinc-300">Peso final da receita pronta (opcional)</label>
+          <div className="relative w-40">
+            <input id="peso-final" value={pesoTxt} onChange={e => setPesoTxt(e.target.value.replace(/[^\d.,]/g, ''))} inputMode="decimal" placeholder="Ex.: 1400"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl pl-4 pr-9 py-2.5 text-zinc-100 placeholder-zinc-500 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">g</span>
+          </div>
+          <p className="text-xs text-zinc-500">Pese a comida pronta (sem a panela). Assim, no diário, você registra em gramas o que colocou no prato.</p>
+        </div>
       </section>
 
       <section aria-label="Por porção" className="rounded-3xl border border-green-500/25 bg-gradient-to-br from-green-500/10 via-zinc-900 to-zinc-900 p-4">
@@ -134,7 +147,7 @@ export function EditorReceita() {
           <p className="text-zinc-500">Proteína <span className="block text-sm font-semibold text-emerald-400">{fmt(porcao.proteina_g)}g</span></p>
           <p className="text-zinc-500">Gordura <span className="block text-sm font-semibold text-amber-400">{fmt(porcao.gordura_g)}g</span></p>
         </div>
-        <p className="text-[11px] text-zinc-500 mt-2">Receita inteira: {fmt(total.calorias)} kcal</p>
+        <p className="text-[11px] text-zinc-500 mt-2">Receita inteira: {fmt(total.calorias)} kcal{pesoFinal ? ` · cada porção ≈ ${fmt(Math.round(pesoFinal / porcoes))} g · 100 g = ${fmt(Math.round(total.calorias * 100 / pesoFinal))} kcal` : ''}</p>
       </section>
 
       <section aria-label="Ingredientes" className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">

@@ -23,7 +23,7 @@ const registro = (refeicao, nome, quantidade, calorias, i) => ({ id: 'f' + i, us
 const REGISTROS = [registro('Café da manhã', 'Pão francês', '1 unidade', 135, 1), registro('Lanche da tarde', 'Banana prata', '1 unidade', 89, 2)]
 const isoDiasAtras = n => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const PESOS = [{ id: 'p1', data: isoDiasAtras(20), peso_kg: 84.1 }, { id: 'p2', data: isoDiasAtras(10), peso_kg: 83.4 }, { id: 'p3', data: isoDiasAtras(2), peso_kg: 82.6 }]
-const RECEITA = { id: 'r1', nome: 'Frango com arroz', porcoes: 4, modo_preparo: null, updated_at: '2026-10-28T00:00:00Z', ingredientes: [
+const RECEITA = { id: 'r1', nome: 'Frango com arroz', porcoes: 4, peso_final_g: 1200, modo_preparo: null, updated_at: '2026-10-28T00:00:00Z', ingredientes: [
   { nome: 'Frango', quantidade: '500 g', calorias: 800, proteina_g: 150, carboidrato_g: 0, gordura_g: 18 },
   { nome: 'Arroz', quantidade: '300 g', calorias: 384, proteina_g: 7.5, carboidrato_g: 84.3, gordura_g: 0.6 }] }
 const META = { user_id: UID, sexo: 'masculino', nascimento: '1990-05-10', altura_cm: 178, peso_kg: 82, atividade: 'moderado', objetivo: 'perder', ritmo_kg_semana: 0.5, calorias: 2280, proteina_g: 164, carboidrato_g: 233, gordura_g: 76, personalizada: false, somar_exercicio: false }
@@ -557,11 +557,13 @@ await t('receitas: montar com ingredientes da busca e adicionar ao diário por p
   await folha.waitFor({ state: 'detached' })
   await page.getByRole('region', { name: 'Ingredientes' }).getByText('1 escumadeira cheia (90 g)').waitFor()
   await page.getByRole('region', { name: 'Por porção' }).getByText('29').waitFor() // 115 kcal / 4 porções
+  await page.getByLabel(/Peso final da receita pronta/).fill('460')
+  await page.getByRole('region', { name: 'Por porção' }).getByText(/cada porção ≈ 115 g · 100 g = 25 kcal/).waitFor()
   await page.screenshot({ path: `${SHOTS}/receita.png`, fullPage: true })
   await page.getByRole('button', { name: 'Salvar receita' }).click()
   await page.waitForURL(/\/receitas$/)
   const nova = page.gravacoes.find(x => x.tabela === 'receitas' && x.metodo === 'POST')
-  assert.equal(nova?.corpo?.nome, 'Arroz da semana'); assert.equal(nova?.corpo?.porcoes, 4); assert.equal(nova?.corpo?.ingredientes?.[0]?.calorias, 115)
+  assert.equal(nova?.corpo?.nome, 'Arroz da semana'); assert.equal(nova?.corpo?.porcoes, 4); assert.equal(nova?.corpo?.ingredientes?.[0]?.calorias, 115); assert.equal(nova?.corpo?.peso_final_g, 460)
   // No diário: aba Receitas adiciona 1 porção
   await page.goto(BASE + '/calorias')
   await page.getByRole('button', { name: 'Adicionar alimento' }).first().click()
@@ -569,7 +571,15 @@ await t('receitas: montar com ingredientes da busca e adicionar ao diário por p
   await page.getByRole('dialog').getByRole('button', { name: 'Adicionar Frango com arroz' }).click()
   await page.waitForTimeout(300)
   const log = page.gravacoes.filter(x => x.tabela === 'food_logs' && x.metodo === 'POST').pop()
-  assert.equal(log?.corpo?.[0]?.nome, 'Frango com arroz'); assert.equal(log?.corpo?.[0]?.quantidade, '1 porção'); assert.equal(log?.corpo?.[0]?.calorias, 296); assert.equal(log?.corpo?.[0]?.origem, 'receita')
+  assert.equal(log?.corpo?.[0]?.nome, 'Frango com arroz'); assert.equal(log?.corpo?.[0]?.quantidade, '1 porção (300 g)'); assert.equal(log?.corpo?.[0]?.calorias, 296); assert.equal(log?.corpo?.[0]?.origem, 'receita')
+  // Com peso final (1200 g), registra em gramas: 150 g do prato
+  await page.getByRole('dialog').getByText('Frango com arroz').click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Em gramas' }).click()
+  await page.getByRole('dialog').getByLabel('Quantidade').fill('150')
+  await page.getByRole('dialog').getByRole('button', { name: /^Adicionar a [A-ZÁ]/ }).click()
+  await page.waitForTimeout(300)
+  const prato = page.gravacoes.filter(x => x.tabela === 'food_logs' && x.metodo === 'POST').pop()?.corpo?.[0]
+  assert.equal(prato?.quantidade, '150 g'); assert.ok(Math.abs(prato?.calorias - 148) <= 1, `150 g ≈ 148 kcal (${prato?.calorias})`); assert.equal(prato?.origem, 'receita')
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
