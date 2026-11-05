@@ -79,7 +79,7 @@ let ok = 0
 const erros = []
 const t = async (nome, f) => { try { await f(); ok++; console.log('✓', nome) } catch (e) { erros.push(nome); console.log('✗', nome, '\n   ', e.message.split('\n')[0]) } }
 
-async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, asaas = false, nutricao = false, treino = false, personal = false, amigos = false, userAgent, instalado = Boolean(userAgent), viewport = { width: 390, height: 844 } } = {}) {
+async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, asaas = false, nutricao = false, treino = false, personal = false, amigos = false, renovacao = false, userAgent, instalado = Boolean(userAgent), viewport = { width: 390, height: 844 } } = {}) {
   const chamadasBilling = []
   const gravacoes = []
   const ctx = await browser.newContext({ viewport, ...(userAgent ? { userAgent } : {}) })
@@ -98,6 +98,16 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
     if (p.startsWith('/auth/v1/user')) return json(usuario)
     if (p.startsWith('/auth/v1/token')) return json(sessao)
     if (p === '/rest/v1/rpc/meu_acesso') return acessoFalha ? json({ message: 'erro' }, 500) : json({ estado, premium, admin, teste_ate: testeAte })
+    if (renovacao) {
+      const objeto = rota.request().headers()['accept']?.includes('vnd.pgrst.object')
+      if (p === '/rest/v1/subscriptions') {
+        const sub = { id: 's1', status: 'ativa', plano_nome: 'R2 Fit Pro Premium', preco_centavos: 1990, iniciada_em: new Date(Date.now() - 27 * 86400000).toISOString(),
+          periodo_atual_fim: new Date(Date.now() + 3 * 86400000).toISOString(), proxima_cobranca: null, cancelada_em: null, created_at: new Date(Date.now() - 27 * 86400000).toISOString(),
+          modalidade: 'recorrente', meses_periodo: 1, provider: 'asaas' }
+        return json(objeto ? sub : [sub])
+      }
+      if (p === '/rest/v1/payments') return json(objeto ? { metodo: 'debit_card' } : [{ metodo: 'debit_card' }])
+    }
     if (amigos) {
       const grava = nome => gravacoes.push({ tabela: nome, corpo: rota.request().postDataJSON() })
       const ativo = gravacoes.some(g => g.tabela === 'social_ativar')
@@ -195,6 +205,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       const corpo = rota.request().postDataJSON() ?? {}
       chamadasBilling.push(corpo)
       if (!pagamentos) return json({ pagamentos_configurados: false, modo_teste: false })
+      if (corpo.acao === 'asaas_fatura') return json({ url: BASE + '/assinatura/retorno?origem=asaas', vencimento: null, valor_centavos: 1990 })
       if (asaas && corpo.acao === 'config') return json({ pagamentos_configurados: true, modo_teste: false, provedor: 'asaas', asaas_cliente: false, public_key: null })
       if (asaas && (corpo.acao === 'asaas_assinar' || corpo.acao === 'asaas_avulso')) return json({ url: BASE + '/assinatura/retorno?origem=asaas' })
       if (corpo.acao === 'checkout_avulso') return checkoutFalha ? json({ erro: 'Mercado Pago: pagamento indisponível' }, 400) : json({ url: BASE + '/assinatura/retorno?status=approved&payment_id=123' })
@@ -1156,6 +1167,18 @@ await t('celular: o app exige instalar na tela inicial (com saída de emergênci
   await c3.page.getByText('Calorias').first().waitFor()
   assert.equal(await c3.page.getByRole('heading', { name: 'Instale o R2 Fit Pro' }).count(), 0)
   await c3.ctx.close()
+})
+
+await t('renovação: quem pagou no débito vê o aviso de vencimento e paga a fatura', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, renovacao: true, pagamentos: true })
+  await page.goto(BASE + '/dashboard')
+  const aviso = page.getByRole('region', { name: 'Renovação da assinatura' })
+  await aviso.getByText('Sua assinatura vence em 3 dias').waitFor()
+  await page.screenshot({ path: `${SHOTS}/renovacao-debito.png` })
+  await aviso.getByRole('button', { name: 'Pagar a fatura' }).click()
+  await page.waitForURL(/assinatura\/retorno/)
+  assert.ok(page.chamadasBilling.some(c => c.acao === 'asaas_fatura'))
+  await ctx.close()
 })
 
 await t('falha de rede ao verificar acesso mostra erro e opção de tentar novamente', async () => {

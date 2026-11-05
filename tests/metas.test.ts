@@ -8,6 +8,7 @@ import { comPadroes, proximoHorarioAgua, resumoDias, normalizarLembrete } from '
 import { carregarTaco, buscarBase, medidasDe, paraAlimento } from '../src/lib/alimentosBase'
 import { alertasAluno, ordenarAlunos, normalizarCodigo, linkConvite, diasDesde, horaMensagem, type AlunoResumo } from '../src/lib/acompanhamentoBase'
 import { posicoesRanking, tempoRelativo, textoCurtidas } from '../src/lib/amigosBase'
+import { diasAvisoRenovacao, textoVencimento } from '../src/lib/renovacao'
 import { grupoRefeicao, escalarAlimento, recentesUnicos, lerQuantidade, ajustarQuantidade, passoQuantidade, pesoDaQuantidade, alimentoEmPeso } from '../src/lib/diario'
 
 let ok = 0
@@ -338,6 +339,17 @@ await t('amigos: ranking com empate e medalhas, tempo relativo e quem curtiu', (
   assert.equal(textoCurtidas(['Bia', 'Caio'], 2), 'Bia e Caio')
   assert.equal(textoCurtidas(['Bia', 'Caio', 'Ana'], 5), 'Bia, Caio e mais 3')
   assert.equal(textoCurtidas(null, 0), '')
+})
+
+await t('renovação: aviso só para quem não pagou no cartão de crédito, perto do vencimento', () => {
+  const agora = new Date('2026-12-01T12:00:00Z')
+  assert.equal(diasAvisoRenovacao({ metodo: 'debit_card', status: 'ativa', fim: '2026-12-05T15:00:00Z' }, agora), 5)
+  assert.equal(diasAvisoRenovacao({ metodo: 'debit_card', status: 'ativa', fim: '2026-12-20T15:00:00Z' }, agora), null)
+  assert.equal(diasAvisoRenovacao({ metodo: 'credit_card', status: 'ativa', fim: '2026-12-02T15:00:00Z' }, agora), null)
+  assert.equal(diasAvisoRenovacao({ metodo: 'pix', status: 'inadimplente', fim: '2026-11-29T15:00:00Z' }, agora), -1)
+  assert.equal(diasAvisoRenovacao({ metodo: 'debit_card', status: 'cancelada', fim: '2026-12-02T15:00:00Z' }, agora), null)
+  assert.equal(textoVencimento(0), 'Sua assinatura vence hoje'); assert.equal(textoVencimento(1), 'Sua assinatura vence amanhã')
+  assert.equal(textoVencimento(3), 'Sua assinatura vence em 3 dias'); assert.equal(textoVencimento(-1), 'Sua assinatura venceu')
 })
 
 console.log(`\n${ok} testes de metas e diário passaram`)

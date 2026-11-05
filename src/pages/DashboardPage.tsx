@@ -12,6 +12,7 @@ import { REFEICOES, grupoRefeicao, hojeLocal } from '../lib/diario'
 import type { Refeicao } from '../lib/diario'
 import { AnelCalorias, BarraMacro, fmt } from '../components/nutricao/Graficos'
 import InstalarApp from '../components/InstalarApp'
+import AvisoRenovacao from '../components/AvisoRenovacao'
 import { useNaoLidas } from '../lib/acompanhamento'
 import CartaoAgua from '../components/progresso/CartaoAgua'
 import GraficoPeso from '../components/progresso/GraficoPeso'
@@ -108,6 +109,8 @@ export default function DashboardPage() {
           <ChevronRight className="w-4 h-4 text-green-300" />
         </Link>
       )}
+
+      {user && <AvisoRenovacao userId={user.id} />}
 
       {/* Calorias do dia */}
       <section aria-label="Calorias de hoje" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 animate-fade-up" style={{ animationDelay: '60ms' }}>

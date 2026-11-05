@@ -42,7 +42,7 @@ export default function Exercicios({ userId, data, pesoKg, somarExercicio, onMud
             <li key={e.id} className="flex items-center gap-2 pl-4 pr-2 py-2.5">
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-zinc-100 truncate">{e.nome}</p>
-                <p className="text-xs text-zinc-500">{e.duracao_min} min{e.origem === 'ia' ? ' · estimado pela IA' : ''}</p>
+                <p className="text-xs text-zinc-500">{e.duracao_min} min{e.origem === 'ia' ? ' · estimado pela IA' : e.origem === 'treino' ? ' · do seu treino (estimado)' : ''}</p>
               </div>
               <span className="text-sm font-semibold tabular-nums text-orange-300">{fmt(e.calorias)}</span>
               <button onClick={() => remover(e.id)} aria-label={`Remover ${e.nome}`} className="p-2 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-zinc-800"><Trash2 className="w-4 h-4" /></button>

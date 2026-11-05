@@ -153,6 +153,33 @@ export async function handleBilling(req: Request): Promise<Response> {
       return json(req, { url: pag.invoiceUrl })
     }
 
+    // Fatura em aberto da assinatura Asaas (quem pagou no débito renova pagando a fatura do mês)
+    if (acao === 'asaas_fatura') {
+      const { data: sub } = await admin.from('subscriptions').select('provider_subscription_id')
+        .eq('user_id', user.id).eq('provider', 'asaas').eq('modalidade', 'recorrente').in('status', ['ativa', 'inadimplente'])
+        .not('provider_subscription_id', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      if (!sub) throw new ErroHttp(404, 'Nenhuma assinatura encontrada.')
+      const id = encodeURIComponent(sub.provider_subscription_id!)
+      // Pago no débito não renova sozinho: a fatura passa a aceitar Pix, boleto e cartão
+      const atual = await asaas('GET', `/subscriptions/${id}`)
+      if (atual?.billingType === 'CREDIT_CARD') {
+        const ultimas = await asaas('GET', `/payments?subscription=${id}&limit=5`)
+        // deno-lint-ignore no-explicit-any
+        if ((ultimas?.data ?? []).some((p: any) => p.billingType === 'DEBIT_CARD')) {
+          await asaas('PUT', `/subscriptions/${id}`, { billingType: 'UNDEFINED', updatePendingPayments: true })
+            .catch(e => log('warn', 'asaas_fatura_tipo', { erro: String(e) }))
+        }
+      }
+      const [vencidas, pendentes] = await Promise.all([
+        asaas('GET', `/payments?subscription=${id}&status=OVERDUE&limit=5`),
+        asaas('GET', `/payments?subscription=${id}&status=PENDING&limit=5`),
+      ])
+      // deno-lint-ignore no-explicit-any
+      const abertas = [...(vencidas?.data ?? []), ...(pendentes?.data ?? [])].sort((a: any, b: any) => String(a.dueDate).localeCompare(String(b.dueDate)))
+      const f = abertas[0]
+      return json(req, f ? { url: f.invoiceUrl ?? null, vencimento: f.dueDate ?? null, valor_centavos: Math.round(Number(f.value) * 100) } : { url: null })
+    }
+
     // Assinatura mensal no cartão sem conta Mercado Pago (cartão tokenizado no navegador pelo Card Payment Brick)
     if (acao === 'assinar_cartao') {
       const plano = await planoParaVenda(admin, user)

@@ -9,6 +9,7 @@ import { chamarApi, ErroApi } from '../lib/api'
 import { brl, cpfValido, dataBR, mascaraCpf, ROTULO_ESTADO } from '../lib/formatos'
 import { Badge, Button, Card, Input, Spinner } from '../components/UI'
 import CartaoMercadoPago from '../components/CartaoMercadoPago'
+import AvisoRenovacao from '../components/AvisoRenovacao'
 
 interface Assinatura {
   id: string
@@ -251,6 +252,8 @@ export default function AssinaturaPage() {
           acaoExtra2={sugerirOutraForma ? { rotulo: 'Assinar pela página do Mercado Pago', onClick: () => { setSugerirOutraForma(false); assinar() } } : undefined} />
       )}
       {aviso && !erro && <Popup tipo="ok" texto={aviso} onFechar={() => setAviso('')} />}
+
+      {user && <AvisoRenovacao userId={user.id} />}
 
       {estado === 'admin' && (
         <Card><p className="text-sm text-zinc-300">Contas administrativas têm acesso completo sem assinatura.</p></Card>

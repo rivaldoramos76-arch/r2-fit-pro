@@ -31,6 +31,7 @@ criado exclusivamente por `billing_registrar_pagamento` com pagamento aprovado c
 - O webhook responde 200 mesmo quando o processamento falha (o Asaas pausa a fila após erros seguidos); o evento fica com status `erro` no painel e o app reconsulta o Asaas ao abrir (`sincronizar`).
 - Fluxo: na primeira compra o cliente informa o CPF (exigido pelo Asaas) e o app cria o cliente (`asaas_clientes`). Mensal recorrente → assinatura `CREDIT_CARD` e o cliente paga na fatura segura do Asaas. Avulso (1 ou 12 meses) → cobrança `UNDEFINED` (Pix, boleto ou cartão), referência `<user>:avulso:<meses>`.
 - Cancelar apaga a assinatura no Asaas; "Desistir e pedir reembolso" estorna a cobrança (`/payments/{id}/refund`). Excluir a conta apaga a assinatura.
+- Aviso de renovação (desde 05/11/2026): quem paga a mensalidade no débito, Pix ou boleto (assinatura cujo último pagamento não foi no cartão de crédito) vê no Início e na tela Assinatura, 5 dias antes do vencimento, "Sua assinatura vence em X dias" com o botão "Pagar a fatura". O botão chama `/billing` ação `asaas_fatura`: se a assinatura está como `CREDIT_CARD` mas o último pagamento foi no débito, ela passa para `UNDEFINED` (Pix, boleto ou cartão) e a fatura em aberto mais antiga é aberta no Asaas. Cartão de débito não renova sozinho.
 - Limitação: troca de cartão da assinatura Asaas ainda não tem tela no app — o cliente cancela e assina de novo, ou fala com o suporte.
 
 ### 1. Mercado Pago (obrigatório para vender)
@@ -126,7 +127,7 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 22. `20261105120000_desconto_personal.sql` — desconto do personal por aluno pagante (`acomp_desconto_personal`, `acomp_meu_desconto`), acesso bônus de quem tem 5+ alunos pagantes (`acomp_rotina_bonus`, de hora em hora) e a rotina diária que ajusta a mensalidade no Asaas (`acomp_rotina_descontos`).
 
 ## Testes
-- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/Asaas/e-mails/lembretes/avisos e desconto do personal (20) + meta diária, diário, busca, exercício, peso, receitas, relatório semanal, lembretes, foto do prato, cartões de compartilhar, alertas do personal e ranking de amigos (23).
+- `npm test` — lógica de treinos (17) + lógica comercial/Mercado Pago/Asaas/e-mails/lembretes/avisos e desconto do personal (20) + meta diária, diário, busca, exercício, peso, receitas, relatório semanal, lembretes, foto do prato, cartões de compartilhar, alertas do personal e ranking de amigos, aviso de renovação (24).
 - `tests/sql/rls_billing.test.sql` — 79 verificações de RLS, permissões e cobrança; executa num bloco que reverte tudo (resultado esperado: `TESTES_OK (79)`).
 - `tests/sql/nutricao.test.sql` — 17 verificações de RLS da meta diária e dos favoritos (resultado esperado: `TESTES_OK (17)`).
 - `tests/sql/admin_acesso.test.sql` — 16 verificações das ações do administrador e da edição no diário (resultado esperado: `TESTES_OK (16)`).
@@ -138,7 +139,7 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 - `tests/sql/desconto_personal.test.sql` — 12 verificações do desconto do personal: 20% por aluno, mínimo de R$ 5, grátis com 5, acesso bônus, aluno contado para um personal só e quem pode consultar (resultado esperado: `TESTES_OK (12)`).
 - `tests/sql/amigos.test.sql` — 21 verificações dos amigos: pedidos, feed só de amigos, privacidade, curtidas, ranking e exclusão (resultado esperado: `TESTES_OK (21)`).
 - `tests/sql/asaas.test.sql` — 9 verificações do Asaas: assinatura pendente até o pagamento, pagamento libera acesso, provedores separados, duplicata, cancelamento com período vigente, avulso, tabelas fechadas e limpeza ao excluir a conta (resultado esperado: `TESTES_OK (9)`).
-- `tests/e2e/ui.test.mjs` — 41 testes de interface (Playwright, celular e desktop) com API simulada.
+- `tests/e2e/ui.test.mjs` — 43 testes de interface (Playwright, celular e desktop) com API simulada.
 
 ## Personal e amigos (desde 31/10/2026)
 - **Personal**: em `/personal` o usuário Premium ativa o modo personal e recebe um código (link `r2fitpro.com.br/convite/CÓDIGO`). O aluno (qualquer conta, mesmo sem Premium) aceita e escolhe o que compartilhar; pode mudar ou encerrar quando quiser. O personal acompanha em `/alunos` (lista com alertas: sem treinar há 4+ dias, diário parado, acima da meta) e `/alunos/:id` (resumo da semana, treinos, diário e mensagens). Para editar um treino do aluno, o app copia o treino para a conta do personal, que edita no editor normal e reenvia substituindo o original. Limites: 5 profissionais por aluno, 300 alunos por personal, 300 mensagens por dia.
