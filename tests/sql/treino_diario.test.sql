@@ -1,0 +1,66 @@
+-- Testes do treino no diário: sessão concluída vira exercício com duração e calorias estimadas,
+-- sem duplicar, e sai do diário se for desmarcada. Tudo revertido; esperado: "TESTES_OK (n)".
+DO $t$
+DECLARE
+  u UUID := gen_random_uuid(); tid UUID; sid UUID; sid2 UUID; n INT := 0; cnt INT; r RECORD;
+BEGIN
+  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at)
+  VALUES (u, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'pg-'||u||'@exemplo.invalid', 'x', NOW(), '{}', NOW(), NOW());
+  INSERT INTO public.registros_peso (user_id, data, peso_kg) VALUES (u, CURRENT_DATE, 80);
+  -- Plano: 2 exercícios × 4 séries × (40 + 60 s) = 13 min
+  INSERT INTO public.treinos (user_id, nome, objetivo, nivel, frequencia_semanal, plano)
+  VALUES (u, 'Hipertrofia', 'hipertrofia', 'iniciante', 3, '{"dias": [{"dia": "Treino A", "exercicios": [{"nome": "Supino", "series": "4"}, {"nome": "Remada", "series": "4"}]}]}')
+  RETURNING id INTO tid;
+
+  -- 1. Sessão de 50 min concluída: entra "Musculação · Treino A", 50 min, 4,5 × 80 × 50/60 = 300 kcal
+  INSERT INTO public.sessoes_treino (user_id, treino_id, treino_nome, dia_index, data_inicio, data_fim, concluido, series_realizadas)
+  VALUES (u, tid, 'Hipertrofia', 0, NOW() - INTERVAL '50 minutes', NOW(), TRUE, '{}') RETURNING id INTO sid;
+  SELECT * INTO r FROM public.exercicios_registro WHERE sessao_id = sid;
+  IF r.nome <> 'Musculação · Treino A' OR r.duracao_min <> 50 OR r.calorias <> 300 OR r.origem <> 'treino'
+     OR r.data <> (NOW() AT TIME ZONE 'America/Sao_Paulo')::DATE THEN
+    RAISE EXCEPTION 'FALHA 1: lançamento (% / % / % / %)', r.nome, r.duracao_min, r.calorias, r.data; END IF; n := n + 1;
+
+  -- 2. Atualizar de novo como concluída não duplica
+  UPDATE public.sessoes_treino SET concluido = TRUE WHERE id = sid;
+  SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE user_id = u;
+  IF cnt <> 1 THEN RAISE EXCEPTION 'FALHA 2: duplicou (%)', cnt; END IF; n := n + 1;
+
+  -- 3. Desmarcar tira do diário; marcar de novo volta
+  UPDATE public.sessoes_treino SET concluido = FALSE WHERE id = sid;
+  SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE user_id = u;
+  IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 3: ficou no diário após desmarcar'; END IF; n := n + 1;
+  UPDATE public.sessoes_treino SET concluido = TRUE WHERE id = sid;
+  SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE user_id = u;
+  IF cnt <> 1 THEN RAISE EXCEPTION 'FALHA 4: não voltou ao marcar'; END IF; n := n + 1;
+
+  -- 5. Sessão marcada sem tempo real (2 min): usa o plano (13 min)
+  INSERT INTO public.sessoes_treino (user_id, treino_id, treino_nome, dia_index, data_inicio, data_fim, concluido, series_realizadas)
+  VALUES (u, tid, 'Hipertrofia', 0, NOW() - INTERVAL '2 minutes', NOW(), TRUE, '{}') RETURNING id INTO sid2;
+  SELECT * INTO r FROM public.exercicios_registro WHERE sessao_id = sid2;
+  IF r.duracao_min <> 13 OR r.calorias <> round(4.5 * 80 * 13 / 60.0)::INT THEN
+    RAISE EXCEPTION 'FALHA 5: duração pelo plano (% / %)', r.duracao_min, r.calorias; END IF; n := n + 1;
+
+  -- 6. Lançamento editado pelo aluno não é recriado nem apagado por engano; apagado à mão não volta
+  DELETE FROM public.exercicios_registro WHERE sessao_id = sid2;
+  UPDATE public.sessoes_treino SET series_realizadas = '{"x": [1]}' WHERE id = sid2;
+  SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE sessao_id = sid2;
+  IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 6: voltou após apagar'; END IF; n := n + 1;
+
+  -- 7. Apagar a sessão mantém o exercício no diário (sessao_id vira nulo)
+  DELETE FROM public.sessoes_treino WHERE id = sid;
+  SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE user_id = u AND sessao_id IS NULL AND origem = 'treino';
+  IF cnt <> 1 THEN RAISE EXCEPTION 'FALHA 7: apagar a sessão'; END IF; n := n + 1;
+
+  -- 8. O cliente não chama as funções internas
+  BEGIN
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', u, 'role', 'authenticated')::TEXT, TRUE);
+    EXECUTE 'SET LOCAL ROLE authenticated';
+    PERFORM public._treino_minutos_plano(tid, 0);
+    RAISE EXCEPTION 'FALHA 8: função interna liberada';
+  EXCEPTION WHEN insufficient_privilege THEN n := n + 1;
+  END;
+  EXECUTE 'RESET ROLE';
+
+  RAISE EXCEPTION 'TESTES_OK (%) — tudo revertido', n;
+END
+$t$;
