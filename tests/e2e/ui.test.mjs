@@ -809,6 +809,24 @@ await t('relatório semanal: média, dias na meta e navegação entre semanas', 
   await ctx.close()
 })
 
+await t('dieta: meus planos aparecem na aba, igual aos treinos', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/dieta')
+  await page.getByText('Plano de Dieta com IA').waitFor()
+  await page.getByText('Meus planos').waitFor()
+  await page.getByText('Plano Cutting').waitFor()
+  await page.getByText('600', { exact: true }).waitFor()
+  await page.screenshot({ path: `${SHOTS}/dieta-planos.png`, fullPage: true })
+  await page.getByRole('link', { name: 'Editar', exact: true }).click()
+  await page.getByRole('heading', { name: 'Editar plano' }).waitFor()
+  await page.goto(BASE + '/dieta')
+  await page.getByText('Plano Cutting').waitFor()
+  await page.getByRole('link', { name: 'Abrir', exact: true }).click()
+  await page.getByRole('heading', { name: 'Plano Cutting' }).waitFor()
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
 await t('dieta: editar alimentos e salvar recalcula as calorias', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
   await page.goto(BASE + '/dieta/d1')

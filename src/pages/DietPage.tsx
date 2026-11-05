@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link, Navigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { gerarDieta, ajustarDieta, recalcularDieta } from '../lib/openai'
@@ -7,18 +7,35 @@ import type { DietaFormData, PlanoAlimentar } from '../lib/openai'
 import EditorDieta from '../components/dieta/EditorDieta'
 import { Pencil, Sparkles } from 'lucide-react'
 import type { Dieta } from '../types'
-import { Button, Input, Select, Textarea, Card, Badge, Spinner, EmptyState, SectionHeader } from '../components/UI'
+import { Button, Input, Select, Textarea, Card, Badge, Spinner } from '../components/UI'
 
-function DietMenu({ onSelect }: { onSelect: (v: 'planos' | 'contador') => void }) {
+function DietMenu({ onSelect }: { onSelect: (v: 'nova' | 'contador') => void }) {
+  const { user } = useAuth()
+  const [dietas, setDietas] = useState<Dieta[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user) return
+    supabase.from('dietas').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+      .then(({ data }) => { setDietas((data as Dieta[]) ?? []); setLoading(false) })
+  }, [user])
+
+  const excluir = async (d: Dieta) => {
+    if (!confirm(`Excluir o plano "${d.nome}"? Esta ação não pode ser desfeita.`)) return
+    const { error } = await supabase.from('dietas').delete().eq('id', d.id)
+    if (error) { alert('Não foi possível excluir o plano.'); return }
+    setDietas(p => p.filter(x => x.id !== d.id))
+  }
+
   return (
-    <div className="flex flex-col gap-5" translate="no">
+    <div className="flex flex-col gap-6" translate="no">
       <div>
         <h1 className="text-2xl font-bold text-zinc-100">Dieta</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Escolha uma opção</p>
       </div>
       <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3">
         <button
-          onClick={() => onSelect('planos')}
+          onClick={() => onSelect('nova')}
           className="group text-left rounded-3xl p-5 min-h-[150px] flex flex-col justify-between gap-4 bg-gradient-to-br from-green-500/20 via-green-500/10 to-zinc-900 border border-green-500/30 hover:border-green-400/60 transition active:scale-[0.98]">
           <span className="w-12 h-12 rounded-2xl bg-green-500 text-zinc-950 flex items-center justify-center shadow-lg shadow-green-500/20">
             <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -45,62 +62,62 @@ function DietMenu({ onSelect }: { onSelect: (v: 'planos' | 'contador') => void }
           </span>
         </button>
       </div>
-    </div>
-  )
-}
 
-function DietList({ onBack }: { onBack: () => void }) {
-  const { user } = useAuth()
-  const [dietas, setDietas] = useState<Dieta[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-
-  useEffect(() => {
-    if (!user) return
-    supabase.from('dietas').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-      .then(({ data }) => { setDietas(data ?? []); setLoading(false) })
-  }, [user])
-
-  const del = async (e: React.MouseEvent, id: string) => {
-    e.preventDefault(); e.stopPropagation()
-    if (!confirm('Excluir este plano?')) return
-    await supabase.from('dietas').delete().eq('id', id)
-    setDietas(p => p.filter(d => d.id !== id))
-  }
-
-  if (showForm) return <DietForm onBack={() => setShowForm(false)} onCreated={(d) => { setDietas(p => [d, ...p]); setShowForm(false) }} />
-
-  return (
-    <div className="flex flex-col gap-5" translate="no">
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} className="text-zinc-400 p-1.5 -ml-1.5 rounded-lg hover:bg-zinc-800">←</button>
-        <SectionHeader title="Planos de Dieta" subtitle="Gerados por IA" action={<Button onClick={() => setShowForm(true)} size="sm">+ Nova</Button>} />
-      </div>
-      {loading ? <div className="flex justify-center py-12"><Spinner size="lg" /></div>
-        : dietas.length === 0 ? <EmptyState title="Nenhuma dieta ainda" description="Crie seu primeiro plano com IA" action={<Button onClick={() => setShowForm(true)}>Criar com IA</Button>} />
-        : <div className="flex flex-col gap-3">{dietas.map((d) => (
-            <div key={d.id} className="relative">
-              <Link to={`/dieta/${d.id}`}><Card className="hover:border-zinc-700 transition">
-                <div className="flex items-start justify-between gap-3 pr-10">
-                  <div className="flex-1 min-w-0">
+      {/* Planos */}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">Meus planos</h2>
+        {loading ? (
+          <div className="flex justify-center py-10"><Spinner size="lg" /></div>
+        ) : dietas.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 px-5 py-8 text-center">
+            <p className="text-3xl mb-2">🥗</p>
+            <p className="font-semibold text-zinc-200">Você ainda não tem planos de dieta</p>
+            <p className="text-sm text-zinc-500 mt-1 max-w-sm mx-auto">Toque em "Plano de Dieta com IA" e a IA monta as refeições e os macros para você.</p>
+          </div>
+        ) : (
+          dietas.map(d => (
+            <div key={d.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+              <Link to={`/dieta/${d.id}`} className="block">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <p className="font-semibold text-zinc-100 truncate">{d.nome}</p>
-                    <p className="text-xs text-zinc-500 mt-1">{new Date(d.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      {d.enviado_por ? 'Enviado pelo seu personal' : 'Gerado por IA'} · {new Date(d.created_at).toLocaleDateString('pt-BR')}
+                    </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-xl font-bold text-green-400">{d.calorias_dia}</p>
-                    <p className="text-xs text-zinc-500">kcal/dia</p>
+                    <p className="text-lg font-bold text-green-400 leading-none">{d.calorias_dia}</p>
+                    <p className="text-[11px] text-zinc-500 mt-1">kcal/dia</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  <Badge variant="green">{d.objetivo}</Badge>
-                  <Badge variant="zinc">{d.plano?.refeicoes?.length ?? 0} refeições</Badge>
-                  {d.plano?.macros && <Badge variant="zinc">P: {d.plano.macros.proteina_g}g</Badge>}
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {d.objetivo && <span className="text-[11px] px-2 py-1 rounded-lg bg-green-500/10 text-green-300 border border-green-500/20">{d.objetivo}</span>}
+                  <span className="text-[11px] px-2 py-1 rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700/60">{d.plano?.refeicoes?.length ?? 0} refeições</span>
+                  {d.plano?.macros && (
+                    <span className="text-[11px] px-2 py-1 rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700/60">
+                      P {d.plano.macros.proteina_g}g · C {d.plano.macros.carboidrato_g}g · G {d.plano.macros.gordura_g}g
+                    </span>
+                  )}
                 </div>
-              </Card></Link>
-              <button onClick={(e) => del(e, d.id)} aria-label="Excluir"
-                className="absolute top-3 right-3 p-2 rounded-lg bg-zinc-900/80 border border-zinc-800 text-red-500/70 hover:text-red-400 hover:bg-red-500/10">🗑</button>
+              </Link>
+              <div className="grid grid-cols-3 gap-2 mt-4">
+                <Link to={`/dieta/${d.id}`}
+                  className="text-center text-sm font-semibold py-2.5 rounded-xl bg-green-500 text-zinc-950 hover:bg-green-400 transition">
+                  Abrir
+                </Link>
+                <Link to={`/dieta/${d.id}?editar=1`}
+                  className="text-center text-sm font-semibold py-2.5 rounded-xl bg-zinc-800 text-zinc-200 border border-zinc-700 hover:bg-zinc-700 transition">
+                  Editar
+                </Link>
+                <button onClick={() => excluir(d)}
+                  className="text-sm font-semibold py-2.5 rounded-xl bg-zinc-900 text-red-400/90 border border-zinc-800 hover:bg-red-500/10 hover:border-red-500/30 transition">
+                  Excluir
+                </button>
+              </div>
             </div>
-          ))}</div>}
+          ))
+        )}
+      </section>
     </div>
   )
 }
@@ -178,9 +195,18 @@ function DietDetail({ id }: { id: string }) {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
+  const [params, setParams] = useSearchParams()
   useEffect(() => {
-    supabase.from('dietas').select('*').eq('id', id).single().then(({ data }) => { setDieta(data); setLoading(false) })
-  }, [id])
+    supabase.from('dietas').select('*').eq('id', id).single().then(({ data }) => {
+      setDieta(data); setLoading(false)
+      // "Editar" na lista de planos abre direto no editor
+      if (data && params.get('editar')) {
+        const p = (data as Dieta).plano ?? {}
+        setRascunho({ nome: (data as Dieta).nome, plano: recalcularDieta({ ...(p as PlanoAlimentar), refeicoes: p.refeicoes ?? [] }) })
+        setParams({}, { replace: true })
+      }
+    })
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
   if (loading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
   if (!dieta) return <div className="text-center py-16 text-zinc-500">Dieta não encontrada</div>
   const plano = dieta.plano ?? {}
@@ -290,9 +316,10 @@ function DietDetail({ id }: { id: string }) {
 
 export default function DietPage() {
   const { id } = useParams<{ id?: string }>()
-  const [view, setView] = useState<'menu' | 'planos' | 'contador'>('menu')
+  const navigate = useNavigate()
+  const [view, setView] = useState<'menu' | 'nova' | 'contador'>('menu')
   if (id) return <DietDetail id={id} />
-  if (view === 'planos') return <DietList onBack={() => setView('menu')} />
+  if (view === 'nova') return <DietForm onBack={() => setView('menu')} onCreated={d => navigate(`/dieta/${d.id}`)} />
   if (view === 'contador') return <Navigate to="/calorias" />
   return <DietMenu onSelect={setView} />
 }

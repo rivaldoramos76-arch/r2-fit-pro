@@ -20,6 +20,8 @@ export interface Dieta {
   calorias_dia: number
   plano: PlanoAlimentar
   created_at: string
+  /** Personal que enviou a dieta (acompanhamento) */
+  enviado_por?: string | null
 }
 
 export interface Treino {
