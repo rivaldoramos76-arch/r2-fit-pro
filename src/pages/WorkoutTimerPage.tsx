@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Pause, Play, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useTreino } from '../lib/treinoApi'
 import { concluirExercicio } from '../lib/sessoes'
-import { TreinoPlayer, carregarClipes, estadoEm, type ClipKey, type FaseTipo, type ModoSom } from '../lib/workoutAudio'
+import { TreinoPlayer, carregarClipes, estadoEm, type ClipKey, type ModoSom } from '../lib/workoutAudio'
 import { Spinner } from '../components/UI'
 import { carregarPreferencias, salvarPreferencias } from '../lib/preferencias'
 import type { PrefsAudio } from '../lib/preferencias'
@@ -13,25 +14,6 @@ type Tela = 'pronto' | 'rodando' | 'concluido' | 'interrompido'
 interface CfgContador { series: number; exec: number; desc: number }
 
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`
-
-function Circulo({ restante, total, tipo }: { restante: number; total: number; tipo: FaseTipo }) {
-  const r = 54, circ = 2 * Math.PI * r
-  const trabalho = tipo === 'work'
-  const off = total > 0 ? circ * (1 - restante / total) : 0
-  return (
-    <div className="relative w-56 h-56 max-w-[70vw] max-h-[70vw] flex items-center justify-center">
-      <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 120 120">
-        <circle cx="60" cy="60" r={r} fill="none" stroke="#27272a" strokeWidth="8" />
-        <circle cx="60" cy="60" r={r} fill="none" stroke={trabalho ? '#22c55e' : '#3b82f6'} strokeWidth="8"
-          strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off} style={{ transition: 'stroke-dashoffset 0.15s linear' }} />
-      </svg>
-      <div className="text-center">
-        <p className="text-5xl font-bold text-zinc-100 tabular-nums">{mmss(Math.ceil(restante))}</p>
-        <p className={`text-sm font-semibold mt-1 ${trabalho ? 'text-green-400' : 'text-blue-400'}`}>{trabalho ? 'TRABALHO' : 'REPOUSO'}</p>
-      </div>
-    </div>
-  )
-}
 
 /** Limite do iPhone para sites: som misturado à música só com a tela desbloqueada. */
 function AvisoIphone() {
@@ -98,6 +80,9 @@ export default function WorkoutTimerPage() {
   }, [])
 
   const liberarWakeLock = () => { wakeRef.current?.release().catch(() => {}); wakeRef.current = null }
+  // Tela inteira durante a contagem (onde o navegador permitir; no app instalado já não há barras)
+  const entrarTelaCheia = () => { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {}) }
+  const sairTelaCheia = () => { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}) }
   const pedirWakeLock = async () => {
     try {
       const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<WakeLockSentinel> } }).wakeLock
@@ -109,6 +94,7 @@ export default function WorkoutTimerPage() {
   useEffect(() => () => {
     playerRef.current?.parar()
     liberarWakeLock()
+    sairTelaCheia()
     if ('mediaSession' in navigator) navigator.mediaSession.metadata = null
   }, [])
 
@@ -166,7 +152,7 @@ export default function WorkoutTimerPage() {
     playerRef.current?.parar()
     const p = new TreinoPlayer({ series: cfg.series, execSeg: cfg.exec, descansoSeg: cfg.desc }, clips, {
       onSeriesConcluidas: () => { registrar() },
-      onFim: () => { setTela('concluido'); liberarWakeLock() },
+      onFim: () => { setTela('concluido'); liberarWakeLock(); sairTelaCheia() },
     }, modoSom, { abaixarMusica: sistema === 'android' && prefsAudio.current?.abaixar_musica !== false })
     p.setVolume(volume)
     p.setMudo(mudo)
@@ -174,6 +160,7 @@ export default function WorkoutTimerPage() {
     setRegistro(null)
     setT(0)
     setPausado(false)
+    entrarTelaCheia()
     // play() precisa acontecer dentro do toque do usuário (exigência do iOS/Android)
     p.iniciar().then(() => {
       setTela('rodando')
@@ -184,6 +171,7 @@ export default function WorkoutTimerPage() {
       }
     }).catch(() => {
       setErroAudio('O navegador bloqueou o áudio. Toque em Iniciar novamente.')
+      sairTelaCheia()
       p.parar()
       playerRef.current = null
     })
@@ -201,6 +189,7 @@ export default function WorkoutTimerPage() {
     playerRef.current?.parar()
     playerRef.current = null
     liberarWakeLock()
+    sairTelaCheia()
     setTela(tela === 'rodando' ? 'interrompido' : tela)
   }
 
@@ -255,6 +244,60 @@ export default function WorkoutTimerPage() {
   const seriesFeitas = !estado ? 0 : estado.fase.tipo === 'final' ? cfg.series
     : estado.fase.tipo === 'rest_countdown' || estado.fase.tipo === 'rest' ? serieAtual : serieAtual - 1
 
+  // Durante a contagem: tela inteira escura e mínima (a tela fica ligada sozinha, sem precisar bloquear)
+  if (tela === 'rodando') {
+    const trabalho = fase?.tipo === 'work' || fase?.tipo === 'countdown'
+    const total = fase && (fase.tipo === 'work' || fase.tipo === 'rest') ? fase.fim - fase.inicio : 0
+    return (
+      <div className="fixed inset-0 bg-black flex flex-col select-none" translate="no"
+        style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="flex justify-center flex-wrap gap-1.5 pt-6 px-6" aria-label={`Série ${serieAtual} de ${cfg.series}`}>
+          {Array.from({ length: cfg.series }).map((_, i) => (
+            <span key={i} className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-semibold border ${
+              i < seriesFeitas ? 'border-green-900 text-green-700' : i + 1 === serieAtual ? 'border-zinc-600 text-zinc-400' : 'border-zinc-900 text-zinc-700'}`}>
+              {i < seriesFeitas ? '✓' : i + 1}
+            </span>
+          ))}
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
+          {isContagem && estado && (
+            estado.numero > 0
+              ? <p key={estado.numero} className="text-[34vw] sm:text-[12rem] leading-none font-light text-purple-400/60 tabular-nums">{estado.numero}</p>
+              : <p className="text-5xl font-light tracking-wide text-zinc-400">{fase?.tipo === 'countdown' ? 'TRABALHO' : 'DESCANSO'}</p>
+          )}
+          {(fase?.tipo === 'work' || fase?.tipo === 'rest') && estado && (
+            <>
+              <p className={`text-[26vw] sm:text-[10rem] leading-none font-light tabular-nums ${trabalho ? 'text-green-500/70' : 'text-sky-400/60'}`}>{mmss(Math.ceil(estado.restante))}</p>
+              <div className="w-40 h-0.5 bg-zinc-900 rounded-full overflow-hidden" aria-hidden>
+                <div className={`h-full ${trabalho ? 'bg-green-800' : 'bg-sky-900'}`} style={{ width: `${total > 0 ? (estado.restante / total) * 100 : 0}%`, transition: 'width 0.15s linear' }} />
+              </div>
+              <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">{trabalho ? 'trabalho' : 'descanso'}</p>
+            </>
+          )}
+          {fase?.tipo === 'final' && <p className="text-3xl font-light text-green-500/70">Séries finalizadas</p>}
+          {precisaToque && (
+            <button onClick={() => playerRef.current?.recuperar().then(() => setPrecisaToque(false)).catch(() => {})}
+              className="text-sm font-semibold px-4 py-2 rounded-xl bg-green-500 text-zinc-950 animate-pulse">Toque para continuar o áudio</button>
+          )}
+          {pausado && <span className="text-xs font-semibold uppercase tracking-widest text-yellow-500/70">Pausado</span>}
+        </div>
+
+        {fase?.tipo !== 'final' && (
+          <div className="flex justify-center gap-12 pb-10">
+            <button onClick={alternarPausa} aria-label={pausado ? 'Retomar' : 'Pausar'}
+              className={`w-14 h-14 rounded-full border flex items-center justify-center active:scale-95 transition ${pausado ? 'border-green-800 text-green-600' : 'border-zinc-800 text-zinc-500'}`}>
+              {pausado ? <Play className="w-6 h-6" /> : <Pause className="w-6 h-6" />}
+            </button>
+            <button onClick={encerrar} aria-label="Encerrar" className="w-14 h-14 rounded-full border border-zinc-800 text-zinc-600 flex items-center justify-center active:scale-95 transition">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-dvh bg-zinc-950 flex flex-col" translate="no">
       <div className="sticky top-0 z-10 bg-zinc-950/90 backdrop-blur border-b border-zinc-800/60 px-4 py-3">
@@ -264,19 +307,13 @@ export default function WorkoutTimerPage() {
             <p className="text-sm font-semibold text-zinc-100 truncate">{ex.nome}</p>
             <p className="text-xs text-zinc-500 truncate">{dia.dia}{dia.foco ? ` · ${dia.foco}` : ''}</p>
           </div>
-          <button onClick={() => { const m = !mudo; setMudo(m); playerRef.current?.setMudo(m) }}
-            className={`p-2 rounded-lg text-lg ${mudo ? 'text-zinc-600 bg-zinc-900' : 'text-zinc-300 bg-zinc-800'}`}
-            aria-label={mudo ? 'Ativar som' : 'Silenciar'}>{mudo ? '🔇' : '🔊'}</button>
         </div>
       </div>
 
       <div className="flex-1 flex flex-col max-w-lg mx-auto w-full px-4 py-6 gap-6 items-center">
         <div className="flex gap-2 flex-wrap justify-center">
           {Array.from({ length: cfg.series }).map((_, i) => (
-            <div key={i} className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold border transition ${
-              i < seriesFeitas ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                : i + 1 === serieAtual && tela === 'rodando' ? 'bg-zinc-700 text-zinc-100 border-zinc-500'
-                  : 'bg-zinc-900 text-zinc-600 border-zinc-800'}`}>{i < seriesFeitas ? '✓' : i + 1}</div>
+            <div key={i} className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold border bg-zinc-900 text-zinc-600 border-zinc-800">{i + 1}</div>
           ))}
         </div>
 
@@ -308,31 +345,6 @@ export default function WorkoutTimerPage() {
               )}
             </div>
           )}
-          {tela === 'rodando' && isContagem && estado && (
-            <div className="w-56 h-56 flex flex-col items-center justify-center">
-              {estado.numero > 0
-                ? <p key={estado.numero} className="text-8xl font-black text-purple-400 tabular-nums animate-pulse">{estado.numero}</p>
-                : <p className="text-4xl font-black text-zinc-100">{fase?.tipo === 'countdown' ? 'TRABALHO!' : 'REPOUSO!'}</p>}
-              <p className="text-sm text-zinc-500 mt-3">{fase?.tipo === 'countdown' ? `prepare-se · série ${serieAtual}` : 'fim da série · prepare o descanso'}</p>
-            </div>
-          )}
-          {tela === 'rodando' && (fase?.tipo === 'work' || fase?.tipo === 'rest') && estado && (
-            <>
-              <Circulo restante={estado.restante} total={fase.fim - fase.inicio} tipo={fase.tipo} />
-              <p className="text-zinc-400 text-sm">Série {serieAtual} de {cfg.series}</p>
-            </>
-          )}
-          {tela === 'rodando' && fase?.tipo === 'final' && (
-            <div className="text-center"><p className="text-6xl">🎉</p><p className="text-green-400 font-semibold mt-3">Todas as séries finalizadas!</p></div>
-          )}
-          {tela === 'rodando' && sistema === 'iphone' && playerRef.current?.modo === 'mix' && (
-            <p className="text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-full px-3 py-1">iPhone: mantenha a tela desbloqueada</p>
-          )}
-          {precisaToque && tela === 'rodando' && (
-            <button onClick={() => playerRef.current?.recuperar().then(() => setPrecisaToque(false)).catch(() => {})}
-              className="text-sm font-semibold px-4 py-2 rounded-xl bg-green-500 text-zinc-950 animate-pulse">Toque para continuar o áudio</button>
-          )}
-          {pausado && tela === 'rodando' && <span className="text-xs font-bold uppercase tracking-wide px-3 py-1 rounded-full bg-yellow-500/15 text-yellow-400">Pausado</span>}
         </div>
 
         <div className="w-full flex flex-col gap-3">
@@ -342,23 +354,13 @@ export default function WorkoutTimerPage() {
               {vozes === 'carregando' ? <><Spinner size="sm" /> Preparando áudio...</> : '▶ Iniciar treino'}
             </button>
           )}
+          {tela === 'pronto' && <p className="text-center text-xs text-zinc-500">Durante a contagem a tela fica ligada e escurecida, só com o tempo. Não precisa bloquear o celular.</p>}
           {erroAudio && <p className="text-center text-sm text-red-400">{erroAudio}</p>}
-          {tela === 'rodando' && fase?.tipo !== 'final' && (
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={alternarPausa}
-                className={`font-semibold py-4 rounded-2xl transition active:scale-[0.98] ${pausado ? 'bg-green-500 text-zinc-950' : 'bg-zinc-800 text-zinc-100 border border-zinc-700'}`}>
-                {pausado ? '▶ Retomar' : '⏸ Pausar'}
-              </button>
-              <button onClick={encerrar}
-                className="bg-zinc-900 text-zinc-400 font-semibold py-4 rounded-2xl border border-zinc-800 active:scale-[0.98]">
-                ✕ Encerrar
-              </button>
-            </div>
-          )}
         </div>
 
-        <div className="w-full flex items-center gap-3 px-1">
-          <span className="text-xs text-zinc-500 shrink-0">🔊</span>
+        <div className="w-full flex items-center gap-3 px-1" aria-label="Volume do contador">
+          <button onClick={() => { const m = !mudo; setMudo(m); playerRef.current?.setMudo(m) }} className="text-sm shrink-0"
+            aria-label={mudo ? 'Ativar som' : 'Silenciar'}>{mudo ? '🔇' : '🔊'}</button>
           <input type="range" min={0} max={1} step={0.05} value={volume} aria-label="Volume"
             onChange={e => { const v = +e.target.value; setVolume(v); playerRef.current?.setVolume(v) }}
             className="flex-1 h-1 accent-green-500 cursor-pointer" />
