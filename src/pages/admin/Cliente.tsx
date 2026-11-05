@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { X, Gift, CalendarPlus, Ban, HandCoins, Trash2 } from 'lucide-react'
+import { X, Gift, CalendarPlus, Ban, HandCoins, Trash2, Undo2 } from 'lucide-react'
 import { chamarApi, ErroApi } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { brl, dataBR, dataHoraBR, ROTULO_ESTADO, ROTULO_PAGAMENTO, type EstadoAcesso } from '../../lib/formatos'
@@ -91,6 +91,19 @@ export default function Cliente({ resumo, onClose, onAlterado }: { resumo: Resum
       setErro(e instanceof ErroApi ? e.message : 'Não foi possível apagar a conta.')
       setApagando(false)
     }
+  }
+
+  const estornar = async (p: Linha) => {
+    if (!confirm(`Estornar ${brl(p.valor_centavos)} para ${resumo.email}?\n\nO valor volta para o cliente pelo Asaas, a assinatura é cancelada (sem novas cobranças) e o acesso pago termina agora. Não dá para desfazer.`)) return
+    setErro(''); setAviso(''); setExecutando(true)
+    try {
+      const r = await chamarApi<{ assinatura_cancelada?: boolean }>('admin', { acao: 'estornar_pagamento', payment_id: p.id })
+      setAviso(`Estorno de ${brl(p.valor_centavos)} pedido ao Asaas${r?.assinatura_cancelada ? ' e assinatura cancelada' : ''}. O cliente recebe um e-mail; o dinheiro volta no prazo do meio de pagamento.`)
+    } catch (e) {
+      setErro(e instanceof ErroApi ? e.message : 'Não foi possível estornar.')
+    }
+    setExecutando(false)
+    await carregar(); onAlterado()
   }
 
   const centavos = (s: string) => Math.round(Number(s.replace(/\./g, '').replace(',', '.')) * 100)
@@ -212,6 +225,12 @@ export default function Cliente({ resumo, onClose, onAlterado }: { resumo: Resum
                         {['aprovado', 'pendente', 'recusado', 'estornado', 'cancelado'].concat(p.status === 'em_disputa' ? ['em_disputa'] : []).map(st => <option key={st} value={st}>{ROTULO_PAGAMENTO[st]?.texto ?? st}</option>)}
                       </select>
                     </label>
+                    {p.status === 'aprovado' && p.provider === 'asaas' && (
+                      <button type="button" onClick={() => estornar(p)} disabled={executando}
+                        className="flex items-center gap-1 rounded-lg border border-red-500/30 px-2 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50">
+                        <Undo2 className="w-3.5 h-3.5" />Estornar
+                      </button>
+                    )}
                     {p.status_detalhe && <span className="basis-full text-xs text-zinc-500">{p.status_detalhe}</span>}
                   </li>
                 ))}

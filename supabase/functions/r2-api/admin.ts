@@ -1,8 +1,9 @@
 // Rota /admin da Edge Function r2-api: ações do painel que exigem a chave de serviço
-// (hoje, excluir a conta de um cliente). O chamador precisa ser administrador.
+// (excluir a conta de um cliente e estornar pagamentos). O chamador precisa ser administrador.
 import { corsHeaders, json, ErroHttp, log } from '../_shared/http.ts'
 import { clienteAdmin, usuarioAutenticado } from '../_shared/supa.ts'
 import { excluirUsuario } from './conta.ts'
+import { estornarPagamento } from './estorno.ts'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -30,6 +31,9 @@ export async function handleAdmin(req: Request): Promise<Response> {
       await excluirUsuario(admin, { id, email: alvo.user.email ?? null }, autor.id, `Excluída pelo administrador ${autor.email ?? autor.id}`)
       log('info', 'conta_excluida_admin', { user: id, admin: autor.id })
       return json(req, { ok: true })
+    }
+    if (corpo?.acao === 'estornar_pagamento') {
+      return json(req, await estornarPagamento(admin, String(corpo.payment_id ?? ''), autor.id))
     }
     throw new ErroHttp(400, 'Ação inválida')
   } catch (e) {

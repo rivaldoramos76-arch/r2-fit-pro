@@ -188,7 +188,7 @@ await t('Asaas: CPF, referências e status', () => {
   assert.deepEqual(lerReferencia('lixo:avulso:5'), { userId: null, avulso: false, meses: 1 })
   assert.equal(mapearStatusAsaas('CONFIRMED'), 'aprovado'); assert.equal(mapearStatusAsaas('RECEIVED'), 'aprovado')
   assert.equal(mapearStatusAsaas('PENDING'), 'pendente'); assert.equal(mapearStatusAsaas('OVERDUE'), 'recusado')
-  assert.equal(mapearStatusAsaas('REFUNDED'), 'estornado'); assert.equal(mapearStatusAsaas('CHARGEBACK_REQUESTED'), 'em_disputa')
+  assert.equal(mapearStatusAsaas('REFUNDED'), 'estornado'); assert.equal(mapearStatusAsaas('REFUND_REQUESTED'), 'estornado'); assert.equal(mapearStatusAsaas('CHARGEBACK_REQUESTED'), 'em_disputa')
   assert.equal(mapearStatusAsaas('PENDING', 'PAYMENT_CREDIT_CARD_CAPTURE_REFUSED'), 'recusado')
   assert.equal(mapearStatusAsaas('PENDING', 'PAYMENT_DELETED'), 'cancelado')
 })

@@ -9,6 +9,7 @@
 //   POST /r2-api/cron/lembretes        → envio dos lembretes vencidos (pg_cron, token de uso único)
 //   POST /r2-api/cron/acomp-aviso      → notificação de mensagem do acompanhamento (gatilho do banco, token de uso único)
 //   POST /r2-api/cron/personal-descontos → mensalidade dos personais pelo número de alunos pagantes (pg_cron diário)
+//   POST /r2-api/cron/estornar         → estorno feito pelo suporte via banco (token de uso único)
 import { handleBilling } from './billing.ts'
 import { handleWebhook } from './webhook.ts'
 import { handleConta } from './conta.ts'
@@ -17,6 +18,7 @@ import { handleAdmin } from './admin.ts'
 import { handleLembretes, handleCronLembretes } from './lembretes.ts'
 import { handleWebhookAsaas, handleCronAsaasWebhook } from './asaas.ts'
 import { handleCronAcompAviso, handleCronPersonalDescontos } from './acompanhamento.ts'
+import { handleCronEstornar } from './estorno.ts'
 import { corsHeaders, json } from '../_shared/http.ts'
 
 Deno.serve((req) => {
@@ -32,6 +34,7 @@ Deno.serve((req) => {
   if (caminho.startsWith('/lembretes')) return handleLembretes(req)
   if (caminho.startsWith('/cron/acomp-aviso')) return handleCronAcompAviso(req)
   if (caminho.startsWith('/cron/personal-descontos')) return handleCronPersonalDescontos(req)
+  if (caminho.startsWith('/cron/estornar')) return handleCronEstornar(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
   if (caminho === '/saude' || caminho === '/saude/') return json(req, { ok: true, servico: 'r2-api' })
   return json(req, { erro: 'Rota não encontrada' }, 404)

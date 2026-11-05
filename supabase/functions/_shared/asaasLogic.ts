@@ -40,11 +40,11 @@ export function mapearStatusAsaas(status: string | null | undefined, evento = ''
   if (evento === 'PAYMENT_DELETED') return 'cancelado'
   switch (String(status ?? '').toUpperCase()) {
     case 'CONFIRMED': case 'RECEIVED': case 'RECEIVED_IN_CASH': case 'DUNNING_RECEIVED': return 'aprovado'
-    case 'REFUNDED': case 'REFUND_IN_PROGRESS': return 'estornado'
+    case 'REFUNDED': case 'REFUND_IN_PROGRESS': case 'REFUND_REQUESTED': return 'estornado'
     case 'CHARGEBACK_REQUESTED': case 'CHARGEBACK_DISPUTE': case 'AWAITING_CHARGEBACK_REVERSAL': return 'em_disputa'
     case 'OVERDUE': return 'recusado'
     case 'DELETED': return 'cancelado'
-    default: return 'pendente' // PENDING, AWAITING_RISK_ANALYSIS, REFUND_REQUESTED…
+    default: return 'pendente' // PENDING, AWAITING_RISK_ANALYSIS…
   }
 }
 
