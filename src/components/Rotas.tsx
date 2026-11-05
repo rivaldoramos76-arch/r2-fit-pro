@@ -1,10 +1,13 @@
 import { Navigate, useLocation } from 'react-router-dom'
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useAcesso } from '../context/AcessoContext'
 import Layout from './Layout'
 import Paywall from './Paywall'
 import { Button, Spinner } from './UI'
+import TelaInstalar from './TelaInstalar'
+import { precisaInstalar } from '../lib/instalacao'
 
 const Carregando = () => (
   <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><Spinner size="lg" /></div>
@@ -13,8 +16,11 @@ const Carregando = () => (
 function useExigeLogin() {
   const { user, loading } = useAuth()
   const location = useLocation()
+  // No celular, o app é usado instalado na tela inicial
+  const [, liberar] = useState(0)
   if (loading) return <Carregando />
   if (!user) return <Navigate to={`/auth?next=${encodeURIComponent(location.pathname + location.search)}`} replace />
+  if (precisaInstalar(location.pathname)) return <TelaInstalar aoContinuar={() => liberar(n => n + 1)} />
   return null
 }
 

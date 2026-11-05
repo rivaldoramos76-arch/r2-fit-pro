@@ -46,6 +46,20 @@ async function criarAsaas(caminho: string, corpo: Record<string, any>) {
   }
 }
 
+/** Personal paga menos por aluno pagante (20% cada, mínimo R$ 5,00) e nada a partir de 5. */
+// deno-lint-ignore no-explicit-any
+async function descontoPersonal(admin: any, userId: string): Promise<{ gratis: boolean; preco_centavos: number; preco_anual_centavos: number | null } | null> {
+  const { data } = await admin.from('personais').select('user_id').eq('user_id', userId).maybeSingle()
+  return data ? await rpc(admin, 'acomp_desconto_personal', { p_personal: userId }) : null
+}
+// deno-lint-ignore no-explicit-any
+async function comDescontoPersonal(admin: any, userId: string, plano: PlanoVenda): Promise<PlanoVenda> {
+  const d = await descontoPersonal(admin, userId)
+  if (!d) return plano
+  if (d.gratis) throw new ErroHttp(409, 'Você tem o Premium grátis por ter 5 ou mais alunos pagantes. O acesso é liberado em até 1 hora.')
+  return { ...plano, preco_centavos: d.preco_centavos, preco_anual_centavos: plano.preco_anual_centavos ? d.preco_anual_centavos : null }
+}
+
 // deno-lint-ignore no-explicit-any
 async function planoParaVenda(admin: any, user: { email_confirmed_at?: string | null }): Promise<PlanoVenda> {
   if (!user.email_confirmed_at) throw new ErroHttp(403, 'Confirme seu e-mail antes de assinar.')
@@ -67,7 +81,10 @@ export async function handleBilling(req: Request): Promise<Response> {
     if (acao === 'config') {
       if (asaasConfigurado()) {
         const { data: cli } = await admin.from('asaas_clientes').select('user_id').eq('user_id', user.id).maybeSingle()
-        return json(req, { pagamentos_configurados: true, modo_teste: false, provedor: 'asaas', asaas_cliente: Boolean(cli), public_key: null })
+        return json(req, {
+          pagamentos_configurados: true, modo_teste: false, provedor: 'asaas', asaas_cliente: Boolean(cli), public_key: null,
+          desconto_personal: await descontoPersonal(admin, user.id),
+        })
       }
       return json(req, {
         pagamentos_configurados: mpConfigurado(), modo_teste: mpModoTeste(), provedor: 'mercadopago',
@@ -77,7 +94,7 @@ export async function handleBilling(req: Request): Promise<Response> {
 
     // Asaas: assinatura mensal no cartão. O cliente digita o cartão na fatura segura do Asaas (sem conta)
     if (acao === 'asaas_assinar') {
-      const plano = await planoParaVenda(admin, user)
+      const plano = await comDescontoPersonal(admin, user.id, await planoParaVenda(admin, user))
       const estado = await rpc<string>(admin, 'estado_acesso', { uid: user.id })
       if (['ativa', 'tolerancia', 'admin'].includes(estado)) throw new ErroHttp(409, 'Você já possui acesso Premium ativo.')
       // Reaproveita uma assinatura recém-criada que ainda não foi paga
@@ -115,7 +132,7 @@ export async function handleBilling(req: Request): Promise<Response> {
 
     // Asaas: 1 ou 12 meses sem renovação automática; na fatura o cliente escolhe Pix, boleto ou cartão
     if (acao === 'asaas_avulso') {
-      const plano = await planoParaVenda(admin, user)
+      const plano = await comDescontoPersonal(admin, user.id, await planoParaVenda(admin, user))
       const periodo = corpo?.periodo === 'anual' ? 'anual' : 'mensal'
       const preco = periodo === 'anual' ? plano.preco_anual_centavos : plano.preco_centavos
       if (!preco) throw new ErroHttp(400, 'O plano anual não está disponível no momento.')

@@ -9,7 +9,7 @@ const PASSOS: Record<Exclude<Sistema, 'outro'>, { texto: ReactNode }[]> = {
     { texto: <>Abra <b>r2fitpro.com.br</b> no <b>Safari</b>.</> },
     { texto: <>Toque em <b>Compartilhar</b> <Share className="inline w-4 h-4 -mt-0.5" /> (quadrado com seta, na barra de baixo).</> },
     { texto: <>Role a lista e toque em <b>Adicionar à Tela de Início</b> <PlusSquare className="inline w-4 h-4 -mt-0.5" />.</> },
-    { texto: <>Toque em <b>Adicionar</b>. Pronto: o ícone verde do R2 Fit Pro aparece na sua tela inicial.</> },
+    { texto: <>Toque em <b>Adicionar</b>. Pronto: o ícone do R2 Fit Pro aparece na sua tela inicial.</> },
   ],
   android: [
     { texto: <>Abra <b>r2fitpro.com.br</b> no <b>Chrome</b>.</> },

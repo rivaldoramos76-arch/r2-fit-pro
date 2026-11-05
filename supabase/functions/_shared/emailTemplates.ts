@@ -69,12 +69,12 @@ export function renderizarEmail(modelo: string, d: Dados, site: string): { assun
     case 'falha_cobranca':
       return {
         assunto: d.primeira_cobranca ? 'Não conseguimos concluir seu pagamento' : 'Falha na renovação da sua assinatura',
-        html: layout(d.primeira_cobranca ? 'Pagamento não aprovado' : 'Falha na renovação', `${ola}<p>A cobrança de <b>${brl(d.valor_centavos)}</b> não foi aprovada pelo meio de pagamento.</p>${!d.primeira_cobranca && data(d.acesso_ate) ? `<p>Seu acesso continua até <b>${data(d.acesso_ate)}</b> (mais um curto período de tolerância). O Mercado Pago fará novas tentativas automaticamente.</p>` : ''}<p>Para regularizar, verifique o cartão cadastrado no Mercado Pago ou contrate novamente em <b>Minha Assinatura</b>.</p>`, site, 'Regularizar assinatura', `${site}/assinatura`),
+        html: layout(d.primeira_cobranca ? 'Pagamento não aprovado' : 'Falha na renovação', `${ola}<p>A cobrança de <b>${brl(d.valor_centavos)}</b> não foi aprovada pelo meio de pagamento.</p>${!d.primeira_cobranca && data(d.acesso_ate) ? `<p>Seu acesso continua até <b>${data(d.acesso_ate)}</b> (mais um curto período de tolerância). Faremos novas tentativas de cobrança automaticamente.</p>` : ''}<p>Para regularizar, verifique o limite e os dados do cartão ou contrate novamente em <b>Minha Assinatura</b> (dá para pagar com Pix ou boleto).</p>`, site, 'Regularizar assinatura', `${site}/assinatura`),
       }
     case 'assinatura_cancelada':
       return {
         assunto: 'Assinatura cancelada — R2 Fit Pro',
-        html: layout('Assinatura cancelada', `${ola}<p>O cancelamento da sua assinatura foi registrado e <b>não haverá novas cobranças</b>.</p>${d.reembolso ? '<p>Como o cancelamento ocorreu dentro do prazo de arrependimento, solicitamos o reembolso integral ao Mercado Pago e o acesso Premium foi encerrado. O estorno aparece conforme o prazo do seu meio de pagamento.</p>' : data(d.acesso_ate) ? `<p>Você continua com acesso Premium até <b>${data(d.acesso_ate)}</b>.</p>` : ''}<p>Seus treinos, dietas e registros continuam salvos na sua conta.</p>`, site, 'Minha assinatura', `${site}/assinatura`),
+        html: layout('Assinatura cancelada', `${ola}<p>O cancelamento da sua assinatura foi registrado e <b>não haverá novas cobranças</b>.</p>${d.reembolso ? '<p>Como o cancelamento ocorreu dentro do prazo de arrependimento, solicitamos o reembolso integral e o acesso Premium foi encerrado. O estorno aparece conforme o prazo do seu meio de pagamento.</p>' : data(d.acesso_ate) ? `<p>Você continua com acesso Premium até <b>${data(d.acesso_ate)}</b>.</p>` : ''}<p>Seus treinos, dietas e registros continuam salvos na sua conta.</p>`, site, 'Minha assinatura', `${site}/assinatura`),
       }
     case 'pagamento_estornado':
       return {

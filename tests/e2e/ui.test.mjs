@@ -79,14 +79,16 @@ let ok = 0
 const erros = []
 const t = async (nome, f) => { try { await f(); ok++; console.log('✓', nome) } catch (e) { erros.push(nome); console.log('✗', nome, '\n   ', e.message.split('\n')[0]) } }
 
-async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, asaas = false, nutricao = false, treino = false, personal = false, amigos = false, userAgent, viewport = { width: 390, height: 844 } } = {}) {
+async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, asaas = false, nutricao = false, treino = false, personal = false, amigos = false, userAgent, instalado = Boolean(userAgent), viewport = { width: 390, height: 844 } } = {}) {
   const chamadasBilling = []
   const gravacoes = []
   const ctx = await browser.newContext({ viewport, ...(userAgent ? { userAgent } : {}) })
-  await ctx.addInitScript(([s, logado]) => {
+  await ctx.addInitScript(([s, logado, instalado]) => {
     sessionStorage.setItem('r2fit:welcome-visto', '1')
     if (logado) localStorage.setItem('sb-mock-auth-token', JSON.stringify(s))
-  }, [sessao, logado])
+    // Simula o app aberto pela tela inicial (no celular o app exige estar instalado)
+    if (instalado) Object.defineProperty(navigator, 'standalone', { get: () => true })
+  }, [sessao, logado, instalado])
   const premium = ['ativa', 'tolerancia', 'cancelada_vigente', 'admin', 'teste'].includes(estado)
   const testeAte = estado === 'teste' ? new Date(Date.now() + 5 * 86400000 - 3600000).toISOString() : null
   await ctx.route('https://mock.supabase.co/**', async rota => {
@@ -1025,6 +1027,11 @@ await t('personal: ativa o modo personal, vê alunos com alertas e acompanha um 
   await page.goto(BASE + '/personal')
   await page.getByLabel('Nome que o aluno vai ver').fill('Rafa Personal')
   await page.getByRole('button', { name: 'Ativar modo personal' }).click()
+  // Boas-vindas com os descontos e o passo a passo
+  await page.getByRole('dialog', { name: /Modo personal ativado/ }).waitFor()
+  await page.getByText('Com 5 alunos assinando, você não paga nada').waitFor()
+  await page.screenshot({ path: `${SHOTS}/personal-boas-vindas.png` })
+  await page.getByRole('button', { name: 'Entendi' }).click()
   await page.getByTestId('codigo-personal').filter({ hasText: 'K7P2QX' }).waitFor()
   await page.getByText(/\/convite\/K7P2QX/).waitFor()
   assert.equal(page.gravacoes.find(g => g.tabela === 'acomp_ativar_personal').corpo.p_nome, 'Rafa Personal')
@@ -1095,6 +1102,37 @@ await t('amigos: ativa, curte treino no feed, vê ranking e aceita pedido', asyn
   assert.equal(page.gravacoes.find(g => g.tabela === 'social_adicionar').corpo.p_codigo, 'DAVI22')
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
+})
+
+await t('celular: o app exige instalar na tela inicial (com saída de emergência)', async () => {
+  const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, userAgent: iphone, instalado: false })
+  await page.goto(BASE + '/dashboard')
+  await page.getByRole('heading', { name: 'Instale o R2 Fit Pro' }).waitFor()
+  await page.getByText('Adicionar à Tela de Início').waitFor()
+  await page.screenshot({ path: `${SHOTS}/instalar-obrigatorio.png` })
+  // Voltar do pagamento funciona no navegador
+  await page.goto(BASE + '/assinatura/retorno?origem=asaas')
+  assert.equal(await page.getByRole('heading', { name: 'Instale o R2 Fit Pro' }).count(), 0)
+  // Saída de emergência só para esta sessão
+  await page.goto(BASE + '/dashboard')
+  await page.getByRole('button', { name: 'Não consigo instalar' }).click()
+  await page.getByRole('link', { name: /Pedir ajuda no WhatsApp/ }).waitFor()
+  await page.getByRole('button', { name: 'Usar no navegador só desta vez' }).click()
+  await page.getByText('Calorias').first().waitFor()
+  await ctx.close()
+  // Navegador do Instagram no Android: abrir no Chrome
+  const insta = 'Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0 Mobile Safari/537.36 Instagram 350.0'
+  const c2 = await contexto(browser, { logado: true, estado: 'ativa', userAgent: insta, instalado: false })
+  await c2.page.goto(BASE + '/dashboard')
+  await c2.page.getByRole('link', { name: /Abrir no Chrome/ }).waitFor()
+  await c2.ctx.close()
+  // Computador não precisa instalar
+  const c3 = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, viewport: { width: 1280, height: 800 } })
+  await c3.page.goto(BASE + '/dashboard')
+  await c3.page.getByText('Calorias').first().waitFor()
+  assert.equal(await c3.page.getByRole('heading', { name: 'Instale o R2 Fit Pro' }).count(), 0)
+  await c3.ctx.close()
 })
 
 await t('falha de rede ao verificar acesso mostra erro e opção de tentar novamente', async () => {

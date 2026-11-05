@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { UserCheck, MessageCircle, ChevronDown, ChevronUp, Users, Share2, Copy, RefreshCw, ChevronRight, ShieldCheck } from 'lucide-react'
+import { UserCheck, MessageCircle, ChevronDown, ChevronUp, Users, Share2, Copy, RefreshCw, ChevronRight, ShieldCheck, HelpCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useAcesso } from '../context/AcessoContext'
 import {
   verConvite, aceitarConvite, meusPersonais, atualizarCompartilhamento, encerrarAcompanhamento,
-  meuPerfilPersonal, ativarPersonal, type MeuPersonal, type Compartilhamento, type PerfilPersonal,
+  meuPerfilPersonal, ativarPersonal, meuDesconto, type MeuPersonal, type Compartilhamento, type PerfilPersonal, type DescontoPersonal,
 } from '../lib/acompanhamento'
 import { normalizarCodigo, linkConvite } from '../lib/acompanhamentoBase'
 import { Button, Input, Spinner } from '../components/UI'
+import { brl } from '../lib/formatos'
 import Conversa from '../components/acompanhamento/Conversa'
 import Compartilhar from '../components/acompanhamento/Compartilhar'
+import BoasVindasPersonal from '../components/acompanhamento/BoasVindasPersonal'
+import { useConfig } from '../lib/config'
 
 const TUDO: Compartilhamento = { ver_treinos: true, ver_diario: true, ver_peso: true, editar_planos: true }
 const erroDe = (e: unknown) => (e instanceof Error ? e.message : 'Algo deu errado. Tente novamente.')
@@ -139,12 +142,17 @@ function ModoPersonal({ userId, nomePadrao }: { userId: string; nomePadrao: stri
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
 
+  const [desconto, setDesconto] = useState<DescontoPersonal | null>(null)
+  const [boasVindas, setBoasVindas] = useState(false)
+  const { config } = useConfig()
   useEffect(() => { meuPerfilPersonal(userId).then(setPerfil).catch(() => setPerfil(null)) }, [userId])
+  useEffect(() => { if (perfil) meuDesconto().then(setDesconto).catch(() => setDesconto(null)) }, [perfil])
 
   const ativar = async (novoCodigo = false) => {
     setOcupado(true); setErro(''); setAviso('')
     try {
       const p = await ativarPersonal(perfil ? null : nome, perfil ? null : cref, novoCodigo)
+      if (!perfil) setBoasVindas(true)
       setPerfil(p)
       if (novoCodigo) setAviso('Código novo gerado. O antigo não funciona mais; quem já é seu aluno continua.')
     } catch (e) { setErro(erroDe(e)) } finally { setOcupado(false) }
@@ -159,13 +167,17 @@ function ModoPersonal({ userId, nomePadrao }: { userId: string; nomePadrao: stri
   if (perfil === undefined) return null
   return (
     <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-3">
-      <div className="flex items-center gap-2"><Users className="w-5 h-5 text-green-400" /><h2 className="font-semibold text-zinc-100">Você é personal?</h2></div>
+      {boasVindas && <BoasVindasPersonal precoCentavos={config?.plano?.preco_centavos ?? null} aoFechar={() => setBoasVindas(false)} aoConvidar={() => { setBoasVindas(false); compartilhar() }} />}
+      <div className="flex items-center gap-2">
+        <Users className="w-5 h-5 text-green-400" /><h2 className="font-semibold text-zinc-100 flex-1">{perfil ? 'Modo personal' : 'Você é personal?'}</h2>
+        {perfil && <button onClick={() => setBoasVindas(true)} className="text-xs text-zinc-400 hover:text-zinc-200 inline-flex items-center gap-1"><HelpCircle className="w-3.5 h-3.5" />Como funciona</button>}
+      </div>
       {!perfil ? (
         !premium ? (
-          <p className="text-sm text-zinc-400">Acompanhe seus alunos pelo app: veja treinos, diário e peso, envie treinos e dietas e troque mensagens. Disponível no <Link to="/assinatura" className="text-green-400 underline">Premium</Link>.</p>
+          <p className="text-sm text-zinc-400">Acompanhe seus alunos pelo app: veja treinos, diário e peso, envie treinos e dietas e troque mensagens. Disponível no <Link to="/assinatura" className="text-green-400 underline">Premium</Link>, com 20% de desconto por aluno que assina e grátis a partir de 5.</p>
         ) : (
           <>
-            <p className="text-sm text-zinc-400">Ative o modo personal para receber um código de convite. Cada aluno escolhe o que compartilha com você.</p>
+            <p className="text-sm text-zinc-400">Ative o modo personal para receber um código de convite. Cada aluno escolhe o que compartilha com você. Cada aluno que assina o Premium tira 20% da sua mensalidade, e com 5 você não paga nada.</p>
             <Input label="Nome que o aluno vai ver" value={nome} onChange={e => setNome(e.target.value)} maxLength={80} />
             <Input label="CREF (opcional)" value={cref} onChange={e => setCref(e.target.value)} maxLength={30} placeholder="000000-G/UF" />
             <Button loading={ocupado} onClick={() => ativar()}>Ativar modo personal</Button>
@@ -182,6 +194,21 @@ function ModoPersonal({ userId, nomePadrao }: { userId: string; nomePadrao: stri
             <Button onClick={compartilhar}><Share2 className="w-4 h-4" />Convidar aluno</Button>
             <Link to="/alunos" className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 font-semibold text-sm px-4 py-2.5">Meus alunos<ChevronRight className="w-4 h-4" /></Link>
           </div>
+          {desconto && (
+            <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-3" data-testid="desconto-personal">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-green-200">{desconto.gratis ? 'Seu Premium está grátis 🎉' : `Sua mensalidade: ${brl(desconto.preco_centavos)}`}</p>
+                <p className="text-xs text-zinc-400 shrink-0">{desconto.alunos_pagantes} de 5 alunos pagantes</p>
+              </div>
+              <div className="mt-2 h-2 rounded-full bg-zinc-800 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={5} aria-valuenow={Math.min(desconto.alunos_pagantes, 5)} aria-label="Alunos pagantes">
+                <div className="h-full bg-green-500 transition-all" style={{ width: `${Math.min(desconto.alunos_pagantes, 5) * 20}%` }} />
+              </div>
+              <p className="text-xs text-zinc-400 mt-2">
+                {desconto.gratis ? 'Enquanto você tiver 5 ou mais alunos assinando o Premium, você não paga nada.'
+                  : `Cada aluno que assina o Premium tira 20% da sua mensalidade (de ${brl(desconto.preco_cheio_centavos)}). Com mais ${desconto.faltam_para_gratis}, ela fica grátis.`}
+              </p>
+            </div>
+          )}
           <div className="flex gap-4">
             <button onClick={async () => { try { await navigator.clipboard.writeText(perfil.codigo); setAviso('Código copiado.') } catch { /* sem permissão */ } }} className="text-xs text-zinc-400 hover:text-zinc-200 inline-flex items-center gap-1"><Copy className="w-3.5 h-3.5" />Copiar código</button>
             <button disabled={ocupado} onClick={() => ativar(true)} className="text-xs text-zinc-400 hover:text-zinc-200 inline-flex items-center gap-1"><RefreshCw className="w-3.5 h-3.5" />Gerar código novo</button>

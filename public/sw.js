@@ -10,8 +10,8 @@ self.addEventListener('push', e => {
   try { d = e.data ? e.data.json() : {} } catch { d = { corpo: e.data ? e.data.text() : '' } }
   e.waitUntil(self.registration.showNotification(d.titulo || 'R2 Fit Pro', {
     body: d.corpo || '',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: '/icons/icon-192-v2.png',
+    badge: '/icons/icon-192-v2.png',
     tag: d.tag || 'r2-lembrete',
     renotify: true,
     data: { url: d.url || '/dashboard' },

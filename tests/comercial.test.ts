@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mensagemAcomp } from '../supabase/functions/_shared/acompLogic'
+import { mensagemAcomp, acaoDescontoPersonal } from '../supabase/functions/_shared/acompLogic'
 import { createHmac } from 'node:crypto'
 import {
   mapearStatusPagamento, paraCentavos, extrairPreapprovalId, normalizarPagamento, normalizarAssinatura,
@@ -228,6 +228,18 @@ await t('acompanhamento: notificação certa para aluno e personal', () => {
   assert.equal(personal.titulo, 'Bia'); assert.equal(personal.url, '/alunos/al1'); assert.equal(personal.tag, 'r2-acomp-al1')
   const longo = mensagemAcomp({ ...base, texto: 'x'.repeat(300), tipo: 'texto', paraPersonal: true })
   assert.equal(longo.corpo.length, 140); assert.ok(longo.corpo.endsWith('…'))
+})
+
+await t('desconto do personal: ajusta o valor no Asaas ou dispensa a cobrança quando é grátis', () => {
+  const pend = [{ id: 'pay_1', dueDate: '2026-11-06', value: 19.9 }, { id: 'pay_2', dueDate: '2026-12-06', value: 19.9 }]
+  // 2 alunos pagantes: 40% de desconto → R$ 11,94, inclusive na cobrança já gerada
+  assert.deepEqual(acaoDescontoPersonal({ gratis: false, precoCentavos: 1194, valorAtual: 19.9, pendentes: pend, hoje: '2026-11-05' }), { novoValor: 11.94, apagar: [] })
+  // valor já certo e cobranças certas: nada a fazer
+  assert.deepEqual(acaoDescontoPersonal({ gratis: false, precoCentavos: 1194, valorAtual: 11.94, pendentes: [{ id: 'p', dueDate: '2026-11-06', value: 11.94 }], hoje: '2026-11-05' }), { novoValor: null, apagar: [] })
+  // assinatura já ajustada mas a cobrança pendente com o valor antigo: ajusta de novo
+  assert.equal(acaoDescontoPersonal({ gratis: false, precoCentavos: 1194, valorAtual: 11.94, pendentes: pend, hoje: '2026-11-05' }).novoValor, 11.94)
+  // grátis: apaga só o que vence nos próximos 2 dias
+  assert.deepEqual(acaoDescontoPersonal({ gratis: true, precoCentavos: 0, valorAtual: 19.9, pendentes: pend, hoje: '2026-11-05' }), { novoValor: null, apagar: ['pay_1'] })
 })
 
 console.log(`\n${ok} testes passaram`)

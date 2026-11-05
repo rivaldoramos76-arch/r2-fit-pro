@@ -50,3 +50,23 @@ export function useInstalacao() {
     },
   }
 }
+
+/** Navegador embutido de outro app (Instagram, Facebook, WhatsApp, TikTok…), que não instala apps. */
+export function navegadorEmbutido(ua = navigator.userAgent): boolean {
+  return /Instagram|FBAN|FBAV|FB_IAB|FBIOS|Line\/|WhatsApp|TikTok|musical_ly|Snapchat|; wv\)/i.test(ua)
+}
+
+const CHAVE_NAVEGADOR = 'r2-continuar-navegador'
+/** Rotas que funcionam no navegador mesmo sem o app instalado: voltar do pagamento e aceitar convites. */
+const LIVRES = [/^\/assinatura\/retorno/, /^\/convite\//, /^\/amigo\//]
+
+/** No celular, o app só é usado instalado na tela inicial (com uma saída de emergência por sessão). */
+export function precisaInstalar(caminho: string, ua = navigator.userAgent): boolean {
+  if (estaInstalado() || detectarSistema(ua) === 'outro') return false
+  if (LIVRES.some(r => r.test(caminho))) return false
+  try { if (sessionStorage.getItem(CHAVE_NAVEGADOR) === '1') return false } catch { /* sem armazenamento */ }
+  return true
+}
+export function continuarNoNavegador() {
+  try { sessionStorage.setItem(CHAVE_NAVEGADOR, '1') } catch { /* sem armazenamento */ }
+}

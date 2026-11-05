@@ -61,6 +61,9 @@ export const definirMeta = (alunoId: string, m: { calorias: number; proteina_g: 
     p_agua_ml: m.agua_ml, p_meta_peso: m.meta_peso_kg,
   })
 
+export interface DescontoPersonal { alunos_pagantes: number; percentual: number; gratis: boolean; faltam_para_gratis: number; preco_centavos: number; preco_cheio_centavos: number }
+export const meuDesconto = () => rpc<DescontoPersonal | null>('acomp_meu_desconto')
+
 // --- Aluno ---
 export const verConvite = (codigo: string) => rpc<{ nome: string; cref: string | null; proprio: boolean; ja_vinculado: boolean }>('acomp_ver_convite', { p_codigo: codigo })
 export const aceitarConvite = (codigo: string, c: Compartilhamento) => rpc<string>('acomp_aceitar', {

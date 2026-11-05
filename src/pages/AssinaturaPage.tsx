@@ -22,7 +22,11 @@ interface Assinatura {
   created_at: string
   modalidade: 'recorrente' | 'avulso' | 'cortesia' | 'teste'
   meses_periodo: number
+  provider: string
 }
+
+/** Desconto do personal: 20% por aluno pagante, grátis a partir de 5 (calculado no servidor). */
+interface DescontoPersonal { alunos_pagantes: number; percentual: number; gratis: boolean; faltam_para_gratis: number; preco_centavos: number; preco_anual_centavos: number | null; preco_cheio_centavos: number }
 
 type Periodo = 'mensal' | 'anual'
 type Forma = 'cartao' | 'avulso'
@@ -101,11 +105,12 @@ export default function AssinaturaPage() {
   const [asaasCliente, setAsaasCliente] = useState(false)
   const [cpf, setCpf] = useState('')
   const [erroCpf, setErroCpf] = useState('')
+  const [desconto, setDesconto] = useState<DescontoPersonal | null>(null)
 
   const carregar = useCallback(async () => {
     if (!user) return
     const { data, error } = await supabase.from('subscriptions')
-      .select('id, status, plano_nome, preco_centavos, iniciada_em, periodo_atual_fim, proxima_cobranca, cancelada_em, created_at, modalidade, meses_periodo')
+      .select('id, status, plano_nome, preco_centavos, iniciada_em, periodo_atual_fim, proxima_cobranca, cancelada_em, created_at, modalidade, meses_periodo, provider')
       .eq('user_id', user.id).order('created_at', { ascending: false }).limit(5)
     if (error) setErro('Não foi possível carregar sua assinatura. Verifique sua conexão.')
     // Mostra a assinatura com acesso vigente; senão, a mais recente
@@ -119,10 +124,11 @@ export default function AssinaturaPage() {
 
   useEffect(() => {
     carregar()
-    chamarApi<{ pagamentos_configurados: boolean; public_key: string | null; provedor?: 'asaas' | 'mercadopago'; asaas_cliente?: boolean }>('billing', { acao: 'config' })
+    chamarApi<{ pagamentos_configurados: boolean; public_key: string | null; provedor?: 'asaas' | 'mercadopago'; asaas_cliente?: boolean; desconto_personal?: DescontoPersonal | null }>('billing', { acao: 'config' })
       .then(r => {
         setPagamentosConfigurados(r.pagamentos_configurados); setPublicKey(r.public_key)
         setProvedor(r.provedor ?? 'mercadopago'); setAsaasCliente(Boolean(r.asaas_cliente))
+        setDesconto(r.provedor === 'asaas' ? r.desconto_personal ?? null : null)
       })
       .catch(() => setPagamentosConfigurados(null))
   }, [carregar])
@@ -209,8 +215,12 @@ export default function AssinaturaPage() {
   if (carregando) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
 
   const rotulo = ROTULO_ESTADO[estado]
-  const plano = config?.plano
+  // Personal com alunos pagantes vê (e paga) o preço com desconto
+  const plano = config?.plano && desconto && desconto.percentual > 0 && !desconto.gratis
+    ? { ...config.plano, preco_centavos: desconto.preco_centavos, preco_anual_centavos: config.plano.preco_anual_centavos ? desconto.preco_anual_centavos : null }
+    : config?.plano
   const avulso = assinatura?.modalidade === 'avulso'
+  const bonusPersonal = assinatura?.provider === 'personal_bonus'
   const cortesia = assinatura?.modalidade === 'cortesia'
   const emTeste = assinatura?.modalidade === 'teste'
   const dentroArrependimento = !!(assinatura?.iniciada_em && plano &&
@@ -251,6 +261,8 @@ export default function AssinaturaPage() {
           <h2 className="font-semibold mb-2">{assinatura.plano_nome}</h2>
           {emTeste ? (
             <Linha rotulo="Tipo" valor="Teste grátis (sem cobrança)" />
+          ) : bonusPersonal ? (
+            <Linha rotulo="Tipo" valor="Grátis por ter 5 ou mais alunos pagantes" />
           ) : cortesia ? (
             <Linha rotulo="Tipo" valor="Cortesia (sem cobrança)" />
           ) : avulso ? (
@@ -269,7 +281,19 @@ export default function AssinaturaPage() {
         </Card>
       )}
 
-      {plano && podeComprar && (
+      {desconto && (desconto.percentual > 0 || desconto.gratis) && (
+        <Card className="border-green-500/30 bg-green-500/5">
+          <p className="text-sm font-semibold text-green-300">Desconto de personal</p>
+          <p className="text-sm text-zinc-300 mt-1">
+            {desconto.gratis
+              ? `Você tem ${desconto.alunos_pagantes} alunos pagantes: seu Premium é grátis enquanto eles continuarem assinando.`
+              : `Você tem ${desconto.alunos_pagantes} aluno(s) pagante(s): ${desconto.percentual}% de desconto. Com mais ${desconto.faltam_para_gratis}, seu Premium fica grátis.`}
+          </p>
+          {!desconto.gratis && <p className="text-xs text-zinc-500 mt-1">A mensalidade é recalculada todo mês, antes da cobrança.</p>}
+        </Card>
+      )}
+
+      {plano && podeComprar && !desconto?.gratis && (
         <Card className="border-green-500/30">
           <h2 className="font-semibold">{renovacaoAvulsa ? 'Renovar ou adicionar tempo' : estado === 'teste' ? 'Continue com o Premium depois do teste' : plano.nome}</h2>
           {renovacaoAvulsa && <p className="text-xs text-zinc-400 mt-1">O tempo comprado agora é somado ao seu período atual.</p>}
