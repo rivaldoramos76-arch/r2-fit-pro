@@ -937,7 +937,7 @@ await t('contador: por cima da música toca só os avisos curtos, agendados, e r
   await ctx.close()
 })
 
-await t('contador: aviso de tela desbloqueada só no iPhone; no Android a música abaixa nos avisos', async () => {
+await t('contador: aviso de tela desbloqueada só no iPhone; no Android cada fala abaixa a música só enquanto toca', async () => {
   const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
   const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36'
   for (const [ua, deve] of [[iphone, true], [android, false]]) {
@@ -955,8 +955,10 @@ await t('contador: aviso de tela desbloqueada só no iPhone; no Android a músic
     await page.getByRole('button', { name: /^▶ Iniciar$/ }).click()
     await page.waitForTimeout(2500)
     const plays = await page.evaluate(() => window.__mediaPlays)
-    assert.ok(deve ? plays === 0 : plays >= 2, `abaixar música: ${plays} disparos`)
-    assert.equal(await page.evaluate(() => window.__agendados.length), 19, 'voz continua agendada no Web Audio')
+    // Android: cada fala toca num áudio curto próprio (o sistema abaixa a música só durante a fala);
+    // iPhone: as falas ficam agendadas no Web Audio
+    assert.ok(deve ? plays === 0 : plays >= 2, `falas em áudio curto: ${plays}`)
+    assert.equal(await page.evaluate(() => window.__agendados.length), deve ? 19 : 0, 'onde a voz toca')
     await ctx.close()
   }
 })

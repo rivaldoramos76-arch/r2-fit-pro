@@ -280,6 +280,21 @@ export function duracoes(clips: Clipes): Record<ClipKey, number> {
   return Object.fromEntries(Object.entries(clips).map(([k, v]) => [k, v.length / TAXA]))
 }
 
+/** Um clipe de voz como WAV (PCM 16 bits mono), para tocar num <audio> curto. */
+export function wavDoClipe(dados: Float32Array, sr = TAXA): Blob {
+  const n = dados.length
+  const buf = new ArrayBuffer(44 + n * 2)
+  const dv = new DataView(buf)
+  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)) }
+  w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE')
+  w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true)
+  dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true)
+  w(36, 'data'); dv.setUint32(40, n * 2, true)
+  const pcm = new Int16Array(buf, 44, n)
+  for (let i = 0; i < n; i++) { const v = Math.max(-1, Math.min(1, dados[i])); pcm[i] = Math.round(v * 32767) }
+  return new Blob([buf], { type: 'audio/wav' })
+}
+
 /** WAV silencioso (usado para pedir ao Android que abaixe a música durante os avisos). */
 export function silencioWav(seg: number, sr = 8000): Blob {
   const n = Math.round(seg * sr)
@@ -355,13 +370,13 @@ export class TreinoPlayer {
   // sistema um "foco de áudio passageiro", e o Android abaixa a música por um instante,
   // como no GPS. O relógio vem do próprio Web Audio (funciona em segundo plano).
   private abaixarMusica = false
-  private duckCurto: HTMLAudioElement | null = null
-  private duckLongo: HTMLAudioElement | null = null
+  /** Android: cada fala toca num <audio> curto próprio. O sistema abaixa a música só enquanto ela
+   *  toca e devolve o volume quando acaba (o Web Audio ligado seguraria a música baixa o treino todo). */
+  private vozes: Record<string, HTMLAudioElement> = {}
+  private vozTocando: HTMLAudioElement | null = null
   private urlsDuck: string[] = []
   private relogio: ScriptProcessorNode | null = null
   private proximoDuck = 0
-  /** Até quando (tempo do treino) a música deve ficar abaixada; depois o áudio silencioso é parado. */
-  private duckAte = 0
   // modo voz
   private t0 = 0
   private pausadoEm: number | null = null
@@ -441,16 +456,16 @@ export class TreinoPlayer {
   }
 
   private prepararAbaixar(ctx: Ctx) {
-    const criar = (seg: number) => {
-      const url = URL.createObjectURL(silencioWav(seg))
+    for (const [k, dados] of Object.entries(this.clips ?? {})) {
+      if (!dados.length) continue
+      const url = URL.createObjectURL(wavDoClipe(dados))
       this.urlsDuck.push(url)
       const a = new Audio(url)
       a.preload = 'auto'
       a.setAttribute('playsinline', '')
-      return a
+      this.vozes[k] = a
     }
-    this.duckCurto = criar(1.4)
-    this.duckLongo = criar(4.5)
+    this.aplicarVolume()
     // Batida do relógio de áudio: dispara no tempo certo mesmo com a tela bloqueada
     const relogio = ctx.createScriptProcessor(2048, 1, 1)
     const mudo = ctx.createGain()
@@ -460,34 +475,29 @@ export class TreinoPlayer {
     this.relogio = relogio
   }
 
-  /** Abaixa a música (Android) quando um aviso está para começar. */
+  /** Android: toca cada fala no seu <audio> na hora certa (o relógio é o do Web Audio, que segue com a tela bloqueada). */
   private marcarAbaixar() {
-    if (!this.ctx || this.parado || this.pausadoMix || this.interrompido || !this.duckCurto) return
+    if (!this.ctx || this.parado || this.pausadoMix || this.interrompido || !this.abaixarMusica) return
     const t = this.ctx.currentTime - this.t0Ctx
     const cues = this.crono.cues
-    while (this.proximoDuck < cues.length && cues[this.proximoDuck].t - 0.3 <= t) {
+    while (this.proximoDuck < cues.length && cues[this.proximoDuck].t - 0.03 <= t) {
       const cue = cues[this.proximoDuck++]
-      if (t > cue.t + 0.3) continue
-      const curto = /^[0-9]$/.test(cue.clip) || cue.clip === 'trabalho' || cue.clip === 'repouso'
-      const el = curto ? this.duckCurto : this.duckLongo!
+      const final = cue.clip === 'fim' || cue.clip === 'treino_fim'
+      if (t > cue.t + 0.5 && !final) continue
+      const el = this.vozes[cue.clip]
+      if (!el) continue
       try { el.currentTime = 0 } catch { /* ainda carregando */ }
+      this.vozTocando = el
       el.play().catch(() => {})
-      const dur = (this.clips?.[cue.clip]?.length ?? 0) / TAXA
-      this.duckAte = Math.max(this.duckAte, cue.t + dur + 0.35)
     }
-    // Fala terminou e não vem outra logo em seguida: para o áudio silencioso para o sistema
-    // devolver o volume da música na hora (sem isso, alguns celulares deixam a música baixa)
-    const proxima = cues[this.proximoDuck]
-    if (this.duckAte && t >= this.duckAte && !(proxima && proxima.t - 0.6 <= t)) this.soltarMusica()
   }
 
   private soltarMusica() {
-    this.duckAte = 0
-    for (const d of [this.duckCurto, this.duckLongo]) {
-      if (!d) continue
-      d.pause()
-      try { d.currentTime = 0 } catch { /* ainda carregando */ }
-    }
+    const d = this.vozTocando
+    this.vozTocando = null
+    if (!d) return
+    d.pause()
+    try { d.currentTime = 0 } catch { /* ainda carregando */ }
   }
 
   /** Agenda no Web Audio todos os avisos a partir da posição `pos` (s). */
@@ -500,6 +510,7 @@ export class TreinoPlayer {
     this.proximoDuck = this.crono.cues.findIndex(c => c.t >= pos - 0.05)
     if (this.proximoDuck < 0) this.proximoDuck = this.crono.cues.length
     for (const cue of this.crono.cues) {
+      if (this.abaixarMusica) break // Android: as falas tocam em <audio> (marcarAbaixar)
       if (cue.t < pos - 0.05) continue
       const b = this.buffers[cue.clip]
       if (!b) continue
@@ -597,6 +608,7 @@ export class TreinoPlayer {
 
   private aplicarVolume() {
     if (this.ganho) this.ganho.gain.value = this.mudo ? 0 : this.volume
+    for (const v of Object.values(this.vozes)) { v.volume = this.volume; v.muted = this.mudo }
   }
 
   setVolume(v: number) {
@@ -620,7 +632,7 @@ export class TreinoPlayer {
     for (const f of this.fontes) { try { f.stop() } catch { /* já parou */ } }
     this.fontes = []
     if (this.relogio) { this.relogio.onaudioprocess = null; this.relogio.disconnect() }
-    for (const d of [this.duckCurto, this.duckLongo]) d?.pause()
+    for (const v of Object.values(this.vozes)) v.pause()
     for (const u of this.urlsDuck) URL.revokeObjectURL(u)
     this.urlsDuck = []
     this.ctx?.close().catch(() => {})
