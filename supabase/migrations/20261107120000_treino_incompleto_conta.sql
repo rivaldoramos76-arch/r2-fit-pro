@@ -2,8 +2,9 @@
 -- R2 Fit Pro — Treino incompleto também conta.
 -- Uma sessão com pelo menos 1 exercício feito vale como treino em tudo: diário de exercícios,
 -- ranking e feed dos amigos, curtidas e painel do personal. A coluna gerada `feito` diz isso.
--- O lançamento no diário é criado no primeiro exercício e atualizado a cada exercício feito
--- (tempo e calorias só dos exercícios feitos); se a sessão ficar sem nenhum exercício, sai do diário.
+-- O lançamento no diário é criado no primeiro exercício e atualizado a cada exercício feito.
+-- Conta só o executado: o tempo é o dos exercícios feitos (séries × (execução + descanso)), sem
+-- somar intervalos parados entre um exercício e outro. Sem nenhum exercício, sai do diário.
 -- ============================================================
 
 ALTER TABLE public.sessoes_treino ADD COLUMN IF NOT EXISTS feito BOOLEAN
@@ -24,7 +25,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.treino_para_diario()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-DECLARE v_n INT; v_real NUMERIC; v_plano INT; v_min INT; v_peso NUMERIC; v_data DATE; v_dia TEXT; v_kcal INT; v_nome TEXT;
+DECLARE v_n INT; v_plano INT; v_min INT; v_peso NUMERIC; v_data DATE; v_dia TEXT; v_kcal INT; v_nome TEXT;
 BEGIN
   IF TG_OP = 'UPDATE' AND NEW.series_realizadas IS NOT DISTINCT FROM OLD.series_realizadas AND NEW.concluido = OLD.concluido THEN
     RETURN NEW;
@@ -34,10 +35,9 @@ BEGIN
     DELETE FROM public.exercicios_registro WHERE sessao_id = NEW.id AND origem = 'treino';
     RETURN NEW;
   END IF;
-  v_real := extract(epoch FROM (COALESCE(NEW.data_fim, NOW()) - NEW.data_inicio)) / 60;
   v_plano := COALESCE(NULLIF(public._treino_minutos_feitos(NEW.treino_id, NEW.dia_index, NEW.series_realizadas), 0),
                       CASE WHEN NEW.concluido THEN 45 ELSE LEAST(45, 10 * GREATEST(v_n, 1)) END);
-  v_min := LEAST(GREATEST(CASE WHEN v_real BETWEEN 5 AND 180 THEN GREATEST(round(v_real)::INT, v_plano) ELSE v_plano END, 5), 180);
+  v_min := LEAST(GREATEST(v_plano, 1), 180);
   SELECT peso_kg INTO v_peso FROM public.registros_peso WHERE user_id = NEW.user_id ORDER BY data DESC LIMIT 1;
   IF v_peso IS NULL THEN SELECT peso_kg INTO v_peso FROM public.metas_nutricionais WHERE user_id = NEW.user_id; END IF;
   SELECT NULLIF(trim(t.plano -> 'dias' -> NEW.dia_index ->> 'dia'), '') INTO v_dia FROM public.treinos t WHERE t.id = NEW.treino_id;

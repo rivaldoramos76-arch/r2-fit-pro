@@ -12,11 +12,11 @@ BEGIN
   VALUES (u, 'Hipertrofia', 'hipertrofia', 'iniciante', 3, '{"dias": [{"dia": "Treino A", "exercicios": [{"id": "e1", "nome": "Supino", "series": "4"}, {"id": "e2", "nome": "Remada", "series": "4"}]}]}')
   RETURNING id INTO tid;
 
-  -- 1. Sessão de 50 min concluída: entra "Musculação · Treino A", 50 min, 4,5 × 80 × 50/60 = 300 kcal
+  -- 1. Treino concluído (mesmo levando 50 min no relógio) conta só o executado: 13 min, 4,5 × 80 × 13/60 = 78 kcal
   INSERT INTO public.sessoes_treino (user_id, treino_id, treino_nome, dia_index, data_inicio, data_fim, concluido, series_realizadas)
-  VALUES (u, tid, 'Hipertrofia', 0, NOW() - INTERVAL '50 minutes', NOW(), TRUE, '{}') RETURNING id INTO sid;
+  VALUES (u, tid, 'Hipertrofia', 0, NOW() - INTERVAL '50 minutes', NOW(), TRUE, '{"e1": 4, "e2": 4}') RETURNING id INTO sid;
   SELECT * INTO r FROM public.exercicios_registro WHERE sessao_id = sid;
-  IF r.nome <> 'Musculação · Treino A' OR r.duracao_min <> 50 OR r.calorias <> 300 OR r.origem <> 'treino'
+  IF r.nome <> 'Musculação · Treino A' OR r.duracao_min <> 13 OR r.calorias <> 78 OR r.origem <> 'treino'
      OR r.data <> (NOW() AT TIME ZONE 'America/Sao_Paulo')::DATE THEN
     RAISE EXCEPTION 'FALHA 1: lançamento (% / % / % / %)', r.nome, r.duracao_min, r.calorias, r.data; END IF; n := n + 1;
 
@@ -25,15 +25,15 @@ BEGIN
   SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE user_id = u;
   IF cnt <> 1 THEN RAISE EXCEPTION 'FALHA 2: duplicou (%)', cnt; END IF; n := n + 1;
 
-  -- 3. Desmarcar tira do diário; marcar de novo volta
-  UPDATE public.sessoes_treino SET concluido = FALSE WHERE id = sid;
+  -- 3. Sem nenhum exercício sai do diário; feito de novo volta
+  UPDATE public.sessoes_treino SET concluido = FALSE, series_realizadas = '{}' WHERE id = sid;
   SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE user_id = u;
   IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 3: ficou no diário após desmarcar'; END IF; n := n + 1;
-  UPDATE public.sessoes_treino SET concluido = TRUE WHERE id = sid;
+  UPDATE public.sessoes_treino SET concluido = TRUE, series_realizadas = '{"e1": 4, "e2": 4}' WHERE id = sid;
   SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE user_id = u;
   IF cnt <> 1 THEN RAISE EXCEPTION 'FALHA 4: não voltou ao marcar'; END IF; n := n + 1;
 
-  -- 5. Sessão marcada sem tempo real (2 min): usa o plano (13 min)
+  -- 5. Outra sessão completa: 13 min do plano
   INSERT INTO public.sessoes_treino (user_id, treino_id, treino_nome, dia_index, data_inicio, data_fim, concluido, series_realizadas)
   VALUES (u, tid, 'Hipertrofia', 0, NOW() - INTERVAL '2 minutes', NOW(), TRUE, '{"e1": 4, "e2": 4}') RETURNING id INTO sid2;
   SELECT * INTO r FROM public.exercicios_registro WHERE sessao_id = sid2;
