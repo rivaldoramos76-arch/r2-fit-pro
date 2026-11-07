@@ -11,7 +11,7 @@ export interface MeuPersonal extends Compartilhamento { id: string; personal_id:
 export interface PerfilPersonal { codigo: string; nome_exibicao: string | null; cref: string | null }
 export interface Mensagem { id: string; acompanhamento_id: string; autor_id: string; tipo: 'texto' | 'treino' | 'dieta' | 'meta' | 'aviso'; texto: string; ref_id: string | null; lida_em: string | null; created_at: string }
 export interface TreinoAluno { id: string; nome: string; objetivo: string | null; nivel: string | null; frequencia_semanal: number | null; created_at: string; enviado_por_mim: boolean }
-export interface SessaoAluno { treino_nome: string | null; dia_index: number; data_inicio: string; data_fim: string | null; concluido: boolean }
+export interface SessaoAluno { treino_nome: string | null; dia_index: number; data_inicio: string; data_fim: string | null; concluido: boolean; feito?: boolean }
 export interface MetaAluno { calorias: number; proteina_g: number; carboidrato_g: number; gordura_g: number; agua_ml: number | null; meta_peso_kg: number | null; somar_exercicio: boolean; personalizada: boolean; peso_kg: number; objetivo: string }
 export interface DadosAluno extends Compartilhamento {
   id: string; aluno_id: string; nome: string; desde: string

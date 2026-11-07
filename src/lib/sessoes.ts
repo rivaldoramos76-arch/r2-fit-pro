@@ -1,7 +1,9 @@
 // Registro de conclusão por plano (treino_id) → sessão (sessoes_treino.id) → exercício (id).
 // Uma sessão representa uma execução de um treino (A, B, C...). `series_realizadas`
 // guarda apenas exercícios concluídos: { [exercicioId]: séries feitas }.
-// A sessão só é marcada como concluída quando todos os exercícios previstos foram feitos.
+// A sessão só é marcada como concluída quando todos os exercícios previstos foram feitos, mas com
+// pelo menos 1 exercício feito ela já conta como treino (coluna `feito` no banco).
+// Uma sessão incompleta sem atividade há mais de 6 horas fica encerrada: o próximo exercício abre outra.
 // O Supabase é a fonte de verdade; o localStorage espelha os dados para uso offline.
 import { supabase } from './supabase'
 
@@ -10,9 +12,19 @@ export interface Sessao {
   treino_id: string
   dia_index: number
   concluido: boolean
+  /** pelo menos 1 exercício feito (calculado no banco) */
+  feito?: boolean
   series_realizadas: Record<string, number>
   data_inicio: string
   data_fim: string | null
+}
+
+const LIMITE_SESSAO_MS = 6 * 3600_000
+/** Sessão ainda aberta: não concluída e com atividade nas últimas 6 horas. */
+export function emAndamento(s: Sessao | null, agora = Date.now()): boolean {
+  if (!s || s.concluido) return false
+  const ultima = Date.parse(s.data_fim ?? s.data_inicio)
+  return Number.isFinite(ultima) && agora - ultima < LIMITE_SESSAO_MS
 }
 
 const chaveLocal = (treinoId: string, dia: number) => `r2fit_sessao_${treinoId}_${dia}`
@@ -46,9 +58,10 @@ export async function sessaoAtual(treinoId: string, dia: number): Promise<Sessao
 /** Última sessão concluída de cada treino do plano (para sugerir o próximo). */
 export async function ultimasConcluidas(treinoId: string): Promise<{ dia_index: number; data_fim: string }[]> {
   const { data } = await supabase.from('sessoes_treino')
-    .select('dia_index, data_fim').eq('treino_id', treinoId).eq('concluido', true)
-    .order('data_fim', { ascending: false }).limit(20)
-  return (data ?? []) as { dia_index: number; data_fim: string }[]
+    .select('dia_index, data_fim, data_inicio').eq('treino_id', treinoId).eq('feito', true)
+    .order('data_inicio', { ascending: false }).limit(20)
+  return ((data ?? []) as { dia_index: number; data_fim: string | null; data_inicio: string }[])
+    .map(s => ({ dia_index: s.dia_index, data_fim: s.data_fim ?? s.data_inicio }))
 }
 
 /**
@@ -66,12 +79,15 @@ export async function concluirExercicio(params: {
 }): Promise<Sessao> {
   const { userId, treinoId, treinoNome, dia, exercicioId, series, exerciciosDoTreino } = params
   let atual = await sessaoAtual(treinoId, dia)
-  if (atual?.concluido) atual = null // sessão anterior já finalizada → nova sessão
+  // sessão anterior já finalizada (ou incompleta e parada há horas) → nova sessão
+  if (atual && !emAndamento(atual) && Object.keys(atual.series_realizadas ?? {}).length > 0) atual = null
+  if (atual?.concluido) atual = null
 
   const feitos = { ...(atual?.series_realizadas ?? {}), [exercicioId]: series }
   const todos = exerciciosDoTreino.length > 0 && exerciciosDoTreino.every(id => feitos[id] != null)
   const agora = new Date().toISOString()
-  const campos = { series_realizadas: feitos, concluido: todos, data_fim: todos ? agora : null }
+  // data_fim = hora do último exercício feito (mesmo com o treino incompleto)
+  const campos = { series_realizadas: feitos, concluido: todos, data_fim: agora }
 
   let salva: Sessao | null = null
   if (atual && !atual.id.startsWith('local-')) {

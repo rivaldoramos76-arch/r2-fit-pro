@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTreino } from '../lib/treinoApi'
 import { descreverGrupos, equipamentosCobertos, type ExercicioPlano, type PlanoTreino } from '../lib/treinoModel'
-import { desmarcarExercicio, novaSessao, sessaoAtual, type Sessao } from '../lib/sessoes'
+import { desmarcarExercicio, emAndamento, novaSessao, sessaoAtual, type Sessao } from '../lib/sessoes'
 import ExercicioPicker, { ExercicioForm } from '../components/treino/ExercicioPicker'
 import { Spinner } from '../components/UI'
 import CompartilharCartao from '../components/CompartilharCartao'
@@ -34,7 +34,8 @@ export default function TreinoDiaPage() {
 
   useEffect(() => {
     if (!id) return
-    sessaoAtual(id, diaIdx).then(setSessao)
+    // Treino incompleto parado há horas já foi contado: a tela começa uma sessão nova
+    sessaoAtual(id, diaIdx).then(s => setSessao(s && !s.concluido && !emAndamento(s) && Object.keys(s.series_realizadas ?? {}).length > 0 ? null : s))
   }, [id, diaIdx])
 
   if (loading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>

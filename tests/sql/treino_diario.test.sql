@@ -1,15 +1,15 @@
 -- Testes do treino no diário: sessão concluída vira exercício com duração e calorias estimadas,
--- sem duplicar, e sai do diário se for desmarcada. Tudo revertido; esperado: "TESTES_OK (n)".
+-- sem duplicar, treino incompleto também conta e sai do diário se ficar sem exercícios. Tudo revertido; esperado: "TESTES_OK (n)".
 DO $t$
 DECLARE
-  u UUID := gen_random_uuid(); tid UUID; sid UUID; sid2 UUID; n INT := 0; cnt INT; r RECORD;
+  u UUID := gen_random_uuid(); tid UUID; sid UUID; sid2 UUID; sid3 UUID; n INT := 0; cnt INT; i INT; r RECORD;
 BEGIN
   INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at)
   VALUES (u, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'pg-'||u||'@exemplo.invalid', 'x', NOW(), '{}', NOW(), NOW());
   INSERT INTO public.registros_peso (user_id, data, peso_kg) VALUES (u, CURRENT_DATE, 80);
   -- Plano: 2 exercícios × 4 séries × (40 + 60 s) = 13 min
   INSERT INTO public.treinos (user_id, nome, objetivo, nivel, frequencia_semanal, plano)
-  VALUES (u, 'Hipertrofia', 'hipertrofia', 'iniciante', 3, '{"dias": [{"dia": "Treino A", "exercicios": [{"nome": "Supino", "series": "4"}, {"nome": "Remada", "series": "4"}]}]}')
+  VALUES (u, 'Hipertrofia', 'hipertrofia', 'iniciante', 3, '{"dias": [{"dia": "Treino A", "exercicios": [{"id": "e1", "nome": "Supino", "series": "4"}, {"id": "e2", "nome": "Remada", "series": "4"}]}]}')
   RETURNING id INTO tid;
 
   -- 1. Sessão de 50 min concluída: entra "Musculação · Treino A", 50 min, 4,5 × 80 × 50/60 = 300 kcal
@@ -35,16 +35,30 @@ BEGIN
 
   -- 5. Sessão marcada sem tempo real (2 min): usa o plano (13 min)
   INSERT INTO public.sessoes_treino (user_id, treino_id, treino_nome, dia_index, data_inicio, data_fim, concluido, series_realizadas)
-  VALUES (u, tid, 'Hipertrofia', 0, NOW() - INTERVAL '2 minutes', NOW(), TRUE, '{}') RETURNING id INTO sid2;
+  VALUES (u, tid, 'Hipertrofia', 0, NOW() - INTERVAL '2 minutes', NOW(), TRUE, '{"e1": 4, "e2": 4}') RETURNING id INTO sid2;
   SELECT * INTO r FROM public.exercicios_registro WHERE sessao_id = sid2;
   IF r.duracao_min <> 13 OR r.calorias <> round(4.5 * 80 * 13 / 60.0)::INT THEN
     RAISE EXCEPTION 'FALHA 5: duração pelo plano (% / %)', r.duracao_min, r.calorias; END IF; n := n + 1;
 
-  -- 6. Lançamento editado pelo aluno não é recriado nem apagado por engano; apagado à mão não volta
+  -- 6. Apagado à mão não volta só por outra alteração da sessão (sem novo exercício feito)
   DELETE FROM public.exercicios_registro WHERE sessao_id = sid2;
-  UPDATE public.sessoes_treino SET series_realizadas = '{"x": [1]}' WHERE id = sid2;
+  UPDATE public.sessoes_treino SET data_fim = NOW() WHERE id = sid2;
   SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE sessao_id = sid2;
   IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 6: voltou após apagar'; END IF; n := n + 1;
+
+  -- 6b. Treino incompleto conta: 1 de 2 exercícios feito entra no diário com o tempo só desse exercício
+  INSERT INTO public.sessoes_treino (user_id, treino_id, treino_nome, dia_index, data_inicio, data_fim, concluido, series_realizadas)
+  VALUES (u, tid, 'Hipertrofia', 0, NOW() - INTERVAL '1 minute', NOW(), FALSE, '{}') RETURNING id INTO sid3;
+  SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE sessao_id = sid3;
+  IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 6b: sessão vazia no diário'; END IF;
+  UPDATE public.sessoes_treino SET series_realizadas = '{"e1": 4}' WHERE id = sid3;
+  SELECT * INTO r FROM public.exercicios_registro WHERE sessao_id = sid3;
+  IF r.duracao_min IS NULL OR r.duracao_min <> 7 THEN RAISE EXCEPTION 'FALHA 6b: incompleto (%)', r.duracao_min; END IF; n := n + 1;
+  IF NOT (SELECT feito FROM public.sessoes_treino WHERE id = sid3) THEN RAISE EXCEPTION 'FALHA 6c: incompleto não conta'; END IF; n := n + 1;
+  -- 6d. Ao fazer o segundo, o mesmo lançamento é atualizado (sem duplicar)
+  UPDATE public.sessoes_treino SET series_realizadas = '{"e1": 4, "e2": 4}' WHERE id = sid3;
+  SELECT count(*), max(duracao_min) INTO cnt, i FROM public.exercicios_registro WHERE sessao_id = sid3;
+  IF cnt <> 1 OR i <> 13 THEN RAISE EXCEPTION 'FALHA 6d: atualização (% / %)', cnt, i; END IF; n := n + 1;
 
   -- 7. Apagar a sessão mantém o exercício no diário (sessao_id vira nulo)
   DELETE FROM public.sessoes_treino WHERE id = sid;

@@ -273,7 +273,9 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
           {multi
             ? <p className="text-zinc-500 text-sm mt-1">{feitos.length} de {itens.length} exercícios concluídos</p>
             : <p className="text-zinc-500 text-sm mt-1">{ok ? `${itens[0]?.series ?? 0} séries finalizadas` : 'Não foi marcado como concluído.'}</p>}
-          {ok && treinoCompleto && <p className="text-xs text-green-400 mt-3">✓ {dia?.dia} completo · já está no seu diário</p>}
+          {registrados.length > 0 && !erroRegistro && (
+            <p className="text-xs text-green-400 mt-3">✓ {treinoCompleto ? `${dia?.dia} completo` : 'Treino registrado'} · já está no seu diário</p>
+          )}
           {erroRegistro && <p className="text-xs text-red-400 mt-3">Não foi possível registrar a conclusão de algum exercício. Confira na lista.</p>}
         </div>
         {multi && feitos.length > 0 && (

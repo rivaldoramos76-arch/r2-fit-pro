@@ -100,7 +100,7 @@ function Resumo({ d, semana, setSemana, aoMeta }: { d: DadosAluno; semana: strin
   const r = resumoSemana({
     inicio: semana,
     alimentos: d.alimentos ?? [], agua: d.agua ?? [], exercicios: d.exercicios ?? [], pesos: d.pesos ?? [],
-    treinosConcluidos: (d.sessoes ?? []).filter(s => s.concluido && diaLocal(s.data_inicio) >= semana && diaLocal(s.data_inicio) <= somarDias(semana, 6)).length,
+    treinosConcluidos: (d.sessoes ?? []).filter(s => (s.feito ?? s.concluido) && diaLocal(s.data_inicio) >= semana && diaLocal(s.data_inicio) <= somarDias(semana, 6)).length,
     meta: d.meta && d.ver_diario ? { calorias: d.meta.calorias, proteina_g: d.meta.proteina_g, carboidrato_g: d.meta.carboidrato_g, gordura_g: d.meta.gordura_g, agua_ml: d.meta.agua_ml ?? 2000, somar_exercicio: d.meta.somar_exercicio } : null,
   })
   const atual = inicioSemana(hojeLocal())
@@ -235,7 +235,7 @@ function Treinos({ d, userId, semana, aoMudar }: { d: DadosAluno; userId: string
     setAviso('Dieta enviada. O aluno foi avisado.'); setDieta('')
   })
   const fimSemana = somarDias(semana, 6)
-  const sessoes = (d.sessoes ?? []).filter(s => s.concluido && diaLocal(s.data_inicio) >= semana && diaLocal(s.data_inicio) <= fimSemana).slice(0, 14)
+  const sessoes = (d.sessoes ?? []).filter(s => (s.feito ?? s.concluido) && diaLocal(s.data_inicio) >= semana && diaLocal(s.data_inicio) <= fimSemana).slice(0, 14)
 
   return (
     <div className="flex flex-col gap-3">

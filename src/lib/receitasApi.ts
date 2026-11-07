@@ -52,7 +52,7 @@ export async function dadosDaSemana(userId: string, inicio: string, fim: string)
     intervalo<{ data: string; calorias: number; duracao_min: number }>('exercicios_registro', 'data, calorias, duracao_min'),
     supabase.from('registros_peso').select('data, peso_kg').eq('user_id', userId).lte('data', fim).order('data', { ascending: false }).limit(20)
       .then(r => ((r.data as { data: string; peso_kg: number }[]) ?? []).map(p => ({ ...p, peso_kg: Number(p.peso_kg) }))),
-    supabase.from('sessoes_treino').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('concluido', true)
+    supabase.from('sessoes_treino').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('feito', true)
       .gte('data_inicio', `${inicio}T00:00:00`).lte('data_inicio', `${fim}T23:59:59`).then(r => r.count ?? 0),
   ])
   const num = (v: unknown) => Number(v ?? 0)

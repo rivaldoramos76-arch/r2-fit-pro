@@ -19,14 +19,16 @@ export default function TreinoPlanoPage() {
   useEffect(() => {
     if (!id) return
     supabase.from('sessoes_treino')
-      .select('id, treino_id, dia_index, concluido, series_realizadas, data_inicio, data_fim')
+      .select('id, treino_id, dia_index, concluido, feito, series_realizadas, data_inicio, data_fim')
       .eq('treino_id', id).order('data_inicio', { ascending: false }).limit(100)
       .then(({ data }) => {
         const porDia: Record<number, Sessao> = {}
         for (const s of (data ?? []) as Sessao[]) if (!porDia[s.dia_index]) porDia[s.dia_index] = s
         setSessoes(porDia)
-        const concl = ((data ?? []) as Sessao[]).filter(s => s.concluido && s.data_fim)
-          .sort((a, b) => (b.data_fim ?? '').localeCompare(a.data_fim ?? ''))
+        // Treino incompleto também conta para sugerir o próximo
+        const fim = (s: Sessao) => s.data_fim ?? s.data_inicio
+        const concl = ((data ?? []) as Sessao[]).filter(s => s.feito ?? s.concluido)
+          .sort((a, b) => fim(b).localeCompare(fim(a)))
         setUltimoConcluido(concl[0]?.dia_index ?? null)
         setCarregouSessoes(true)
       })
@@ -114,7 +116,7 @@ export default function TreinoPlanoPage() {
                   <p className="text-sm text-zinc-400 truncate">{d.foco || descreverGrupos(d.grupos) || 'Sem foco definido'}</p>
                   <p className="text-xs text-zinc-500 mt-1">
                     {total === 0 ? 'Nenhum exercício ainda — toque para adicionar' : `${total} exercício${total > 1 ? 's' : ''} · ~${d.duracao_estimada_min} min`}
-                    {!concluido && feitos > 0 && ` · ${feitos}/${total} feitos`}
+                    {!concluido && feitos > 0 && ` · ${feitos}/${total} feitos${s?.data_fim ? ` em ${new Date(s.data_fim).toLocaleDateString('pt-BR')}` : ''}`}
                     {concluido && s?.data_fim && ` · em ${new Date(s.data_fim).toLocaleDateString('pt-BR')}`}
                   </p>
                 </div>
