@@ -155,4 +155,35 @@ await t('próximo treino segue a agenda', () => {
   const p = normalizarPlano({ versao:2, dias:[{letra:'A'},{letra:'B'}], agenda:[{letra:'A'},{letra:'B'},{letra:'A'},{letra:'B'}] })
   assert.equal(proximoTreino(p, null), 0); assert.equal(proximoTreino(p, 0), 1); assert.equal(proximoTreino(p, 1), 0)
 })
+await t('treino completo: anuncia o próximo, conta o descanso do anterior e emenda o seguinte', () => {
+  const dur = { '5': .5, '4': .5, '3': .5, '2': .5, '1': .5, trabalho: .7, repouso: .7, fim: 2, proximo: 1.8, treino_fim: 2.5, 'nome:Remada': 1.2 }
+  const c = montarCronograma([
+    { series: 2, execSeg: 30, descansoSeg: 60, nome: 'Supino' },
+    { series: 1, execSeg: 20, descansoSeg: 45, nome: 'Remada' },
+  ], dur, k => k in dur)
+  assert.equal(c.exercicios, 2); assert.equal(c.marcos.length, 2)
+  const trans = c.fases.find(f => f.proximo === 1)!
+  assert.equal(trans.tipo, 'rest'); assert.equal(trans.exercicio, 0)
+  assert.equal(trans.inicio, c.marcos[0], 'anúncio logo ao fim da última série')
+  assert.deepEqual(trans.cues.map(x => x.clip), ['proximo', 'nome:Remada'])
+  assert.ok(Math.abs(trans.fim - trans.inicio - 60) < 0.01, 'descanso do exercício que terminou')
+  const prox = c.fases[c.fases.indexOf(trans) + 1]
+  assert.equal(prox.tipo, 'countdown'); assert.equal(prox.exercicio, 1); assert.equal(prox.serie, 1)
+  assert.equal(c.fimUltimaSerie, c.marcos[1])
+  assert.equal(c.cues.at(-1)!.clip, 'treino_fim')
+  assert.equal(estadoEm(c, trans.inicio + 1).fase.proximo, 1)
+})
+await t('treino completo sem a voz do nome: anuncia só "próximo" e o descanso cobre o aviso', () => {
+  const dur = { proximo: 1.8 }
+  const c = montarCronograma([{ series: 1, execSeg: 10, descansoSeg: 0, nome: 'A' }, { series: 1, execSeg: 10, descansoSeg: 0, nome: 'B' }], dur, k => k in dur)
+  const trans = c.fases.find(f => f.proximo === 1)!
+  assert.deepEqual(trans.cues.map(x => x.clip), ['proximo'])
+  assert.ok(trans.fim - trans.inicio >= 1.8, 'descanso zero não corta o aviso')
+  assert.equal(c.cues.at(-1)!.clip, 'fim', 'sem o clipe de treino completo usa o aviso padrão')
+})
+await t('um exercício só continua igual', () => {
+  const c = montarCronograma({ series: 2, execSeg: 5, descansoSeg: 5 })
+  assert.equal(c.marcos.length, 1); assert.equal(c.fases.filter(f => f.proximo != null).length, 0)
+  assert.equal(c.cues.filter(x => x.clip === 'proximo').length, 0)
+})
 console.log(`\n${ok} testes passaram`)

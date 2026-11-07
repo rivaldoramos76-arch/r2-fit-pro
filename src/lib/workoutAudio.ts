@@ -10,59 +10,95 @@
 // Se as vozes pré-gravadas não puderem ser carregadas, usamos o modo "voz"
 // (speechSynthesis + relógio performance.now), que funciona com a tela ativa.
 
-export type ClipKey = '5' | '4' | '3' | '2' | '1' | 'trabalho' | 'repouso' | 'fim'
-export const CLIP_KEYS: ClipKey[] = ['5', '4', '3', '2', '1', 'trabalho', 'repouso', 'fim']
-export const CLIP_TEXTO: Record<ClipKey, string> = {
+/** Clipes fixos gravados no build. Os nomes dos exercícios usam a chave `nome:<nome>`. */
+export type ClipBase = '5' | '4' | '3' | '2' | '1' | 'trabalho' | 'repouso' | 'fim'
+export type ClipKey = string
+export const CLIP_KEYS: ClipBase[] = ['5', '4', '3', '2', '1', 'trabalho', 'repouso', 'fim']
+/** Opcionais: se faltarem, o treino completo funciona sem eles. */
+export const CLIP_EXTRAS = ['proximo', 'treino_fim'] as const
+export const CLIP_TEXTO: Record<string, string> = {
   '5': 'Cinco', '4': 'Quatro', '3': 'Três', '2': 'Dois', '1': 'Um',
   trabalho: 'Trabalho!', repouso: 'Repouso!', fim: 'Exercício concluído! Todas as séries finalizadas.',
+  proximo: 'Exercício finalizado! Próximo exercício:', treino_fim: 'Treino completo! Parabéns, todos os exercícios finalizados.',
 }
+export type Clipes = Record<string, Float32Array>
+export const chaveNome = (nome: string) => `nome:${nome.trim()}`
+export const textoDoClipe = (k: string) => (k.startsWith('nome:') ? k.slice(5) : CLIP_TEXTO[k] ?? k)
 
 export type FaseTipo = 'countdown' | 'work' | 'rest_countdown' | 'rest' | 'final'
 export interface Cue { t: number; clip: ClipKey }
-export interface Fase { tipo: FaseTipo; serie: number; inicio: number; fim: number; cues: Cue[] }
-export interface Cronograma { fases: Fase[]; cues: Cue[]; total: number; fimUltimaSerie: number }
-export interface ConfigCrono { series: number; execSeg: number; descansoSeg: number }
+/** `exercicio`: posição na sequência. `proximo`: no descanso de transição, o exercício que vem a seguir. */
+export interface Fase { tipo: FaseTipo; serie: number; exercicio: number; proximo?: number; inicio: number; fim: number; cues: Cue[] }
+/** `marcos[i]`: instante em que termina a última série do exercício i. */
+export interface Cronograma { fases: Fase[]; cues: Cue[]; total: number; fimUltimaSerie: number; marcos: number[]; exercicios: number }
+export interface ConfigCrono { series: number; execSeg: number; descansoSeg: number; nome?: string }
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000
 
-/** Monta a linha do tempo completa. `dur` = duração real de cada clipe (s), quando conhecida. */
-export function montarCronograma(cfg: ConfigCrono, dur: Partial<Record<ClipKey, number>> = {}): Cronograma {
-  const series = Math.max(1, Math.round(cfg.series))
-  const exec = Math.max(1, cfg.execSeg)
-  const desc = Math.max(0, cfg.descansoSeg)
+/** Monta a linha do tempo completa de um exercício ou de uma sequência (treino completo).
+ *  `dur` = duração real de cada clipe (s), quando conhecida; `tem` diz se um clipe opcional existe.
+ *  Entre dois exercícios: ao fim da última série anuncia o próximo e conta o descanso do exercício
+ *  que terminou; depois a contagem regressiva começa o próximo sozinho. */
+export function montarCronograma(cfg: ConfigCrono | ConfigCrono[], dur: Partial<Record<ClipKey, number>> = {},
+  tem: (k: ClipKey) => boolean = () => true): Cronograma {
+  const lista = Array.isArray(cfg) ? cfg : [cfg]
   const maxNum = Math.max(...(['5', '4', '3', '2', '1'] as ClipKey[]).map(k => dur[k] ?? 0.7))
   const passo = Math.max(1, r3(maxNum + 0.12)) // nunca sobrepõe dois números
   const fases: Fase[] = []
   const cues: Cue[] = []
+  const marcos: number[] = []
   let t = 0
 
-  const contagem = (tipo: 'countdown' | 'rest_countdown', serie: number, comando: ClipKey) => {
+  const contagem = (tipo: 'countdown' | 'rest_countdown', serie: number, exercicio: number, comando: ClipKey) => {
     const inicio = t
     const fc: Cue[] = (['5', '4', '3', '2', '1'] as ClipKey[]).map((clip, i) => ({ t: r3(inicio + i * passo), clip }))
     const tCmd = r3(inicio + 5 * passo)
     fc.push({ t: tCmd, clip: comando })
     const fim = r3(tCmd + Math.max(0.9, (dur[comando] ?? 0.8) + 0.15))
-    fases.push({ tipo, serie, inicio, fim, cues: fc })
+    fases.push({ tipo, serie, exercicio, inicio, fim, cues: fc })
     cues.push(...fc)
     t = fim
   }
 
-  for (let s = 1; s <= series; s++) {
-    contagem('countdown', s, 'trabalho')
-    fases.push({ tipo: 'work', serie: s, inicio: t, fim: r3(t + exec), cues: [] })
-    t = r3(t + exec)
-    if (s < series) {
-      contagem('rest_countdown', s, 'repouso')
-      fases.push({ tipo: 'rest', serie: s, inicio: t, fim: r3(t + desc), cues: [] })
-      t = r3(t + desc)
+  lista.forEach((c, e) => {
+    const series = Math.max(1, Math.round(c.series))
+    const exec = Math.max(1, c.execSeg)
+    const desc = Math.max(0, c.descansoSeg)
+    for (let s = 1; s <= series; s++) {
+      contagem('countdown', s, e, 'trabalho')
+      fases.push({ tipo: 'work', serie: s, exercicio: e, inicio: t, fim: r3(t + exec), cues: [] })
+      t = r3(t + exec)
+      if (s < series) {
+        contagem('rest_countdown', s, e, 'repouso')
+        fases.push({ tipo: 'rest', serie: s, exercicio: e, inicio: t, fim: r3(t + desc), cues: [] })
+        t = r3(t + desc)
+      }
     }
-  }
+    marcos.push(t)
+    if (e < lista.length - 1) {
+      const inicio = t
+      const prox = lista[e + 1]
+      const fc: Cue[] = []
+      let ta = r3(t + 0.3)
+      for (const k of ['proximo', prox.nome?.trim() ? chaveNome(prox.nome) : null]) {
+        if (!k || !tem(k)) continue
+        fc.push({ t: ta, clip: k })
+        ta = r3(ta + (dur[k] ?? 2.4) + 0.25)
+      }
+      const fim = r3(Math.max(inicio + desc, ta + 1))
+      fases.push({ tipo: 'rest', serie: series, exercicio: e, proximo: e + 1, inicio, fim, cues: fc })
+      cues.push(...fc)
+      t = fim
+    }
+  })
   const fimUltimaSerie = t
-  const cueFim: Cue = { t: r3(t + 0.25), clip: 'fim' }
+  const clipFim = lista.length > 1 && tem('treino_fim') ? 'treino_fim' : 'fim'
+  const cueFim: Cue = { t: r3(t + 0.25), clip: clipFim }
   cues.push(cueFim)
-  const total = r3(cueFim.t + (dur.fim ?? 3.5) + 0.6)
-  fases.push({ tipo: 'final', serie: series, inicio: t, fim: total, cues: [cueFim] })
-  return { fases, cues, total, fimUltimaSerie }
+  const total = r3(cueFim.t + (dur[clipFim] ?? 3.5) + 0.6)
+  const ultimo = lista.length - 1
+  fases.push({ tipo: 'final', serie: Math.max(1, Math.round(lista[ultimo].series)), exercicio: ultimo, inicio: t, fim: total, cues: [cueFim] })
+  return { fases, cues, total, fimUltimaSerie, marcos, exercicios: lista.length }
 }
 
 export interface Estado {
@@ -86,7 +122,7 @@ export function estadoEm(c: Cronograma, t: number): Estado {
 
 // --- Renderização da faixa (WAV PCM 16 bits mono) ---
 
-export function renderizarFaixa(c: Cronograma, clips: Record<ClipKey, Float32Array>, sr: number): Blob {
+export function renderizarFaixa(c: Cronograma, clips: Clipes, sr: number): Blob {
   const n = Math.ceil(c.total * sr)
   const buf = new ArrayBuffer(44 + n * 2)
   const dv = new DataView(buf)
@@ -194,9 +230,9 @@ export function maximizar(s: Float32Array, sr: number, { alvo = 0.55, ganhoMax =
 // --- Carregamento das vozes ---
 
 export const TAXA = 24000
-let cacheClipes: Promise<Record<ClipKey, Float32Array> | null> | null = null
+let cacheClipes: Promise<Clipes | null> | null = null
 
-function decodificar(dados: ArrayBuffer): Promise<AudioBuffer> {
+export function decodificar(dados: ArrayBuffer): Promise<AudioBuffer> {
   const W = window as unknown as { OfflineAudioContext?: typeof OfflineAudioContext; webkitOfflineAudioContext?: typeof OfflineAudioContext }
   const Ctor = W.OfflineAudioContext ?? W.webkitOfflineAudioContext
   if (!Ctor) return Promise.reject(new Error('Sem OfflineAudioContext'))
@@ -207,19 +243,28 @@ function decodificar(dados: ArrayBuffer): Promise<AudioBuffer> {
   })
 }
 
-export function carregarClipes(): Promise<Record<ClipKey, Float32Array> | null> {
+/** Decodifica, apara o silêncio e realça a voz de um WAV/MP3. */
+export async function prepararVoz(dados: ArrayBuffer): Promise<Float32Array> {
+  const ab = await decodificar(dados)
+  return maximizar(aparar(ab.getChannelData(0), ab.sampleRate), ab.sampleRate)
+}
+
+export function carregarClipes(): Promise<Clipes | null> {
   if (cacheClipes) return cacheClipes
   cacheClipes = (async () => {
     try {
-      const pares = await Promise.all(CLIP_KEYS.map(async k => {
+      const baixar = async (k: string) => {
         const r = await fetch(`/audio/${k}.wav`)
         if (!r.ok) throw new Error(`clip ${k}: ${r.status}`)
-        const ab = await decodificar(await r.arrayBuffer())
-        const dados = maximizar(aparar(ab.getChannelData(0), ab.sampleRate), ab.sampleRate)
+        const dados = await prepararVoz(await r.arrayBuffer())
         if (!dados.length) throw new Error(`clip ${k} vazio`)
         return [k, dados] as const
-      }))
-      return Object.fromEntries(pares) as Record<ClipKey, Float32Array>
+      }
+      const [pares, extras] = await Promise.all([
+        Promise.all(CLIP_KEYS.map(baixar)),
+        Promise.all(CLIP_EXTRAS.map(k => baixar(k).catch(() => null))),
+      ])
+      return Object.fromEntries([...pares, ...extras.filter(x => x !== null)]) as Clipes
     } catch (e) {
       console.warn('[R2] vozes indisponíveis, usando síntese de voz do navegador', e)
       return null
@@ -231,8 +276,8 @@ export function carregarClipes(): Promise<Record<ClipKey, Float32Array> | null> 
   return atual
 }
 
-export function duracoes(clips: Record<ClipKey, Float32Array>): Record<ClipKey, number> {
-  return Object.fromEntries(CLIP_KEYS.map(k => [k, clips[k].length / TAXA])) as Record<ClipKey, number>
+export function duracoes(clips: Clipes): Record<ClipKey, number> {
+  return Object.fromEntries(Object.entries(clips).map(([k, v]) => [k, v.length / TAXA]))
 }
 
 /** WAV silencioso (usado para pedir ao Android que abaixe a música durante os avisos). */
@@ -264,6 +309,7 @@ export type ModoSom = 'musica' | 'bloqueio'
 export interface Ouvintes {
   onSeriesConcluidas: () => void // todas as séries terminaram (antes do aviso final)
   onFim: () => void // aviso final terminou
+  onExercicioConcluido?: (indice: number) => void // terminou a última série do exercício `indice` da sequência
 }
 
 type Ctx = AudioContext
@@ -279,6 +325,7 @@ export class TreinoPlayer {
   readonly crono: Cronograma
   private ouv: Ouvintes
   private concluidoAvisado = false
+  private marcosAvisados = 0
   private fimAvisado = false
   private parado = false
   private volume = 1
@@ -293,11 +340,11 @@ export class TreinoPlayer {
   private audio: HTMLAudioElement | null = null
   private url: string | null = null
   // modo mix
-  private clips: Record<ClipKey, Float32Array> | null = null
+  private clips: Clipes | null = null
   private ctx: Ctx | null = null
   private ganho: GainNode | null = null
   private entrada: AudioNode | null = null
-  private buffers: Partial<Record<ClipKey, AudioBuffer>> = {}
+  private buffers: Record<string, AudioBuffer> = {}
   private fontes: AudioBufferSourceNode[] = []
   private t0Ctx = 0
   private pausadoMix = false
@@ -317,12 +364,13 @@ export class TreinoPlayer {
   private proximoCue = 0
   private timer: ReturnType<typeof setInterval> | null = null
 
-  constructor(cfg: ConfigCrono, clips: Record<ClipKey, Float32Array> | null, ouv: Ouvintes, modoSom: ModoSom = 'musica',
+  constructor(cfg: ConfigCrono | ConfigCrono[], clips: Clipes | null, ouv: Ouvintes, modoSom: ModoSom = 'musica',
     opcoes: { abaixarMusica?: boolean } = {}) {
     this.ouv = ouv
     this.abaixarMusica = !!opcoes.abaixarMusica
     this.modo = !clips ? 'voz' : modoSom === 'musica' ? 'mix' : 'audio'
-    this.crono = montarCronograma(cfg, clips ? duracoes(clips) : {})
+    // Sem as vozes gravadas, o navegador fala qualquer texto; com elas, só entram os clipes que existem
+    this.crono = montarCronograma(cfg, clips ? duracoes(clips) : {}, clips ? k => !!clips[k]?.length : () => true)
     if (this.modo === 'mix') this.clips = clips
     if (this.modo === 'audio' && clips) {
       const blob = renderizarFaixa(this.crono, clips, TAXA)
@@ -372,8 +420,8 @@ export class TreinoPlayer {
     presenca.connect(graves); graves.connect(limitador); limitador.connect(this.ganho)
     this.ganho.connect(ctx.destination)
     this.aplicarVolume()
-    for (const k of CLIP_KEYS) {
-      const dados = this.clips[k]
+    for (const [k, dados] of Object.entries(this.clips)) {
+      if (!dados.length) continue
       const b = ctx.createBuffer(1, dados.length, TAXA)
       b.getChannelData(0).set(dados)
       this.buffers[k] = b
@@ -415,7 +463,8 @@ export class TreinoPlayer {
     while (this.proximoDuck < cues.length && cues[this.proximoDuck].t - 0.3 <= t) {
       const cue = cues[this.proximoDuck++]
       if (t > cue.t + 0.3) continue
-      const el = cue.clip === 'fim' ? this.duckLongo! : this.duckCurto
+      const curto = /^[0-9]$/.test(cue.clip) || cue.clip === 'trabalho' || cue.clip === 'repouso'
+      const el = curto ? this.duckCurto : this.duckLongo!
       try { el.currentTime = 0 } catch { /* ainda carregando */ }
       el.play().catch(() => {})
     }
@@ -564,6 +613,10 @@ export class TreinoPlayer {
   verificar(terminou = false) {
     if (this.parado) return
     const t = terminou ? this.crono.total : this.tempo()
+    const marcos = this.crono.marcos
+    while (this.marcosAvisados < marcos.length && t >= marcos[this.marcosAvisados]) {
+      this.ouv.onExercicioConcluido?.(this.marcosAvisados++)
+    }
     if (!this.concluidoAvisado && t >= this.crono.fimUltimaSerie) {
       this.concluidoAvisado = true
       this.ouv.onSeriesConcluidas()
@@ -582,7 +635,8 @@ export class TreinoPlayer {
     while (this.proximoCue < cues.length && cues[this.proximoCue].t <= t) {
       const cue = cues[this.proximoCue++]
       // só fala o cue se não estiver muito atrasado (ex.: aba suspensa)
-      if (t - cue.t < 0.8 || cue.clip === 'fim') this.falar(cue.clip)
+      const longo = !/^[0-9]$/.test(cue.clip) && cue.clip !== 'trabalho' && cue.clip !== 'repouso'
+      if (t - cue.t < (longo ? 3 : 0.8) || cue.clip === 'fim' || cue.clip === 'treino_fim') this.falar(cue.clip)
     }
     this.verificar()
   }
@@ -592,7 +646,7 @@ export class TreinoPlayer {
     if (!ss || this.mudo) return
     const numero = /^[0-9]$/.test(clip)
     if (numero) ss.cancel()
-    const u = new SpeechSynthesisUtterance(CLIP_TEXTO[clip])
+    const u = new SpeechSynthesisUtterance(textoDoClipe(clip))
     u.lang = 'pt-BR'
     u.rate = numero ? 1.15 : 1.0
     u.volume = this.volume

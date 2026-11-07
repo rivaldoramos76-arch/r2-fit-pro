@@ -7,6 +7,9 @@ const CLIPES = {
   '5': 'Cinco!', '4': 'Quatro!', '3': 'Três!', '2': 'Dois!', '1': 'Um!',
   trabalho: 'Trabalho!', repouso: 'Repouso!',
   fim: 'Exercício concluído! Todas as séries finalizadas.',
+  // Treino completo: anúncio antes do nome do próximo exercício e aviso final
+  proximo: 'Exercício finalizado! Próximo exercício:',
+  treino_fim: 'Treino completo! Parabéns, todos os exercícios finalizados.',
 }
 const INSTRUCOES = 'Você é uma treinadora de academia brasileira. Fale em português do Brasil, com sotaque brasileiro, voz feminina firme, clara, enérgica e motivadora, sem gritar. Pronuncie cada palavra por inteiro, articulando bem a última sílaba (por exemplo: cin-co, qua-tro, três, dois, um). Diga apenas o texto, sem pausas no início nem no fim.'
 // Voz feminina: "coral" no gpt-4o-mini-tts (aceita instruções de estilo); "nova" no tts-1-hd

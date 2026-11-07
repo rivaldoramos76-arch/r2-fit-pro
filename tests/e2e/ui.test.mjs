@@ -38,6 +38,10 @@ const DIETA = { id: 'd1', user_id: UID, nome: 'Plano Cutting', objetivo: 'Perda 
 const CLIENTE = { id: '99999999-2222-4333-8444-555555555555', nome: 'Maria Cliente', email: 'maria@teste.com', criado_em: '2026-10-25T10:00:00Z', ultimo_login: '2026-10-29T10:00:00Z', email_confirmado: false, estado: 'sem_assinatura', admin: false, total: 1 }
 const TREINO = { id: 't1', user_id: UID, nome: 'Treino teste', objetivo: 'Hipertrofia', nivel: 'Iniciante', frequencia_semanal: 3, created_at: '2026-10-20T00:00:00Z',
   plano: { versao: 2, dias: [{ id: 'd0', letra: 'A', dia: 'Treino A', exercicios: [{ id: 'e1', nome: 'Supino reto com barra', series: 2, tempo_execucao_segundos: 3, tempo_descanso_segundos: 2 }] }] } }
+// Treino com dois exercícios para o "treino completo"
+const TREINO2 = { ...TREINO, plano: { versao: 2, dias: [{ id: 'd0', letra: 'A', dia: 'Treino A', exercicios: [
+  { id: 'e1', nome: 'Supino reto com barra', series: 2, tempo_execucao_segundos: 3, tempo_descanso_segundos: 2 },
+  { id: 'e2', nome: 'Remada curvada', series: 1, tempo_execucao_segundos: 3, tempo_descanso_segundos: 2 }] }] } }
 const ALUNO_ID = '77777777-2222-4333-8444-555555555555'
 const ALUNOS = [
   { id: 'v1', aluno_id: ALUNO_ID, nome: 'Bia Souza', desde: '2026-10-01T10:00:00Z', ver_treinos: true, ver_diario: true, ver_peso: true, editar_planos: true,
@@ -82,6 +86,7 @@ const t = async (nome, f) => { try { await f(); ok++; console.log('✓', nome) }
 async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, asaas = false, nutricao = false, treino = false, personal = false, amigos = false, renovacao = false, userAgent, instalado = Boolean(userAgent), viewport = { width: 390, height: 844 } } = {}) {
   const chamadasBilling = []
   const gravacoes = []
+  let sessaoE2e = null
   const ctx = await browser.newContext({ viewport, ...(userAgent ? { userAgent } : {}) })
   await ctx.addInitScript(([s, logado, instalado]) => {
     sessionStorage.setItem('r2fit:welcome-visto', '1')
@@ -193,7 +198,14 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       if (p.endsWith('metas_nutricionais')) return json(nutricao === 'sem_meta' ? [] : [META])
       return json([])
     }
-    if (treino && p === '/rest/v1/treinos') return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? TREINO : [TREINO])
+    if (treino && p === '/rest/v1/treinos') { const tr = treino === 'dois' ? TREINO2 : TREINO; return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? tr : [tr]) }
+    if (treino && p === '/rest/v1/sessoes_treino') {
+      if (rota.request().method() === 'GET') return json(sessaoE2e ? [sessaoE2e] : [])
+      const corpo = rota.request().postDataJSON()
+      gravacoes.push({ tabela: 'sessoes_treino', metodo: rota.request().method(), corpo })
+      sessaoE2e = { id: 's1', treino_id: 't1', dia_index: 0, data_inicio: new Date().toISOString(), concluido: false, data_fim: null, series_realizadas: {}, ...sessaoE2e, ...corpo }
+      return json(sessaoE2e)
+    }
     if (nutricao && p === '/rest/v1/dietas') {
       const objeto = rota.request().headers()['accept']?.includes('vnd.pgrst.object')
       if (rota.request().method() !== 'GET') { const corpo = rota.request().postDataJSON(); gravacoes.push({ tabela: 'dietas', metodo: rota.request().method(), corpo }); return json({ ...DIETA, ...corpo }) }
@@ -237,6 +249,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
   })
   if (treino) {
     await ctx.route('**/audio/*.wav', r => r.fulfill({ status: 200, contentType: 'audio/wav', body: tomWav() }))
+    await ctx.route('**/api/voz', r => { gravacoes.push({ tabela: 'api_voz', corpo: r.request().postDataJSON() }); return r.fulfill({ status: 200, contentType: 'audio/wav', body: tomWav() }) })
     await ctx.addInitScript(() => {
       const w = window
       w.__agendados = []; w.__mediaPlays = 0
@@ -881,10 +894,11 @@ await t('início mostra o lembrete para instalar com passo a passo', async () =>
 
 await t('contador: por cima da música toca só os avisos curtos, agendados, e retoma após interrupção', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
-  await page.goto(BASE + '/assistente/t1/0')
+  await page.goto(BASE + '/treino/t1/dia/0')
   await page.getByRole('radio', { name: /Por cima da música/ }).waitFor()
   assert.equal(await page.getByRole('radio', { name: /Por cima da música/ }).getAttribute('aria-checked'), 'true', 'modo padrão')
-  await page.getByRole('button', { name: /Iniciar treino/ }).click()
+  // Sem janela nem tela intermediária: "Iniciar" na lista já começa a contagem
+  await page.getByRole('button', { name: /^▶ Iniciar$/ }).click()
   await page.waitForTimeout(600)
   // Tela mínima: só séries, tempo e os ícones de pausar/encerrar (volume fica antes de iniciar)
   await page.getByRole('button', { name: 'Pausar' }).waitFor()
@@ -907,7 +921,7 @@ await t('contador: por cima da música toca só os avisos curtos, agendados, e r
     definir('visible'); document.dispatchEvent(new Event('visibilitychange', { bubbles: true }))
   })
   await page.waitForTimeout(1500)
-  assert.equal(await page.getByRole('button', { name: /Iniciar treino/ }).count(), 0, 'não voltou para a tela inicial do contador')
+  assert.equal(await page.getByRole('button', { name: 'Pausar' }).count(), 1, 'contagem continua aberta')
   assert.ok(await page.evaluate(() => window.__ctx.__marca === 'antes' && window.__ctx.state === 'running'), 'mesmo som continua tocando')
   await page.getByRole('button', { name: /Pausar/ }).click()
   await page.getByText('Pausado').waitFor()
@@ -924,7 +938,7 @@ await t('contador: aviso de tela desbloqueada só no iPhone; no Android a músic
   const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36'
   for (const [ua, deve] of [[iphone, true], [android, false]]) {
     const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true, userAgent: ua })
-    await page.goto(BASE + '/assistente/t1/0')
+    await page.goto(BASE + '/treino/t1/dia/0')
     await page.getByRole('radio', { name: /Por cima da música/ }).waitFor()
     assert.equal(await page.getByRole('note').filter({ hasText: 'Só para iPhone' }).count(), deve ? 1 : 0, deve ? 'iPhone vê o aviso' : 'Android não vê')
     if (deve) {
@@ -934,7 +948,7 @@ await t('contador: aviso de tela desbloqueada só no iPhone; no Android a músic
       await page.getByRole('radio', { name: /Por cima da música/ }).click()
     }
     // Android pede ao sistema para abaixar a música durante os avisos (áudio curto silencioso); iPhone não
-    await page.getByRole('button', { name: /Iniciar treino/ }).click()
+    await page.getByRole('button', { name: /^▶ Iniciar$/ }).click()
     await page.waitForTimeout(2500)
     const plays = await page.evaluate(() => window.__mediaPlays)
     assert.ok(deve ? plays === 0 : plays >= 2, `abaixar música: ${plays} disparos`)
@@ -945,13 +959,39 @@ await t('contador: aviso de tela desbloqueada só no iPhone; no Android a músic
 
 await t('contador: modo tela bloqueada usa a faixa contínua', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
-  await page.goto(BASE + '/assistente/t1/0')
+  await page.goto(BASE + '/treino/t1/dia/0')
   await page.getByRole('radio', { name: /Tela bloqueada/ }).click()
   await page.getByText(/pausa a sua música/).waitFor()
-  await page.getByRole('button', { name: /Iniciar treino/ }).click()
+  await page.getByRole('button', { name: /^▶ Iniciar$/ }).click()
   await page.waitForTimeout(500)
   assert.equal(await page.evaluate(() => window.__mediaPlays), 1)
   assert.equal(await page.evaluate(() => window.__agendados.length), 0)
+  await ctx.close()
+})
+
+await t('treino completo: faz os exercícios em sequência, anuncia o próximo pelo nome e registra cada um', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: 'dois' })
+  await page.goto(BASE + '/treino/t1/dia/0')
+  // A voz com o nome do próximo exercício é preparada antes
+  await page.waitForFunction(() => true)
+  for (let i = 0; i < 40 && !page.gravacoes.some(g => g.tabela === 'api_voz'); i++) await page.waitForTimeout(100)
+  assert.deepEqual(page.gravacoes.filter(g => g.tabela === 'api_voz').map(g => g.corpo.texto).sort(), ['Remada curvada', 'Supino reto com barra'])
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: /Treino completo · 2 exercícios/ }).click()
+  await page.getByText('Exercício 1 de 2 · Supino reto com barra').waitFor()
+  await page.screenshot({ path: `${SHOTS}/treino-completo.png` })
+  // 1º: 3 contagens (18) + anúncio "próximo" + nome (2) + 2º: 1 contagem (6) + aviso final (1)
+  assert.equal(await page.evaluate(() => window.__agendados.length), 27)
+  await page.locator('p', { hasText: 'Próximo: Remada curvada' }).waitFor({ timeout: 40000 })
+  await page.screenshot({ path: `${SHOTS}/treino-completo-proximo.png` })
+  await page.getByText('Exercício 2 de 2 · Remada curvada').waitFor({ timeout: 20000 })
+  await page.getByRole('heading', { name: 'Treino completo!' }).waitFor({ timeout: 40000 })
+  const registros = page.gravacoes.filter(g => g.tabela === 'sessoes_treino')
+  assert.equal(registros.length, 2, 'cada exercício registrado ao terminar')
+  assert.equal(registros.at(-1).corpo.concluido, true, 'o último fecha o treino')
+  await page.getByRole('button', { name: 'Voltar ao Treino A' }).click()
+  await page.getByRole('radio', { name: /Por cima da música/ }).waitFor()
+  assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
 

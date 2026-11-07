@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { AcessoProvider } from './context/AcessoContext'
 import { RotaPrivada, RotaPremium, RotaAdmin } from './components/Rotas'
@@ -27,7 +27,6 @@ import { ListaReceitas, EditorReceita } from './pages/ReceitasPage'
 import RelatorioPage from './pages/RelatorioPage'
 import LembretesPage from './pages/LembretesPage'
 import WorkoutPage from './pages/WorkoutPage'
-import WorkoutTimerPage from './pages/WorkoutTimerPage'
 import PlanoWizardPage from './pages/PlanoWizardPage'
 import TreinoPlanoPage from './pages/TreinoPlanoPage'
 import TreinoDiaPage from './pages/TreinoDiaPage'
@@ -49,6 +48,12 @@ function Suporte() {
   const { user, loading } = useAuth()
   if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><Spinner size="lg" /></div>
   return user ? <Layout><SuportePage /></Layout> : <PublicLayout><SuportePage /></PublicLayout>
+}
+
+/** O contador agora abre direto na tela do treino; links antigos do contador levam para lá. */
+function ContadorAntigo() {
+  const { treinoId, diaIndex } = useParams()
+  return <Navigate to={`/treino/${treinoId}/dia/${diaIndex}`} replace />
 }
 
 function AppRoutes() {
@@ -97,9 +102,9 @@ function AppRoutes() {
       <Route path="/treino/:id/editar" element={<RotaPremium recurso="Os treinos"><PlanoWizardPage /></RotaPremium>} />
       <Route path="/treino/:id/dia/:dia" element={<RotaPremium recurso="Os treinos"><TreinoDiaPage /></RotaPremium>} />
 
-      {/* Timer — fullscreen sem o Layout */}
-      <Route path="/assistente/:treinoId/:diaIndex" element={<RotaPremium recurso="O contador de treino" semLayout><WorkoutTimerPage /></RotaPremium>} />
-      <Route path="/assistente/:treinoId/:diaIndex/:exId" element={<RotaPremium recurso="O contador de treino" semLayout><WorkoutTimerPage /></RotaPremium>} />
+      {/* Contador: abre na própria tela do treino */}
+      <Route path="/assistente/:treinoId/:diaIndex" element={<ContadorAntigo />} />
+      <Route path="/assistente/:treinoId/:diaIndex/:exId" element={<ContadorAntigo />} />
 
       {/* Administração */}
       <Route path="/admin" element={<RotaAdmin><AdminPage /></RotaAdmin>} />
