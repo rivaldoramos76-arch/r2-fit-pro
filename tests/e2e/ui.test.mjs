@@ -987,7 +987,7 @@ await t('treino completo: faz os exercícios em sequência, anuncia o próximo p
   await page.getByText('Exercício 2 de 2 · Remada curvada').waitFor({ timeout: 20000 })
   await page.getByRole('heading', { name: 'Treino completo!' }).waitFor({ timeout: 40000 })
   const registros = page.gravacoes.filter(g => g.tabela === 'sessoes_treino')
-  assert.equal(registros.length, 2, 'cada exercício registrado ao terminar')
+  assert.deepEqual(registros.map(g => g.corpo.series_realizadas), [{ e1: 1 }, { e1: 2 }, { e1: 2, e2: 1 }], 'cada série vai para o banco assim que termina')
   assert.equal(registros.at(-1).corpo.concluido, true, 'o último fecha o treino')
   await page.getByRole('button', { name: 'Voltar ao Treino A' }).click()
   await page.getByRole('radio', { name: /Por cima da música/ }).waitFor()

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useTreino } from '../lib/treinoApi'
 import { descreverGrupos, proximoTreino } from '../lib/treinoModel'
-import type { Sessao } from '../lib/sessoes'
+import { exercicioConcluido, seriesFeitas, type Sessao } from '../lib/sessoes'
 import { Spinner } from '../components/UI'
 import EnviarParaAluno from '../components/acompanhamento/EnviarParaAluno'
 
@@ -100,7 +100,8 @@ export default function TreinoPlanoPage() {
         {plano.dias.map((d, i) => {
           const s = sessoes[i]
           const total = d.exercicios.length
-          const feitos = s ? d.exercicios.filter(e => s.series_realizadas?.[e.id] != null).length : 0
+          const feitos = s ? d.exercicios.filter(e => exercicioConcluido(s, e)).length : 0
+          const algumaSerie = s ? d.exercicios.some(e => seriesFeitas(s, e.id) > 0) : false
           const concluido = !!s?.concluido && total > 0
           return (
             <Link key={d.id} to={`/treino/${treino.id}/dia/${i}`}
@@ -116,7 +117,7 @@ export default function TreinoPlanoPage() {
                   <p className="text-sm text-zinc-400 truncate">{d.foco || descreverGrupos(d.grupos) || 'Sem foco definido'}</p>
                   <p className="text-xs text-zinc-500 mt-1">
                     {total === 0 ? 'Nenhum exercício ainda — toque para adicionar' : `${total} exercício${total > 1 ? 's' : ''} · ~${d.duracao_estimada_min} min`}
-                    {!concluido && feitos > 0 && ` · ${feitos}/${total} feitos${s?.data_fim ? ` em ${new Date(s.data_fim).toLocaleDateString('pt-BR')}` : ''}`}
+                    {!concluido && algumaSerie && ` · ${feitos}/${total} feitos${s?.data_fim ? ` em ${new Date(s.data_fim).toLocaleDateString('pt-BR')}` : ''}`}
                     {concluido && s?.data_fim && ` · em ${new Date(s.data_fim).toLocaleDateString('pt-BR')}`}
                   </p>
                 </div>

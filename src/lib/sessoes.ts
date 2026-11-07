@@ -1,6 +1,7 @@
 // Registro de conclusão por plano (treino_id) → sessão (sessoes_treino.id) → exercício (id).
 // Uma sessão representa uma execução de um treino (A, B, C...). `series_realizadas`
-// guarda apenas exercícios concluídos: { [exercicioId]: séries feitas }.
+// guarda as séries feitas de cada exercício: { [exercicioId]: séries feitas }. O exercício está concluído
+// quando fez todas as séries previstas; com menos, conta como treino incompleto (vai para o diário igual).
 // A sessão só é marcada como concluída quando todos os exercícios previstos foram feitos, mas com
 // pelo menos 1 exercício feito ela já conta como treino (coluna `feito` no banco).
 // Uma sessão incompleta sem atividade há mais de 6 horas fica encerrada: o próximo exercício abre outra.
@@ -18,6 +19,15 @@ export interface Sessao {
   data_inicio: string
   data_fim: string | null
 }
+
+/** Séries feitas de um exercício na sessão (aceita o formato antigo em lista). */
+export function seriesFeitas(s: Pick<Sessao, 'series_realizadas'> | null | undefined, exercicioId: string): number {
+  const v = (s?.series_realizadas as Record<string, unknown> | undefined)?.[exercicioId]
+  return typeof v === 'number' ? v : Array.isArray(v) ? v.length : 0
+}
+/** Exercício com todas as séries previstas feitas. */
+export const exercicioConcluido = (s: Pick<Sessao, 'series_realizadas'> | null | undefined, ex: { id: string; series: number }) =>
+  seriesFeitas(s, ex.id) >= Math.max(1, ex.series)
 
 const LIMITE_SESSAO_MS = 6 * 3600_000
 /** Sessão ainda aberta: não concluída e com atividade nas últimas 6 horas. */
@@ -74,8 +84,9 @@ export async function concluirExercicio(params: {
   treinoNome: string
   dia: number
   exercicioId: string
+  /** séries feitas até agora neste exercício (pode ser menos que as previstas) */
   series: number
-  exerciciosDoTreino: string[]
+  exerciciosDoTreino: { id: string; series: number }[]
 }): Promise<Sessao> {
   const { userId, treinoId, treinoNome, dia, exercicioId, series, exerciciosDoTreino } = params
   let atual = await sessaoAtual(treinoId, dia)
@@ -83,8 +94,9 @@ export async function concluirExercicio(params: {
   if (atual && !emAndamento(atual) && Object.keys(atual.series_realizadas ?? {}).length > 0) atual = null
   if (atual?.concluido) atual = null
 
-  const feitos = { ...(atual?.series_realizadas ?? {}), [exercicioId]: series }
-  const todos = exerciciosDoTreino.length > 0 && exerciciosDoTreino.every(id => feitos[id] != null)
+  // Refazer um exercício nunca diminui o que já foi feito na mesma sessão
+  const feitos = { ...(atual?.series_realizadas ?? {}), [exercicioId]: Math.max(series, seriesFeitas(atual, exercicioId)) }
+  const todos = exerciciosDoTreino.length > 0 && exerciciosDoTreino.every(e => exercicioConcluido({ series_realizadas: feitos }, e))
   const agora = new Date().toISOString()
   // data_fim = hora do último exercício feito (mesmo com o treino incompleto)
   const campos = { series_realizadas: feitos, concluido: todos, data_fim: agora }

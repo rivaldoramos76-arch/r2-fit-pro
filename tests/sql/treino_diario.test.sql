@@ -51,14 +51,20 @@ BEGIN
   VALUES (u, tid, 'Hipertrofia', 0, NOW() - INTERVAL '1 minute', NOW(), FALSE, '{}') RETURNING id INTO sid3;
   SELECT count(*) INTO cnt FROM public.exercicios_registro WHERE sessao_id = sid3;
   IF cnt <> 0 THEN RAISE EXCEPTION 'FALHA 6b: sessão vazia no diário'; END IF;
-  UPDATE public.sessoes_treino SET series_realizadas = '{"e1": 4}' WHERE id = sid3;
+  -- 2 de 4 séries do primeiro exercício: 2 × (40 + 60 s) = 3 min, marcado como treino incompleto
+  UPDATE public.sessoes_treino SET series_realizadas = '{"e1": 2}' WHERE id = sid3;
   SELECT * INTO r FROM public.exercicios_registro WHERE sessao_id = sid3;
-  IF r.duracao_min IS NULL OR r.duracao_min <> 7 THEN RAISE EXCEPTION 'FALHA 6b: incompleto (%)', r.duracao_min; END IF; n := n + 1;
+  IF r.duracao_min IS NULL OR r.duracao_min <> 3 OR r.nome <> 'Musculação · Treino A · treino incompleto'
+     OR r.calorias <> round(4.5 * 80 * 3 / 60.0)::INT THEN
+    RAISE EXCEPTION 'FALHA 6b: incompleto (% / % / %)', r.nome, r.duracao_min, r.calorias; END IF; n := n + 1;
   IF NOT (SELECT feito FROM public.sessoes_treino WHERE id = sid3) THEN RAISE EXCEPTION 'FALHA 6c: incompleto não conta'; END IF; n := n + 1;
   -- 6d. Ao fazer o segundo, o mesmo lançamento é atualizado (sem duplicar)
   UPDATE public.sessoes_treino SET series_realizadas = '{"e1": 4, "e2": 4}' WHERE id = sid3;
   SELECT count(*), max(duracao_min) INTO cnt, i FROM public.exercicios_registro WHERE sessao_id = sid3;
   IF cnt <> 1 OR i <> 13 THEN RAISE EXCEPTION 'FALHA 6d: atualização (% / %)', cnt, i; END IF; n := n + 1;
+  -- 6e. Ao concluir, some o "treino incompleto" do nome
+  UPDATE public.sessoes_treino SET concluido = TRUE WHERE id = sid3;
+  IF (SELECT nome FROM public.exercicios_registro WHERE sessao_id = sid3) <> 'Musculação · Treino A' THEN RAISE EXCEPTION 'FALHA 6e: nome ao concluir'; END IF; n := n + 1;
 
   -- 7. Apagar a sessão mantém o exercício no diário (sessao_id vira nulo)
   DELETE FROM public.sessoes_treino WHERE id = sid;

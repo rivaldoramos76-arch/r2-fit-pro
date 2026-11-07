@@ -310,6 +310,7 @@ export interface Ouvintes {
   onSeriesConcluidas: () => void // todas as séries terminaram (antes do aviso final)
   onFim: () => void // aviso final terminou
   onExercicioConcluido?: (indice: number) => void // terminou a última série do exercício `indice` da sequência
+  onSerieConcluida?: (exercicio: number, serie: number) => void // terminou o tempo de trabalho de uma série
 }
 
 type Ctx = AudioContext
@@ -326,6 +327,8 @@ export class TreinoPlayer {
   private ouv: Ouvintes
   private concluidoAvisado = false
   private marcosAvisados = 0
+  private seriesAvisadas = 0
+  private fimSeries: { t: number; exercicio: number; serie: number }[] = []
   private fimAvisado = false
   private parado = false
   private volume = 1
@@ -613,6 +616,11 @@ export class TreinoPlayer {
   verificar(terminou = false) {
     if (this.parado) return
     const t = terminou ? this.crono.total : this.tempo()
+    if (!this.fimSeries.length) this.fimSeries = this.crono.fases.filter(f => f.tipo === 'work').map(f => ({ t: f.fim, exercicio: f.exercicio, serie: f.serie }))
+    while (this.seriesAvisadas < this.fimSeries.length && t >= this.fimSeries[this.seriesAvisadas].t) {
+      const f = this.fimSeries[this.seriesAvisadas++]
+      this.ouv.onSerieConcluida?.(f.exercicio, f.serie)
+    }
     const marcos = this.crono.marcos
     while (this.marcosAvisados < marcos.length && t >= marcos[this.marcosAvisados]) {
       this.ouv.onExercicioConcluido?.(this.marcosAvisados++)

@@ -51,6 +51,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
   const [precisaToque, setPrecisaToque] = useState(false)
   const [erroAudio, setErroAudio] = useState('')
   const [registrados, setRegistrados] = useState<number[]>([])
+  const [seriesSalvas, setSeriesSalvas] = useState(0)
   const [erroRegistro, setErroRegistro] = useState(false)
   const [treinoCompleto, setTreinoCompleto] = useState(false)
   const playerRef = useRef<TreinoPlayer | null>(null)
@@ -103,16 +104,21 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     if ('mediaSession' in navigator) navigator.mediaSession.metadata = null
   }, [])
 
-  const registrar = useCallback(async (ex: ExercicioPlano, series: number) => {
+  // Cada série terminada já vai para o banco (e para o diário): se a pessoa pausar e sair, o feito fica.
+  // As gravações vão em fila para uma não sobrescrever a outra.
+  const fila = useRef<Promise<void>>(Promise.resolve())
+  const registrar = useCallback((ex: ExercicioPlano, series: number) => {
     if (!user || !treino || !dia) return
-    try {
-      const s = await concluirExercicio({
-        userId: user.id, treinoId: treino.id, treinoNome: treino.nome, dia: diaIdx,
-        exercicioId: ex.id, series, exerciciosDoTreino: dia.exercicios.map(e => e.id),
-      })
-      setTreinoCompleto(s.concluido)
-      onSessao(s)
-    } catch { setErroRegistro(true) }
+    fila.current = fila.current.then(async () => {
+      try {
+        const s = await concluirExercicio({
+          userId: user.id, treinoId: treino.id, treinoNome: treino.nome, dia: diaIdx,
+          exercicioId: ex.id, series, exerciciosDoTreino: dia.exercicios.map(e => ({ id: e.id, series: e.series })),
+        })
+        setTreinoCompleto(s.concluido)
+        onSessao(s)
+      } catch { setErroRegistro(true) }
+    })
   }, [user, treino, dia, diaIdx, onSessao])
 
   // Atualização da tela (o tempo vem do áudio, então não acumula atraso)
@@ -160,7 +166,8 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     const clips = base ? { ...base, ...nomesRef.current } : null
     const cfg = lista.map(e => ({ series: e.series, execSeg: Math.max(5, e.tempo_execucao_segundos), descansoSeg: e.tempo_descanso_segundos, nome: e.nome }))
     const p = new TreinoPlayer(cfg, clips, {
-      onExercicioConcluido: i => { setRegistrados(r => [...r, i]); registrar(lista[i], lista[i].series) },
+      onSerieConcluida: (i, serie) => { setSeriesSalvas(n => n + 1); registrar(lista[i], serie) },
+      onExercicioConcluido: i => { setRegistrados(r => [...r, i]) },
       onSeriesConcluidas: () => {},
       onFim: () => { setTela('concluido'); liberarWakeLock(); sairTelaCheia() },
     }, modoSom, { abaixarMusica: sistema === 'android' && prefsAudio.current?.abaixar_musica !== false })
@@ -169,6 +176,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     playerRef.current = p
     setItens(lista)
     setRegistrados([])
+    setSeriesSalvas(0)
     setErroRegistro(false)
     setTreinoCompleto(false)
     setT(0)
@@ -210,8 +218,8 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
   const encerrar = () => {
     const multi = itens.length > 1
     const msg = multi
-      ? 'Encerrar o treino agora? Os exercícios já terminados continuam marcados como concluídos.'
-      : 'Encerrar agora? O exercício não será marcado como concluído.'
+      ? 'Encerrar o treino agora? Tudo o que já foi feito fica no diário como treino incompleto.'
+      : 'Encerrar agora? As séries já feitas ficam no diário como treino incompleto.'
     if (!confirm(msg)) return
     playerRef.current?.parar()
     playerRef.current = null
@@ -272,10 +280,11 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
           {!multi && itens[0] && <p className="text-zinc-300 font-semibold">{itens[0].nome}</p>}
           {multi
             ? <p className="text-zinc-500 text-sm mt-1">{feitos.length} de {itens.length} exercícios concluídos</p>
-            : <p className="text-zinc-500 text-sm mt-1">{ok ? `${itens[0]?.series ?? 0} séries finalizadas` : 'Não foi marcado como concluído.'}</p>}
-          {registrados.length > 0 && !erroRegistro && (
-            <p className="text-xs text-green-400 mt-3">✓ {treinoCompleto ? `${dia?.dia} completo` : 'Treino registrado'} · já está no seu diário</p>
+            : <p className="text-zinc-500 text-sm mt-1">{ok ? `${itens[0]?.series ?? 0} séries finalizadas` : `${seriesSalvas} de ${itens[0]?.series ?? 0} séries feitas`}</p>}
+          {seriesSalvas > 0 && !erroRegistro && (
+            <p className="text-xs text-green-400 mt-3">✓ {treinoCompleto ? `${dia?.dia} completo` : ok && !multi ? 'Exercício registrado' : 'Treino incompleto'} · já está no seu diário</p>
           )}
+          {!ok && seriesSalvas === 0 && <p className="text-xs text-zinc-500 mt-3">Nenhuma série chegou ao fim, então nada foi para o diário.</p>}
           {erroRegistro && <p className="text-xs text-red-400 mt-3">Não foi possível registrar a conclusão de algum exercício. Confira na lista.</p>}
         </div>
         {multi && feitos.length > 0 && (

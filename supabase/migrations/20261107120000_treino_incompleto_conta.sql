@@ -3,19 +3,26 @@
 -- Uma sessão com pelo menos 1 exercício feito vale como treino em tudo: diário de exercícios,
 -- ranking e feed dos amigos, curtidas e painel do personal. A coluna gerada `feito` diz isso.
 -- O lançamento no diário é criado no primeiro exercício e atualizado a cada exercício feito.
--- Conta só o executado: o tempo é o dos exercícios feitos (séries × (execução + descanso)), sem
--- somar intervalos parados entre um exercício e outro. Sem nenhum exercício, sai do diário.
+-- Conta só o executado: o tempo é o das séries feitas (séries feitas × (execução + descanso)), sem
+-- somar intervalos parados. Enquanto o treino não termina, o lançamento diz "treino incompleto".
+-- Basta 1 série feita para entrar no diário. Sem nenhuma série, sai do diário.
 -- ============================================================
 
 ALTER TABLE public.sessoes_treino ADD COLUMN IF NOT EXISTS feito BOOLEAN
   GENERATED ALWAYS AS (concluido OR (jsonb_typeof(series_realizadas) = 'object' AND series_realizadas <> '{}'::JSONB)) STORED;
 CREATE INDEX IF NOT EXISTS sessoes_treino_feito_idx ON public.sessoes_treino (user_id, data_inicio) WHERE feito;
 
-/** Minutos previstos no plano só para os exercícios feitos (séries × (execução + descanso)). */
+/** Minutos só das séries feitas: séries feitas × (execução + descanso) de cada exercício.
+ *  `p_feitos` = { exercicioId: séries feitas } (o formato antigo em lista conta pelo tamanho). */
 CREATE OR REPLACE FUNCTION public._treino_minutos_feitos(p_treino UUID, p_dia INT, p_feitos JSONB)
 RETURNS INT LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT COALESCE(round(sum(
-           COALESCE(NULLIF(substring(e ->> 'series' FROM '\d+'), '')::NUMERIC, 3)
+           LEAST(
+             CASE jsonb_typeof(p_feitos -> (e ->> 'id'))
+               WHEN 'number' THEN (p_feitos ->> (e ->> 'id'))::NUMERIC
+               WHEN 'array' THEN jsonb_array_length(p_feitos -> (e ->> 'id'))::NUMERIC
+               ELSE 0 END,
+             COALESCE(NULLIF(substring(e ->> 'series' FROM '\d+'), '')::NUMERIC, 3))
            * (COALESCE(NULLIF(substring(e ->> 'tempo_execucao_segundos' FROM '\d+'), '')::NUMERIC, 40)
               + COALESCE(NULLIF(substring(e ->> 'tempo_descanso_segundos' FROM '\d+'), '')::NUMERIC, 60))) / 60.0)::INT, 0)
   FROM public.treinos t, jsonb_array_elements(COALESCE(t.plano -> 'dias' -> p_dia -> 'exercicios', '[]'::JSONB)) e
@@ -43,11 +50,12 @@ BEGIN
   SELECT NULLIF(trim(t.plano -> 'dias' -> NEW.dia_index ->> 'dia'), '') INTO v_dia FROM public.treinos t WHERE t.id = NEW.treino_id;
   v_data := (COALESCE(NEW.data_fim, NOW()) AT TIME ZONE 'America/Sao_Paulo')::DATE;
   v_kcal := LEAST(round(4.5 * COALESCE(v_peso, 70) * v_min / 60.0)::INT, 4000);
-  v_nome := left('Musculação · ' || COALESCE(v_dia, NULLIF(trim(NEW.treino_nome), ''), 'treino'), 120);
+  v_nome := left('Musculação · ' || COALESCE(v_dia, NULLIF(trim(NEW.treino_nome), ''), 'treino'), 100)
+            || CASE WHEN NEW.concluido THEN '' ELSE ' · treino incompleto' END;
   INSERT INTO public.exercicios_registro (user_id, data, nome, duracao_min, calorias, origem, sessao_id)
   VALUES (NEW.user_id, v_data, v_nome, v_min, v_kcal, 'treino', NEW.id)
   ON CONFLICT (sessao_id) WHERE sessao_id IS NOT NULL
-  DO UPDATE SET data = EXCLUDED.data, duracao_min = EXCLUDED.duracao_min, calorias = EXCLUDED.calorias;
+  DO UPDATE SET data = EXCLUDED.data, nome = EXCLUDED.nome, duracao_min = EXCLUDED.duracao_min, calorias = EXCLUDED.calorias;
   RETURN NEW;
 END;
 $$;

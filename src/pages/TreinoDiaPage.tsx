@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTreino } from '../lib/treinoApi'
 import { descreverGrupos, equipamentosCobertos, type ExercicioPlano, type PlanoTreino } from '../lib/treinoModel'
-import { desmarcarExercicio, emAndamento, novaSessao, sessaoAtual, type Sessao } from '../lib/sessoes'
+import { desmarcarExercicio, emAndamento, exercicioConcluido, novaSessao, seriesFeitas, sessaoAtual, type Sessao } from '../lib/sessoes'
 import ExercicioPicker, { ExercicioForm } from '../components/treino/ExercicioPicker'
 import { Spinner } from '../components/UI'
 import CompartilharCartao from '../components/CompartilharCartao'
@@ -43,7 +43,8 @@ export default function TreinoDiaPage() {
   if (!treino || !treinoDia) return <div className="text-center py-16 text-zinc-500">Treino não encontrado.</div>
 
   const exercicios = treinoDia.exercicios
-  const feitos = new Set(Object.keys(sessao?.series_realizadas ?? {}))
+  // Concluído = todas as séries feitas; com menos, o exercício mostra quantas foram (já estão no diário)
+  const feitos = new Set(exercicios.filter(e => exercicioConcluido(sessao, e)).map(e => e.id))
   const concluidos = exercicios.filter(e => feitos.has(e.id)).length
   const sessaoFinalizada = !!sessao?.concluido && exercicios.length > 0
   const minutos = sessao?.data_inicio && sessao?.data_fim
@@ -142,6 +143,7 @@ export default function TreinoDiaPage() {
         <div className="flex flex-col gap-3">
           {exercicios.map((ex, i) => {
             const ok = feitos.has(ex.id)
+            const parcial = ok ? 0 : seriesFeitas(sessao, ex.id)
             return (
               <div key={ex.id} className={`rounded-2xl border p-4 ${ok ? 'bg-green-500/5 border-green-500/30' : 'bg-zinc-900 border-zinc-800'}`}>
                 <div className="flex items-start gap-3">
@@ -152,6 +154,7 @@ export default function TreinoDiaPage() {
                     <p className="font-semibold text-zinc-100 leading-snug">{ex.nome}</p>
                     {ex.grupos_musculares.length > 0 && <p className="text-xs text-zinc-500 mt-0.5 truncate">{ex.grupos_musculares.join(' · ')}</p>}
                     {ok && <p className="text-xs font-semibold text-green-400 mt-1">✓ Concluído</p>}
+                    {parcial > 0 && <p className="text-xs font-semibold text-amber-400 mt-1">{parcial} de {ex.series} séries feitas · treino incompleto</p>}
                   </div>
                 </div>
                 <div className="grid grid-cols-4 gap-1.5 mt-3 text-center">
@@ -178,7 +181,7 @@ export default function TreinoDiaPage() {
                   <button onClick={() => mover(i, 1)} disabled={i === exercicios.length - 1} className="px-2.5 py-2.5 rounded-xl text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
                   <button onClick={() => remover(ex)} className="px-2.5 py-2.5 rounded-xl text-sm bg-zinc-900 text-red-400/80 border border-zinc-800" aria-label="Remover">🗑</button>
                 </div>
-                {ok && sessao && (
+                {(ok || parcial > 0) && sessao && (
                   <button onClick={async () => setSessao(await desmarcarExercicio(sessao, ex.id))}
                     className="mt-2 text-[11px] text-zinc-500 hover:text-zinc-300">Desmarcar conclusão</button>
                 )}
