@@ -984,6 +984,10 @@ await t('treino completo: faz os exercícios em sequência, anuncia o próximo p
   for (let i = 0; i < 40 && !page.gravacoes.some(g => g.tabela === 'api_voz'); i++) await page.waitForTimeout(100)
   assert.deepEqual(page.gravacoes.filter(g => g.tabela === 'api_voz').map(g => g.corpo.texto), ['Remada curvada'])
   await page.waitForTimeout(1000)
+  // Cada exercício mostra o bonequinho com a execução; um toque troca pela descrição
+  await page.getByRole('img', { name: 'Execução: Supino' }).waitFor()
+  await page.getByRole('img', { name: 'Execução: Remada' }).waitFor()
+  await page.screenshot({ path: `${SHOTS}/treino-dia.png`, fullPage: true })
   await page.getByRole('button', { name: /Treino completo · 2 exercícios/ }).click()
   await page.getByText('Exercício 1 de 2 · Supino reto com barra').waitFor()
   await page.screenshot({ path: `${SHOTS}/treino-completo.png` })

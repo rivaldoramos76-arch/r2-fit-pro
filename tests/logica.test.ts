@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { CATALOGO, GRUPOS } from '../src/data/exercicios'
 import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
 import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar } from '../src/lib/workoutAudio'
+import { movimentoDe } from '../src/components/treino/AnimacaoExercicio'
 import { normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
 let ok = 0
@@ -185,5 +186,15 @@ await t('um exercício só continua igual', () => {
   const c = montarCronograma({ series: 2, execSeg: 5, descansoSeg: 5 })
   assert.equal(c.marcos.length, 1); assert.equal(c.fases.filter(f => f.proximo != null).length, 0)
   assert.equal(c.cues.filter(x => x.clip === 'proximo').length, 0)
+})
+await t('bonequinho animado: quase todo o catálogo tem movimento, e cada um faz sentido', () => {
+  const sem = CATALOGO.filter(e => !movimentoDe(e.nome)).map(e => e.nome)
+  assert.ok(sem.length <= 10, `sem animação: ${sem.join(', ')}`)
+  assert.equal(movimentoDe('Supino inclinado com halteres')?.rotulo, 'Supino')
+  assert.equal(movimentoDe('Panturrilha no leg press')?.rotulo, 'Panturrilha')
+  assert.equal(movimentoDe('Crucifixo invertido com halteres')?.rotulo, 'Crucifixo invertido')
+  assert.equal(movimentoDe('Agachamento búlgaro')?.rotulo, 'Afundo')
+  assert.equal(movimentoDe('Superman'), null, 'sem desenho que combine: fica a descrição')
+  assert.equal(movimentoDe('Exercício inventado'), null)
 })
 console.log(`\n${ok} testes passaram`)
