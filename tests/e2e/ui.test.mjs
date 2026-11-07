@@ -931,6 +931,8 @@ await t('contador: por cima da música toca só os avisos curtos, agendados, e r
   await page.getByRole('button', { name: /Retomar/ }).click()
   await page.waitForFunction(() => window.__ctx.state === 'running')
   await page.getByRole('heading', { name: 'Exercício concluído!' }).waitFor({ timeout: 40000 })
+  // Acabou: o som do contador é desligado na hora, para a música voltar ao volume normal
+  await page.waitForFunction(() => window.__ctx.state === 'closed')
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })

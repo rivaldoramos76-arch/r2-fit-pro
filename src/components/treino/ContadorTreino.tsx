@@ -96,12 +96,18 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
   const liberarWakeLock = () => { wakeRef.current?.release().catch(() => {}); wakeRef.current = null }
   const entrarTelaCheia = () => { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {}) }
   const sairTelaCheia = () => { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}) }
+  /** Solta os controles de mídia do sistema (a música volta a ser a dona do som e do volume). */
+  const limparMidia = () => {
+    if (!('mediaSession' in navigator)) return
+    navigator.mediaSession.metadata = null
+    for (const a of ['play', 'pause'] as const) { try { navigator.mediaSession.setActionHandler(a, null) } catch { /* sem suporte */ } }
+  }
 
   useEffect(() => () => {
     playerRef.current?.parar()
     liberarWakeLock()
     sairTelaCheia()
-    if ('mediaSession' in navigator) navigator.mediaSession.metadata = null
+    limparMidia()
   }, [])
 
   // Cada série terminada já vai para o banco (e para o diário): se a pessoa pausar e sair, o feito fica.
@@ -150,12 +156,13 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
 
   // Informações na tela de bloqueio / central de controle
   useEffect(() => {
-    if (tela !== 'rodando' || !exAtual || !('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return
+    // Só no modo "tela bloqueada": no modo música, os controles do fone e da tela de bloqueio ficam com o app de música
+    if (tela !== 'rodando' || modoSom !== 'bloqueio' || !exAtual || !('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return
     navigator.mediaSession.metadata = new MediaMetadata({
       title: exAtual.nome, artist: `R2 Fit Pro · ${dia?.dia ?? ''}`,
       album: itens.length > 1 ? `Exercício ${idxAtual + 1} de ${itens.length}` : `${exAtual.series} séries`,
     })
-  }, [tela, exAtual, dia, idxAtual, itens.length])
+  }, [tela, modoSom, exAtual, dia, idxAtual, itens.length])
 
   /** Começa a contagem. Chamar direto no toque do botão. */
   const iniciar = (lista: ExercicioPlano[]) => {
@@ -169,7 +176,8 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
       onSerieConcluida: (i, serie) => { setSeriesSalvas(n => n + 1); registrar(lista[i], serie) },
       onExercicioConcluido: i => { setRegistrados(r => [...r, i]) },
       onSeriesConcluidas: () => {},
-      onFim: () => { setTela('concluido'); liberarWakeLock(); sairTelaCheia() },
+      // Fim da última fala: desliga o som do contador na hora, para a música voltar ao volume normal
+      onFim: () => { setTela('concluido'); liberarWakeLock(); sairTelaCheia(); p.parar(); limparMidia() },
     }, modoSom, { abaixarMusica: sistema === 'android' && prefsAudio.current?.abaixar_musica !== false })
     p.setVolume(volume)
     p.setMudo(mudo)
@@ -186,7 +194,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     // play() precisa acontecer dentro do toque do usuário (exigência do iOS/Android)
     p.iniciar().then(() => {
       setTela('rodando')
-      if ('mediaSession' in navigator) {
+      if ('mediaSession' in navigator && modoSom === 'bloqueio') {
         navigator.mediaSession.setActionHandler('play', () => { p.retomar().catch(() => setPrecisaToque(true)); setPausado(false) })
         navigator.mediaSession.setActionHandler('pause', () => { p.pausar(); setPausado(true) })
       }
@@ -212,6 +220,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     playerRef.current = null
     liberarWakeLock()
     sairTelaCheia()
+    limparMidia()
     setTela('parado')
   }
 
@@ -225,6 +234,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     playerRef.current = null
     liberarWakeLock()
     sairTelaCheia()
+    limparMidia()
     setTela('interrompido')
   }
 

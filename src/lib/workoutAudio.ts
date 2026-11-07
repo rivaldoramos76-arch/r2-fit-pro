@@ -360,6 +360,8 @@ export class TreinoPlayer {
   private urlsDuck: string[] = []
   private relogio: ScriptProcessorNode | null = null
   private proximoDuck = 0
+  /** Até quando (tempo do treino) a música deve ficar abaixada; depois o áudio silencioso é parado. */
+  private duckAte = 0
   // modo voz
   private t0 = 0
   private pausadoEm: number | null = null
@@ -470,6 +472,21 @@ export class TreinoPlayer {
       const el = curto ? this.duckCurto : this.duckLongo!
       try { el.currentTime = 0 } catch { /* ainda carregando */ }
       el.play().catch(() => {})
+      const dur = (this.clips?.[cue.clip]?.length ?? 0) / TAXA
+      this.duckAte = Math.max(this.duckAte, cue.t + dur + 0.35)
+    }
+    // Fala terminou e não vem outra logo em seguida: para o áudio silencioso para o sistema
+    // devolver o volume da música na hora (sem isso, alguns celulares deixam a música baixa)
+    const proxima = cues[this.proximoDuck]
+    if (this.duckAte && t >= this.duckAte && !(proxima && proxima.t - 0.6 <= t)) this.soltarMusica()
+  }
+
+  private soltarMusica() {
+    this.duckAte = 0
+    for (const d of [this.duckCurto, this.duckLongo]) {
+      if (!d) continue
+      d.pause()
+      try { d.currentTime = 0 } catch { /* ainda carregando */ }
     }
   }
 
@@ -520,6 +537,7 @@ export class TreinoPlayer {
     if (this.modo === 'mix') {
       if (!this.ctx || this.pausadoMix) return
       this.pausadoMix = true
+      this.soltarMusica()
       this.pausaPedida = true
       this.interrompido = false
       this.ctx.suspend().finally(() => { this.pausaPedida = false })
@@ -596,6 +614,7 @@ export class TreinoPlayer {
 
   parar() {
     this.parado = true
+    this.soltarMusica()
     if (this.timer) clearInterval(this.timer)
     this.timer = null
     for (const f of this.fontes) { try { f.stop() } catch { /* já parou */ } }
