@@ -1,12 +1,21 @@
 // Voz com o nome de cada exercício, para o treino completo anunciar o próximo ("Próximo exercício: Supino...").
-// Gerada uma vez pelo servidor (/api/voz, mesma voz dos avisos) e guardada no aparelho.
+// Os nomes do catálogo já vêm gravados no app (public/audio/nomes, gerados por scripts/gen-voice.mjs --nomes).
+// Nomes fora do catálogo são gerados uma vez pelo servidor (/api/voz, mesma voz) e guardados no aparelho.
 import { supabase } from './supabase'
 import { chaveNome, prepararVoz, type Clipes } from './workoutAudio'
 
 const CACHE = 'r2-voz-nomes-v1'
 const memoria = new Map<string, Promise<Float32Array | null>>()
 
+/** Mesmo nome de arquivo do script que grava as vozes. */
+export const slugNome = (n: string) => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
 async function baixar(nome: string): Promise<ArrayBuffer | null> {
+  // 1) Gravado no app (nomes do catálogo)
+  try {
+    const r = await fetch(`/audio/nomes/${slugNome(nome)}.mp3`)
+    if (r.ok && (r.headers.get('content-type') ?? '').includes('audio')) return await r.arrayBuffer()
+  } catch { /* segue para o servidor */ }
   const chave = `/voz-nome/${encodeURIComponent(nome.toLowerCase())}`
   try {
     const salvo = await caches?.open(CACHE).then(c => c.match(chave))

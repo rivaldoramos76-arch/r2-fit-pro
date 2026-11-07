@@ -2,7 +2,7 @@
 // Mesma voz dos avisos do contador (scripts/gen-voice.mjs). Exige sessão válida e Premium.
 // O app guarda o áudio no aparelho, então cada nome é gerado uma única vez por pessoa.
 
-const INSTRUCOES = 'Você é uma treinadora de academia brasileira. Fale em português do Brasil, com sotaque brasileiro, voz feminina firme, clara, enérgica e motivadora, sem gritar. É o nome de um exercício de musculação: pronuncie com clareza, sem pausas no início nem no fim. Diga apenas o texto.'
+const INSTRUCOES = 'Você é uma personal trainer brasileira, nascida e criada em São Paulo, falando com seu aluno na academia. Fale em português do Brasil com sotaque paulistano natural, nunca com sotaque estrangeiro ou de Portugal. Voz feminina firme, clara, enérgica e motivadora, animada, sem gritar. É o nome de um exercício de musculação: pronuncie cada palavra por inteiro, articulando bem a última sílaba.'
 const VOZ = { 'gpt-4o-mini-tts': 'coral', 'tts-1-hd': 'nova' }
 
 const erro = (status, mensagem) =>
@@ -46,7 +46,7 @@ export async function POST(request) {
     return erro(503, 'Tente novamente.')
   }
 
-  for (const modelo of ['gpt-4o-mini-tts', 'tts-1-hd']) {
+  for (const modelo of ['gpt-4o-mini-tts']) {
     try {
       const body = { model: modelo, voice: VOZ[modelo], input: `${texto}.`, response_format: 'pcm', speed: 1.0 }
       if (modelo.startsWith('gpt-4o')) body.instructions = INSTRUCOES

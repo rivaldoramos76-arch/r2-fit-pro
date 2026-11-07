@@ -976,9 +976,10 @@ await t('treino completo: faz os exercícios em sequência, anuncia o próximo p
   await page.goto(BASE + '/treino/t1/dia/0')
   // A voz com o nome do próximo exercício é preparada antes
   await page.waitForFunction(() => true)
+  // Nome do catálogo vem gravado no app; nome fora do catálogo é pedido ao servidor
   for (let i = 0; i < 40 && !page.gravacoes.some(g => g.tabela === 'api_voz'); i++) await page.waitForTimeout(100)
-  assert.deepEqual(page.gravacoes.filter(g => g.tabela === 'api_voz').map(g => g.corpo.texto).sort(), ['Remada curvada', 'Supino reto com barra'])
-  await page.waitForTimeout(500)
+  assert.deepEqual(page.gravacoes.filter(g => g.tabela === 'api_voz').map(g => g.corpo.texto), ['Remada curvada'])
+  await page.waitForTimeout(1000)
   await page.getByRole('button', { name: /Treino completo · 2 exercícios/ }).click()
   await page.getByText('Exercício 1 de 2 · Supino reto com barra').waitFor()
   await page.screenshot({ path: `${SHOTS}/treino-completo.png` })

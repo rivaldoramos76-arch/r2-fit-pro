@@ -1,7 +1,11 @@
-// Gera os clipes de voz (pt-BR) usados pelo contador de séries.
-// Roda antes do build: grava public/audio/*.wav (sem compressão, 24 kHz, voz feminina).
-// Se não houver chave da OpenAI ou a geração falhar, o build continua e o app usa a voz do navegador.
-import { mkdir, writeFile, access } from 'node:fs/promises'
+// Gera as vozes (pt-BR) do contador de séries com a mesma voz de personal (OpenAI gpt-4o-mini-tts, "coral").
+// Os arquivos ficam versionados em public/audio — o build só gera o que faltar, então a voz não muda
+// a cada publicação.
+//   node scripts/gen-voice.mjs              → falas fixas que faltarem (public/audio/<chave>.wav)
+//   node scripts/gen-voice.mjs --nomes      → também os nomes do catálogo (public/audio/nomes/<nome>.mp3)
+//   node scripts/gen-voice.mjs --refazer    → gera tudo de novo (troca de voz ou de estilo)
+// Precisa de OPENAI_API_KEY. Atrás de proxy: NODE_USE_ENV_PROXY=1. Sem chave, o build continua.
+import { mkdir, writeFile, access, readFile } from 'node:fs/promises'
 
 const CLIPES = {
   '5': 'Cinco!', '4': 'Quatro!', '3': 'Três!', '2': 'Dois!', '1': 'Um!',
@@ -11,25 +15,29 @@ const CLIPES = {
   proximo: 'Exercício finalizado! Próximo exercício:',
   treino_fim: 'Treino completo! Parabéns, todos os exercícios finalizados.',
 }
-const INSTRUCOES = 'Você é uma treinadora de academia brasileira. Fale em português do Brasil, com sotaque brasileiro, voz feminina firme, clara, enérgica e motivadora, sem gritar. Pronuncie cada palavra por inteiro, articulando bem a última sílaba (por exemplo: cin-co, qua-tro, três, dois, um). Diga apenas o texto, sem pausas no início nem no fim.'
-// Voz feminina: "coral" no gpt-4o-mini-tts (aceita instruções de estilo); "nova" no tts-1-hd
-const VOZ = { 'gpt-4o-mini-tts': 'coral', 'tts-1-hd': 'nova' }
+// Mesmo estilo da amostra escolhida (voz 1, coral)
+export const INSTRUCOES = 'Você é uma personal trainer brasileira, nascida e criada em São Paulo, falando com seu aluno na academia. Fale em português do Brasil com sotaque paulistano natural, nunca com sotaque estrangeiro ou de Portugal. Voz feminina firme, clara, enérgica e motivadora, animada, sem gritar. Pronuncie cada palavra por inteiro, articulando bem a última sílaba.'
+const MODELO = 'gpt-4o-mini-tts'
+const VOZ = 'coral'
 const DIR = new URL('../public/audio/', import.meta.url)
+const DIR_NOMES = new URL('nomes/', DIR)
 const key = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY
+const args = new Set(process.argv.slice(2))
+const refazer = args.has('--refazer')
 
-async function existe(f) { try { await access(new URL(f, DIR)); return true } catch { return false } }
+/** Mesmo nome de arquivo usado pelo app (src/lib/vozNomes.ts). */
+export const slugNome = n => n.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
-async function falar(texto, modelo) {
-  // PCM cru (24 kHz, 16 bits, mono) e cabeçalho WAV montado aqui, com tamanhos corretos
-  const body = { model: modelo, voice: VOZ[modelo], input: texto, response_format: 'pcm', speed: 1.0 }
-  if (modelo.startsWith('gpt-4o')) body.instructions = INSTRUCOES
+async function existe(u) { try { await access(u); return true } catch { return false } }
+
+async function falar(texto, formato) {
   const r = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ model: MODELO, voice: VOZ, input: texto, instructions: INSTRUCOES, response_format: formato }),
   })
-  if (!r.ok) throw new Error(`${modelo}: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`)
-  return comoWav(Buffer.from(await r.arrayBuffer()))
+  if (!r.ok) throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 200)}`)
+  return Buffer.from(await r.arrayBuffer())
 }
 
 function comoWav(pcm, sr = 24000) {
@@ -41,23 +49,36 @@ function comoWav(pcm, sr = 24000) {
   return Buffer.concat([h, pcm])
 }
 
+/** Roda em lotes para não estourar o limite da API. */
+async function emLotes(itens, n, fn) {
+  for (let i = 0; i < itens.length; i += n) await Promise.all(itens.slice(i, i + n).map(fn))
+}
+
+async function nomesDoCatalogo() {
+  const src = await readFile(new URL('../src/data/exercicios.ts', import.meta.url), 'utf8')
+  const corpo = src.slice(src.indexOf('const RAW'), src.indexOf('export const CATALOGO'))
+  return [...corpo.matchAll(/^\s*\['([^']+)'/gm)].map(m => m[1])
+}
+
 async function main() {
   await mkdir(DIR, { recursive: true })
   const faltando = []
-  for (const k of Object.keys(CLIPES)) if (!(await existe(`${k}.wav`))) faltando.push(k)
-  if (!faltando.length) { console.log('[voz] clipes já existem'); return }
-  if (!key) { console.warn('[voz] sem OPENAI_API_KEY — o app usará a voz do navegador'); return }
-  for (const modelo of ['gpt-4o-mini-tts', 'tts-1-hd']) {
-    try {
-      const audios = await Promise.all(faltando.map(k => falar(CLIPES[k], modelo)))
-      await Promise.all(faltando.map((k, i) => writeFile(new URL(`${k}.wav`, DIR), audios[i])))
-      console.log(`[voz] ${faltando.length} clipes gerados com ${modelo}`)
-      return
-    } catch (e) {
-      console.warn('[voz] falhou:', e.message)
-    }
+  for (const k of Object.keys(CLIPES)) if (refazer || !(await existe(new URL(`${k}.wav`, DIR)))) faltando.push(k)
+  let nomes = []
+  if (args.has('--nomes')) {
+    await mkdir(DIR_NOMES, { recursive: true })
+    for (const n of await nomesDoCatalogo()) if (refazer || !(await existe(new URL(`${slugNome(n)}.mp3`, DIR_NOMES)))) nomes.push(n)
   }
-  console.warn('[voz] não foi possível gerar os clipes — o app usará a voz do navegador')
+  if (!faltando.length && !nomes.length) { console.log('[voz] tudo pronto'); return }
+  if (!key) { console.warn('[voz] sem OPENAI_API_KEY — faltam', faltando.length + nomes.length, 'vozes; o app usa a voz do navegador nelas'); return }
+  let erros = 0
+  await emLotes(faltando, 5, async k => {
+    try { await writeFile(new URL(`${k}.wav`, DIR), comoWav(await falar(CLIPES[k], 'pcm'))) } catch (e) { erros++; console.warn('[voz]', k, e.message) }
+  })
+  await emLotes(nomes, 6, async n => {
+    try { await writeFile(new URL(`${slugNome(n)}.mp3`, DIR_NOMES), await falar(`${n}.`, 'mp3')) } catch (e) { erros++; console.warn('[voz]', n, e.message) }
+  })
+  console.log(`[voz] ${faltando.length + nomes.length - erros} vozes geradas${erros ? `, ${erros} falharam` : ''}`)
 }
 
 main().catch(e => console.warn('[voz] erro inesperado:', e?.message))
