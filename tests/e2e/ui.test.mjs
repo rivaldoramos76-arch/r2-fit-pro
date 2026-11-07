@@ -491,7 +491,7 @@ await t('início mostra o anel de calorias com meta, macros e refeições do dia
   await folha.getByRole('button', { name: 'Adicionar aos favoritos' }).first().click()
   await folha.getByRole('button', { name: 'Remover dos favoritos' }).first().waitFor()
   assert.ok(page.gravacoes.some(g => g.tabela === 'alimentos_favoritos' && g.metodo === 'POST'), 'favoritou')
-  await folha.getByText('Pão francês').click()
+  await folha.getByText('Pão francês', { exact: true }).click()
   await folha.getByRole('button', { name: 'Mais' }).click()
   assert.equal(await folha.getByLabel('Quantidade').inputValue(), '2')
   await folha.getByText('2 unidades').first().waitFor()
@@ -565,7 +565,9 @@ await t('busca: TACO com medidas caseiras, produto industrializado e cálculo pe
   await folha.getByText('115').first().waitFor() // 128 kcal/100 g × 90 g
   await page.screenshot({ path: `${SHOTS}/busca-medida.png` })
   await folha.getByRole('button', { name: /^Adicionar a [A-ZÁ]/ }).click()
-  await page.waitForTimeout(300)
+  // Aviso de salvo e tela limpa, pronta para o próximo alimento
+  await folha.getByRole('status').filter({ hasText: /Arroz, tipo 1, cozido salvo em/ }).waitFor()
+  assert.equal(await folha.getByPlaceholder(/Buscar alimento/).inputValue(), '', 'busca zerada depois de salvar')
   const ins = page.gravacoes.filter(x => x.tabela === 'food_logs' && x.metodo === 'POST').pop()
   assert.equal(ins?.corpo?.[0]?.nome, 'Arroz, tipo 1, cozido'); assert.equal(ins?.corpo?.[0]?.quantidade, '1 escumadeira cheia (90 g)')
   assert.equal(ins?.corpo?.[0]?.calorias, 115); assert.equal(ins?.corpo?.[0]?.origem, 'busca')
@@ -745,7 +747,7 @@ await t('receitas: montar com ingredientes da busca e adicionar ao diário por p
   const log = page.gravacoes.filter(x => x.tabela === 'food_logs' && x.metodo === 'POST').pop()
   assert.equal(log?.corpo?.[0]?.nome, 'Frango com arroz'); assert.equal(log?.corpo?.[0]?.quantidade, '1 porção (300 g)'); assert.equal(log?.corpo?.[0]?.calorias, 296); assert.equal(log?.corpo?.[0]?.origem, 'receita')
   // Com peso final (1200 g), registra em gramas: 150 g do prato
-  await page.getByRole('dialog').getByText('Frango com arroz').click()
+  await page.getByRole('dialog').getByText('Frango com arroz', { exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Em gramas' }).click()
   await page.getByRole('dialog').getByLabel('Quantidade').fill('150')
   await page.getByRole('dialog').getByRole('button', { name: /^Adicionar a [A-ZÁ]/ }).click()

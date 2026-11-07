@@ -86,6 +86,19 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
   const [adicionados, setAdicionados] = useState<Set<string>>(new Set())
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  // Depois de salvar: aviso curto e a tela limpa, pronta para o próximo alimento
+  const [aviso, setAviso] = useState('')
+  const [rodada, setRodada] = useState(0)
+  const timerAviso = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (timerAviso.current) clearTimeout(timerAviso.current) }, [])
+  const avisarSalvo = (itens: Alimento[], texto: string) => {
+    const quem = itens.length === 1 ? itens[0].nome : `${itens.length} alimentos`
+    setAviso(`✓ ${quem} ${texto}`)
+    setBusca('')
+    setRodada(r => r + 1)
+    if (timerAviso.current) clearTimeout(timerAviso.current)
+    timerAviso.current = setTimeout(() => setAviso(''), 4000)
+  }
 
   useEffect(() => {
     alimentosRecentes(userId).then(setRecentes)
@@ -116,7 +129,7 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
     if (onEscolher) {
       onEscolher(itens.map(({ nome, quantidade, calorias, proteina_g, carboidrato_g, gordura_g }) => ({ nome, quantidade, calorias, proteina_g, carboidrato_g, gordura_g })))
       setAdicionados(s => new Set([...s, ...itens.map(chaveAlimento)]))
-      if (fechar) onClose()
+      if (fechar) onClose(); else avisarSalvo(itens, itens.length === 1 ? 'adicionado à receita' : 'adicionados à receita')
       return
     }
     setSalvando(true)
@@ -124,7 +137,7 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
       await registrarAlimentos(userId, data, refeicao, itens, origem)
       setAdicionados(s => new Set([...s, ...itens.map(chaveAlimento)]))
       onSalvo?.()
-      if (fechar) onClose()
+      if (fechar) onClose(); else avisarSalvo(itens, `${itens.length === 1 ? 'salvo' : 'salvos'} em ${refeicao}`)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível adicionar')
     } finally { setSalvando(false) }
@@ -213,9 +226,10 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
 
   return (
     <Folha titulo={titulo} onClose={onClose}
-      rodape={adicionados.size > 0 && (aba === 'buscar' || aba === 'favoritos' || aba === 'receitas')
+      rodape={adicionados.size > 0
         ? <Button size="lg" className="w-full" onClick={onClose}><Check className="w-5 h-5" />Concluir ({adicionados.size})</Button> : undefined}>
       {!ingrediente && <SeletorRefeicao valor={refeicao} onChange={setRefeicao} />}
+      {aviso && <p role="status" className="mt-3 rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm font-semibold text-green-300 animate-fade-up">{aviso}</p>}
       <div className={`mt-4 grid ${abas.length === 5 ? 'grid-cols-5' : 'grid-cols-4'} gap-1 bg-zinc-800/60 rounded-xl p-1`} role="tablist">
         {abas.map(({ id, rotulo, icone: Icone }) => (
           <button key={id} role="tab" aria-selected={aba === id} onClick={() => { setAba(id); setErro(''); if (id === 'receitas' && receitas === null) listarReceitas(userId).then(setReceitas).catch(() => setReceitas([])) }}
@@ -272,8 +286,8 @@ export default function AdicionarAlimento({ userId, data = '', refeicaoInicial =
         </div>
       )}
 
-      {aba === 'texto' && <AbaTexto inicial={busca} salvando={salvando} favPorChave={favPorChave} alternarFavorito={alternarFavorito} onSalvar={itens => adicionar(itens, 'texto', true)} />}
-      {aba === 'foto' && <AbaFoto userId={userId} salvando={salvando} onSalvar={itens => adicionar(itens, 'foto', true)} />}
+      {aba === 'texto' && <AbaTexto key={rodada} inicial={busca} salvando={salvando} favPorChave={favPorChave} alternarFavorito={alternarFavorito} onSalvar={itens => adicionar(itens, 'texto', false)} />}
+      {aba === 'foto' && <AbaFoto key={rodada} userId={userId} salvando={salvando} onSalvar={itens => adicionar(itens, 'foto', false)} />}
       {erro && <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-xl p-3"><p className="text-red-400 text-sm">{erro}</p></div>}
     </Folha>
   )
