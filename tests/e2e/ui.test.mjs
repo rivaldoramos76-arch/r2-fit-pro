@@ -198,6 +198,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       if (p.endsWith('metas_nutricionais')) return json(nutricao === 'sem_meta' ? [] : [META])
       return json([])
     }
+    if (treino && p === '/rest/v1/treinos' && rota.request().method() !== 'GET') { gravacoes.push({ tabela: 'treinos', metodo: rota.request().method(), corpo: rota.request().postDataJSON() }); return json({ ...(treino === 'dois' ? TREINO2 : TREINO), ...rota.request().postDataJSON() }) }
     if (treino && p === '/rest/v1/treinos') { const tr = treino === 'dois' ? TREINO2 : TREINO; return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? tr : [tr]) }
     if (treino && p === '/rest/v1/sessoes_treino') {
       if (rota.request().method() === 'GET') return json(sessaoE2e ? [sessaoE2e] : [])
@@ -972,6 +973,25 @@ await t('contador: modo tela bloqueada usa a faixa contínua', async () => {
   await page.waitForTimeout(500)
   assert.equal(await page.evaluate(() => window.__mediaPlays), 1)
   assert.equal(await page.evaluate(() => window.__agendados.length), 0)
+  await ctx.close()
+})
+
+await t('editar exercício: execução e descanso em minutos e segundos', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
+  await page.goto(BASE + '/treino/t1/dia/0')
+  await page.getByRole('button', { name: 'Editar' }).first().click()
+  const folha = page.getByRole('group', { name: 'Descanso' })
+  await folha.getByLabel('Descanso: minutos').fill('1')
+  await folha.getByLabel('Descanso: segundos').fill('30')
+  await page.getByRole('group', { name: 'Execução' }).getByLabel('Execução: segundos').fill('45')
+  await page.screenshot({ path: `${SHOTS}/editar-tempos.png` })
+  await page.getByRole('button', { name: 'Salvar' }).click()
+  await page.getByText('01:30').first().waitFor()
+  for (let i = 0; i < 30 && !page.gravacoes.some(g => g.tabela === 'treinos'); i++) await page.waitForTimeout(100)
+  const salvo = page.gravacoes.filter(g => g.tabela === 'treinos').pop()
+  const ex = salvo.corpo.plano.dias[0].exercicios[0]
+  assert.equal(ex.tempo_descanso_segundos, 90); assert.equal(ex.tempo_execucao_segundos, 45)
+  assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
 

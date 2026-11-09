@@ -38,6 +38,31 @@ function Num({ label, valor, passo, min, max, sufixo, onChange }: {
   )
 }
 
+/** Tempo em minutos e segundos (ex.: 1:30), com − e + de 5 em 5 segundos. */
+function Tempo({ label, valor, min, max, sufixo, onChange }: {
+  label: string; valor: number; min: number; max: number; sufixo?: string; onChange: (seg: number) => void
+}) {
+  const lim = (v: number) => Math.min(max, Math.max(min, Math.round(v)))
+  const m = Math.floor(valor / 60), s = valor % 60
+  const num = (v: string) => Math.max(0, Math.round(+v.replace(/\D/g, '') || 0))
+  const caixa = `${CAMPO} text-center px-1 w-14`
+  return (
+    <div className="flex flex-col gap-1.5 col-span-2" role="group" aria-label={label}>
+      <span className="text-xs text-zinc-400">{label} <span className="text-zinc-600">(min : seg)</span></span>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => onChange(lim(valor - 5))} aria-label={`Diminuir ${label}`} className="w-10 h-10 shrink-0 rounded-xl bg-zinc-800 text-zinc-100 font-bold">−</button>
+        <input type="number" inputMode="numeric" min={0} max={Math.floor(max / 60)} value={m} aria-label={`${label}: minutos`}
+          onChange={ev => onChange(lim(num(ev.target.value) * 60 + s))} className={caixa} />
+        <span className="text-zinc-500 font-bold">:</span>
+        <input type="number" inputMode="numeric" min={0} max={59} value={String(s).padStart(2, '0')} aria-label={`${label}: segundos`}
+          onChange={ev => onChange(lim(m * 60 + Math.min(59, num(ev.target.value))))} className={caixa} />
+        <button type="button" onClick={() => onChange(lim(valor + 5))} aria-label={`Aumentar ${label}`} className="w-10 h-10 shrink-0 rounded-xl bg-zinc-800 text-zinc-100 font-bold">+</button>
+        {sufixo && <span className="text-[11px] text-zinc-600 ml-1 leading-tight">{sufixo}</span>}
+      </div>
+    </div>
+  )
+}
+
 export function ExercicioForm({ inicial, titulo, subtitulo, onSalvar, onCancelar, rotuloSalvar }: {
   inicial: ExercicioPlano
   titulo: string
@@ -70,8 +95,8 @@ export function ExercicioForm({ inicial, titulo, subtitulo, onSalvar, onCancelar
           <span className="text-xs text-zinc-400">Carga <span className="text-zinc-600">(opcional)</span></span>
           <input value={e.carga ?? ''} onChange={ev => set('carga', ev.target.value || undefined)} placeholder="Ex.: 20 kg, 2×10 kg, elástico médio" className={CAMPO} />
         </label>
-        <Num label="Execução (s)" valor={e.tempo_execucao_segundos} passo={5} min={5} max={600} sufixo="duração de uma série" onChange={v => set('tempo_execucao_segundos', v)} />
-        <Num label="Descanso (s)" valor={e.tempo_descanso_segundos} passo={5} min={0} max={600} sufixo="entre as séries" onChange={v => set('tempo_descanso_segundos', v)} />
+        <Tempo label="Execução" valor={e.tempo_execucao_segundos} min={5} max={600} sufixo="duração de uma série" onChange={v => set('tempo_execucao_segundos', v)} />
+        <Tempo label="Descanso" valor={e.tempo_descanso_segundos} min={0} max={600} sufixo="entre as séries" onChange={v => set('tempo_descanso_segundos', v)} />
       </div>
       <div className="grid grid-cols-2 gap-3 pt-1">
         <button onClick={onCancelar} className="py-3 rounded-xl font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700">Cancelar</button>
