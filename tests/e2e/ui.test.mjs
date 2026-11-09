@@ -259,7 +259,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       const Orig = window.AudioContext
       window.AudioContext = class extends Orig { constructor(...a) { super(...a); w.__ctx = this } }
       const play = HTMLMediaElement.prototype.play
-      HTMLMediaElement.prototype.play = function (...a) { w.__mediaPlays++; return play.apply(this, a) }
+      HTMLMediaElement.prototype.play = function (...a) { if (this.tagName !== 'VIDEO') w.__mediaPlays++; return play.apply(this, a) } // vídeos mudos das animações não contam
     })
   }
   const page = await ctx.newPage()
@@ -1004,6 +1004,15 @@ await t('treino completo: faz os exercícios em sequência, anuncia o próximo p
   for (let i = 0; i < 40 && !page.gravacoes.some(g => g.tabela === 'api_voz'); i++) await page.waitForTimeout(100)
   assert.deepEqual(page.gravacoes.filter(g => g.tabela === 'api_voz').map(g => g.corpo.texto), ['Remada curvada'])
   await page.waitForTimeout(1000)
+  // Animação discreta: miniatura só no exercício que tem animação; um toque amplia, outro fecha
+  const mini = page.getByRole('button', { name: 'Ver execução de Supino reto com barra' })
+  await mini.waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Ver execução de Remada curvada' }).count(), 0)
+  await mini.click()
+  await page.getByRole('button', { name: 'Fechar execução' }).waitFor()
+  await page.screenshot({ path: `${SHOTS}/treino-execucao.png`, fullPage: true })
+  await page.getByRole('button', { name: 'Fechar execução' }).click()
+  await mini.waitFor()
   await page.screenshot({ path: `${SHOTS}/treino-dia.png`, fullPage: true })
   await page.getByRole('button', { name: /Treino completo · 2 exercícios/ }).click()
   await page.getByText('Exercício 1 de 2 · Supino reto com barra').waitFor()

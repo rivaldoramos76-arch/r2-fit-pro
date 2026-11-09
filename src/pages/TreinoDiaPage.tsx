@@ -9,6 +9,7 @@ import { Spinner } from '../components/UI'
 import CompartilharCartao from '../components/CompartilharCartao'
 import { cartaoTreino } from '../lib/cartoesBase'
 import { useContadorTreino } from '../components/treino/ContadorTreino'
+import { ExecucaoAmpliada, MiniExecucao } from '../components/treino/ExecucaoAnimada'
 
 function mmss(seg: number) {
   return `${String(Math.floor(seg / 60)).padStart(2, '0')}:${String(seg % 60).padStart(2, '0')}`
@@ -26,6 +27,7 @@ export default function TreinoDiaPage() {
   const [picker, setPicker] = useState(false)
   const [editando, setEditando] = useState<ExercicioPlano | null>(null)
   const [aviso, setAviso] = useState('')
+  const [execucao, setExecucao] = useState<string | null>(null)
   const aoRegistrar = useCallback((s: Sessao) => setSessao(s), [])
   const contador = useContadorTreino({
     user, treino: treino ? { id: treino.id, nome: treino.nome } : null, diaIdx,
@@ -156,7 +158,9 @@ export default function TreinoDiaPage() {
                     {ok && <p className="text-xs font-semibold text-green-400 mt-1">✓ Concluído</p>}
                     {parcial > 0 && <p className="text-xs font-semibold text-amber-400 mt-1">{parcial} de {ex.series} séries feitas · treino incompleto</p>}
                   </div>
+                  {execucao !== ex.id && !contador.rodando && <MiniExecucao nome={ex.nome} onAbrir={() => setExecucao(ex.id)} />}
                 </div>
+                {execucao === ex.id && !contador.rodando && <ExecucaoAmpliada nome={ex.nome} onFechar={() => setExecucao(null)} />}
                 <div className="grid grid-cols-4 gap-1.5 mt-3 text-center">
                   {[
                     ['Séries', String(ex.series)], ['Reps', ex.repeticoes],
