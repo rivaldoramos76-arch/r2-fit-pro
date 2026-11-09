@@ -1,17 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { slugNome } from '../../lib/vozNomes'
-
-/**
- * Exercícios com animação 3D da execução, gravadas em public/animacoes/<slug>.mp4 (+ .jpg de capa).
- * Geradas fora do app (personagem 3D com aparelhos fixos); para incluir outra, gravar os dois arquivos
- * e acrescentar o nome aqui.
- */
-const COM_ANIMACAO = new Set([
-  'agachamento-livre-com-barra',
-  'supino-reto-com-barra',
-  'supino-inclinado-com-halteres',
-  'leg-press-45',
-])
+import { COM_ANIMACAO } from './listaAnimacoes'
 
 /** Caminho base da animação do exercício (sem extensão) ou null se não houver. */
 export function animacaoDe(nome: string): string | null {
