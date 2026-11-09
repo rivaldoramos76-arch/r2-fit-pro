@@ -9,24 +9,9 @@ import { Spinner } from '../components/UI'
 import CompartilharCartao from '../components/CompartilharCartao'
 import { cartaoTreino } from '../lib/cartoesBase'
 import { useContadorTreino } from '../components/treino/ContadorTreino'
-import AnimacaoExercicio, { movimentoDe } from '../components/treino/AnimacaoExercicio'
 
 function mmss(seg: number) {
   return `${String(Math.floor(seg / 60)).padStart(2, '0')}:${String(seg % 60).padStart(2, '0')}`
-}
-
-/** Bonequinho mostrando a execução; um toque alterna para a descrição em texto. */
-function AnimacaoComTexto({ nome, instrucoes }: { nome: string; instrucoes?: string }) {
-  const [texto, setTexto] = useState(false)
-  return (
-    <button type="button" onClick={() => setTexto(t => !t)} className="w-full mt-2 rounded-xl bg-zinc-950/60 border border-zinc-800 text-left"
-      aria-label={texto ? 'Ver animação' : 'Ver descrição'}>
-      {texto && instrucoes
-        ? <p className="text-xs text-zinc-400 leading-relaxed p-3">{instrucoes}</p>
-        : <AnimacaoExercicio nome={nome} className="w-full h-28" />}
-      <span className="block text-[10px] text-zinc-600 text-center pb-1">{texto ? 'toque para ver a animação' : 'toque para ver a descrição'}</span>
-    </button>
-  )
 }
 
 // --- Página ---
@@ -184,9 +169,7 @@ export default function TreinoDiaPage() {
                   ))}
                 </div>
                 {ex.carga && <p className="text-xs text-zinc-400 mt-2">Carga: <span className="text-zinc-200">{ex.carga}</span></p>}
-                {movimentoDe(ex.nome) ? (
-                  <AnimacaoComTexto nome={ex.nome} instrucoes={ex.instrucoes} />
-                ) : ex.instrucoes && <p className="text-xs text-zinc-500 mt-2 leading-relaxed">{ex.instrucoes}</p>}
+                {ex.instrucoes && <p className="text-xs text-zinc-500 mt-2 leading-relaxed">{ex.instrucoes}</p>}
                 {ex.dica && <p className="text-xs text-yellow-500/80 mt-1">💡 {ex.dica}</p>}
                 <div className="flex items-center gap-1.5 mt-3">
                   <button onClick={() => contador.iniciar([ex])} disabled={contador.preparando}
