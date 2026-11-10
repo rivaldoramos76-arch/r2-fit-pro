@@ -3,7 +3,7 @@
 
 export interface ContadorNativo {
   preparar(o: { clipes: Record<string, { wav: string; dur: number }> }): Promise<void>
-  tocar(o: { cues: { t: number; clip: string }[]; desde: number; volume: number; mudo: boolean; titulo: string }): Promise<void>
+  tocar(o: { cues: { t: number; clip: string }[]; desde: number; volume: number; mudo: boolean; titulo: string; avisos?: { t: number; titulo: string; texto: string; dur: number }[] }): Promise<void>
   pausar(): Promise<void>
   parar(): Promise<void>
   volume(o: { volume: number; mudo: boolean }): Promise<void>

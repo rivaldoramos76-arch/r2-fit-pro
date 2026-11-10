@@ -48,6 +48,9 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
   const [volume, setVolume] = useState(1)
   const [mudo, setMudo] = useState(false)
   const [ligado, setLigado] = useState(true)
+  // App instalado: notificação a cada fase (TRABALHO / DESCANSO), que vibra e aparece no relógio pareado
+  const [avisosRelogio, setAvisosRelogio] = useState(() => { try { return localStorage.getItem('r2-avisos-relogio') !== '0' } catch { return true } })
+  const alternarAvisos = () => setAvisosRelogio(v => { try { localStorage.setItem('r2-avisos-relogio', v ? '0' : '1') } catch { /* sem armazenamento */ } return !v })
   const prefsAudio = useRef<PrefsAudio | null>(null)
 
   const [tela, setTela] = useState<Tela>('parado')
@@ -212,6 +215,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
       abaixarMusica: sistema === 'android' && prefsAudio.current?.abaixar_musica !== false,
       // App Android instalado: contador nativo (tela bloqueada e por cima da música)
       nativo: contadorNativo(),
+      avisosRelogio,
       titulo: lista.length > 1 ? `${dia?.dia ?? 'Treino'} · ${lista.length} exercícios` : lista[0]?.nome,
     })
     p.setVolume(volume)
@@ -300,7 +304,16 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
   ) : (
     <section className="bg-zinc-900 border border-zinc-800 rounded-2xl px-3.5 py-3" aria-label="Som do contador">
       {contadorNativo() && vozes !== 'fallback' ? (
-        <p className="text-[11px] text-zinc-500 leading-snug">📱 App instalado: a voz toca por cima da música (que abaixa só nos avisos) e continua com a tela bloqueada.</p>
+        <>
+          <p className="text-[11px] text-zinc-500 leading-snug">📱 App instalado: a voz toca por cima da música (que abaixa só nos avisos) e continua com a tela bloqueada.</p>
+          <button type="button" role="switch" aria-checked={avisosRelogio} aria-label="Avisos no relógio" onClick={alternarAvisos}
+            className="w-full mt-2 flex items-center gap-2 text-left">
+            <span className="flex-1 text-[11px] text-zinc-400">⌚ Avisos no relógio: notificação a cada fase (trabalho, descanso)</span>
+            <span className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${avisosRelogio ? 'bg-green-500' : 'bg-zinc-700'}`}>
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${avisosRelogio ? 'translate-x-4' : ''}`} />
+            </span>
+          </button>
+        </>
       ) : vozes === 'fallback' ? (
         <p className="text-[11px] text-zinc-500">Vozes gravadas indisponíveis: usando a voz do navegador. Neste modo, mantenha a tela ligada.</p>
       ) : (

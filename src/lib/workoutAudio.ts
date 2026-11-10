@@ -362,6 +362,32 @@ function definirSessaoAudio(tipo: 'ambient' | 'playback') {
   if (sessao) { try { sessao.type = tipo } catch { /* não suportado */ } }
 }
 
+export interface AvisoFase { t: number; titulo: string; texto: string; dur: number }
+const mmssAviso = (seg: number) => `${Math.floor(seg / 60)}:${String(Math.round(seg % 60)).padStart(2, '0')}`
+
+/**
+ * Um aviso por fase (TRABALHO, DESCANSO, fim) para a notificação do app: vibra e aparece no relógio
+ * pareado (smartwatch e pulseiras repassam as notificações do celular).
+ */
+export function avisosDasFases(crono: Cronograma, lista: ConfigCrono[]): AvisoFase[] {
+  const avisos: AvisoFase[] = []
+  for (const f of crono.fases) {
+    const ex = lista[f.exercicio]
+    const series = Math.max(1, Math.round(ex?.series ?? 1))
+    const dur = r3(f.fim - f.inicio)
+    const nome = ex?.nome?.trim() || 'Exercício'
+    if (f.tipo === 'work') {
+      avisos.push({ t: f.inicio, dur, titulo: `💪 TRABALHO · série ${f.serie} de ${series}`, texto: `${nome} · ${mmssAviso(dur)}` })
+    } else if (f.tipo === 'rest') {
+      const prox = f.proximo != null ? lista[f.proximo]?.nome?.trim() : null
+      avisos.push({ t: f.inicio, dur, titulo: `😮‍💨 DESCANSO · ${mmssAviso(dur)}`, texto: prox ? `Próximo: ${prox}` : `Próxima: série ${f.serie + 1} de ${series}` })
+    } else if (f.tipo === 'final') {
+      avisos.push({ t: f.inicio, dur: 8, titulo: lista.length > 1 ? '🏆 Treino completo!' : '✅ Séries finalizadas', texto: lista.length > 1 ? `${lista.length} exercícios` : nome })
+    }
+  }
+  return avisos
+}
+
 export class TreinoPlayer {
   /** 'nativo': app Android instalado, as falas tocam fora do navegador (tela bloqueada, por cima da música) */
   readonly modo: 'mix' | 'audio' | 'voz' | 'nativo'
@@ -417,13 +443,16 @@ export class TreinoPlayer {
   private timer: ReturnType<typeof setInterval> | null = null
 
   constructor(cfg: ConfigCrono | ConfigCrono[], clips: Clipes | null, ouv: Ouvintes, modoSom: ModoSom = 'musica',
-    opcoes: { abaixarMusica?: boolean; nativo?: ContadorNativo | null; titulo?: string } = {}) {
+    opcoes: { abaixarMusica?: boolean; nativo?: ContadorNativo | null; titulo?: string; avisosRelogio?: boolean } = {}) {
     this.ouv = ouv
     this.abaixarMusica = !!opcoes.abaixarMusica
     this.modo = !clips ? 'voz' : opcoes.nativo ? 'nativo' : modoSom === 'musica' ? 'mix' : 'audio'
-    if (this.modo === 'nativo') { this.nativo = opcoes.nativo!; this.clips = clips; this.titulo = opcoes.titulo ?? 'Contador' }
+    if (this.modo === 'nativo') {
+      this.nativo = opcoes.nativo!; this.clips = clips; this.titulo = opcoes.titulo ?? 'Contador'
+    }
     // Sem as vozes gravadas, o navegador fala qualquer texto; com elas, só entram os clipes que existem
     this.crono = montarCronograma(cfg, clips ? duracoes(clips) : {}, clips ? k => !!clips[k]?.length : () => true)
+    if (this.modo === 'nativo' && opcoes.avisosRelogio !== false) this.avisos = avisosDasFases(this.crono, Array.isArray(cfg) ? cfg : [cfg])
     if (this.modo === 'mix') this.clips = clips
     if (this.modo === 'audio' && clips) {
       const blob = renderizarFaixa(this.crono, clips, TAXA)
@@ -455,6 +484,7 @@ export class TreinoPlayer {
   }
 
   private titulo = 'Contador'
+  private avisos: AvisoFase[] = []
   /** App Android: manda só os clipes usados e o cronograma para o contador nativo; o relógio da tela é o de parede. */
   private async iniciarNativo() {
     const n = this.nativo!
@@ -473,7 +503,7 @@ export class TreinoPlayer {
   private tocarNativo(desde: number) {
     return this.nativo!.tocar({
       cues: this.crono.cues.filter(c => this.clips?.[c.clip]?.length).map(c => ({ t: c.t, clip: c.clip })),
-      desde, volume: this.volume, mudo: this.mudo, titulo: this.titulo,
+      desde, volume: this.volume, mudo: this.mudo, titulo: this.titulo, avisos: this.avisos,
     })
   }
 

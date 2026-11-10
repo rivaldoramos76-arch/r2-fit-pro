@@ -21,7 +21,8 @@ function intervaloPadrao(a: Atividade): { series: number; exec: number; desc: nu
   return { series: 10, exec: 30, desc: 30 }
 }
 const mss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-const lerPref = () => { try { return localStorage.getItem('r2-diario-contador') === '1' } catch { return false } }
+// Ligado por padrão; se a pessoa desligar, fica desligado neste aparelho
+const lerPref = () => { try { return localStorage.getItem('r2-diario-contador') !== '0' } catch { return true } }
 const gravarPref = (v: boolean) => { try { localStorage.setItem('r2-diario-contador', v ? '1' : '0') } catch { /* sem armazenamento */ } }
 
 function Passo({ rotulo, valor, onMenos, onMais, podeMenos, podeMais }: {

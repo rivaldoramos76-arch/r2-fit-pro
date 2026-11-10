@@ -58,10 +58,16 @@ public class ContadorNativoPlugin extends Plugin {
                 JSONObject o = arr.getJSONObject(i);
                 cues.add(new ContadorMotor.Cue(o.getDouble("t"), o.getString("clip")));
             }
+            JSArray av = call.getArray("avisos", new JSArray());
+            List<ContadorMotor.Aviso> avisos = new ArrayList<>();
+            for (int i = 0; i < av.length(); i++) {
+                JSONObject o = av.getJSONObject(i);
+                avisos.add(new ContadorMotor.Aviso(o.getDouble("t"), o.optString("titulo", ""), o.optString("texto", ""), o.optDouble("dur", 0)));
+            }
             ContadorMotor m = ContadorMotor.get(getContext());
             m.setVolume(call.getFloat("volume", 1f), Boolean.TRUE.equals(call.getBoolean("mudo", false)));
             pedirNotificacao();
-            m.tocar(cues, call.getDouble("desde", 0.0), call.getString("titulo", "Contador"));
+            m.tocar(cues, avisos, call.getDouble("desde", 0.0), call.getString("titulo", "Contador"));
             call.resolve();
         } catch (Exception e) {
             call.reject("Não foi possível iniciar o contador", e);

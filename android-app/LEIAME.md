@@ -7,6 +7,10 @@ sem gerar APK novo. A parte nativa existe para o que o navegador não deixa:
   continuam com a tela bloqueada (serviço em primeiro plano com notificação "contador ativo") e abaixam a música
   só durante cada fala (foco de áudio "pode abaixar", como app de navegação). O site detecta o app por
   `window.Capacitor` (`src/lib/nativo.ts`) e o `TreinoPlayer` usa o modo `nativo`.
+- **Avisos no relógio**: a cada fase (TRABALHO, DESCANSO, fim) o app solta uma notificação curta que vibra e
+  some ao fim da fase (canal "Fases do treino (relógio)"). O celular repassa ao relógio/pulseira pareado.
+  A notificação fixa do contador mostra a fase atual e não vai para o relógio. Chave "Avisos no relógio" nas
+  opções de som do treino (só dentro do app).
 - Tela sempre ligada durante o contador, câmera para o código de barras.
 
 Só é preciso gerar APK novo quando muda algo nesta pasta (código nativo, ícone, permissões).

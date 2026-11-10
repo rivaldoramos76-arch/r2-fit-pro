@@ -24,6 +24,11 @@ import java.util.Map;
  * então a música abaixa só durante a fala, como num app de navegação.
  */
 public final class ContadorMotor {
+    public static final class Aviso {
+        final double t; final String titulo; final String texto; final double dur;
+        Aviso(double t, String titulo, String texto, double dur) { this.t = t; this.titulo = titulo; this.texto = texto; this.dur = dur; }
+    }
+
     public static final class Cue {
         final double t;
         final String clip;
@@ -99,7 +104,7 @@ public final class ContadorMotor {
     }
 
     /** Agenda as falas a partir de `desde` segundos do cronograma (retomar depois de pausa usa o mesmo). */
-    public void tocar(List<Cue> cues, double desde, String titulo) {
+    public void tocar(List<Cue> cues, List<Aviso> avisos, double desde, String titulo) {
         h.removeCallbacksAndMessages(TOKEN);
         this.titulo = titulo != null ? titulo : "Contador";
         long base = SystemClock.uptimeMillis();
@@ -111,6 +116,13 @@ public final class ContadorMotor {
             Long d = duracaoMs.get(c.clip);
             fim = Math.max(fim, quando + (d != null ? d : 1500L));
         }
+        // Avisos de fase (notificação que vibra e vai para o relógio); a fase em andamento ao retomar também avisa
+        for (Aviso a : avisos) {
+            if (a.t + a.dur < desde) continue;
+            double resta = Math.max(0, a.t + a.dur - Math.max(desde, a.t));
+            long quando = base + Math.max(0, Math.round((a.t - desde) * 1000));
+            h.postAtTime(() -> ContadorServico.avisarFase(ctx, a.titulo, a.texto, Math.round(resta * 1000)), TOKEN, quando + 30);
+        }
         // Depois da última fala, desliga o serviço sozinho
         h.postAtTime(this::encerrarServico, TOKEN, fim + 1500);
         iniciarServico();
@@ -118,12 +130,14 @@ public final class ContadorMotor {
 
     public void pausar() {
         h.removeCallbacksAndMessages(TOKEN);
+        ContadorServico.limparAvisos(ctx);
         pool.autoPause();
         soltarFoco();
     }
 
     public void parar() {
         h.removeCallbacksAndMessages(TOKEN);
+        ContadorServico.limparAvisos(ctx);
         pool.autoPause();
         soltarFoco();
         encerrarServico();
