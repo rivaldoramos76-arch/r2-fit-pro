@@ -23,12 +23,17 @@ public class ContadorServico extends Service {
     /** O serviço está rodando (só então a notificação fixa acompanha a fase). */
     private static volatile boolean rodando = false;
     private PowerManager.WakeLock trava;
+    private final android.os.Handler espera = new android.os.Handler(android.os.Looper.getMainLooper());
+    /** O contador de verdade está tocando (o fim do teste não pode derrubar o serviço dele). */
+    static volatile boolean contadorTocando = false;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String titulo = intent != null && intent.getStringExtra("titulo") != null ? intent.getStringExtra("titulo") : "Contador";
+        boolean teste = intent != null && intent.getBooleanExtra("teste", false);
         rodando = true;
-        Notification n = fixa(this, "R2 Fit Pro · contador ativo", titulo);
+        Notification n = teste ? fixa(this, "R2 Fit Pro · teste do relógio", "Bloqueie a tela: o aviso chega em instantes")
+            : fixa(this, "R2 Fit Pro · contador ativo", titulo);
         if (Build.VERSION.SDK_INT >= 29) startForeground(ID_FIXA, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         else startForeground(ID_FIXA, n);
         if (trava == null) {
@@ -37,6 +42,13 @@ public class ContadorServico extends Service {
             trava.setReferenceCounted(false);
         }
         trava.acquire(3 * 60 * 60 * 1000L);
+        if (teste) {
+            // Teste do relógio com o serviço ativo, como no treino: o celular não congela o app com a tela bloqueada
+            long atraso = Math.max(0, Math.min(60, intent.getIntExtra("atraso", 10))) * 1000L;
+            android.content.Context c = getApplicationContext();
+            espera.postDelayed(() -> avisarFase(c, "⌚ Teste do relógio", "Se apareceu no relógio, os avisos de trabalho e descanso vão chegar.", 15000), atraso);
+            espera.postDelayed(() -> { if (!contadorTocando) stopSelf(); }, atraso + 20000);
+        }
         return START_NOT_STICKY;
     }
 
@@ -117,6 +129,7 @@ public class ContadorServico extends Service {
     @Override
     public void onDestroy() {
         rodando = false;
+        espera.removeCallbacksAndMessages(null);
         if (trava != null && trava.isHeld()) trava.release();
         super.onDestroy();
     }

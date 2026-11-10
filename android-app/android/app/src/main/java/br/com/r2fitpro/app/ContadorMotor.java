@@ -181,11 +181,13 @@ public final class ContadorMotor {
     }
 
     private void iniciarServico() {
+        ContadorServico.contadorTocando = true;
         Intent i = new Intent(ctx, ContadorServico.class).putExtra("titulo", titulo);
         if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i); else ctx.startService(i);
     }
 
     private void encerrarServico() {
+        ContadorServico.contadorTocando = false;
         soltarFoco();
         ctx.stopService(new Intent(ctx, ContadorServico.class));
     }
