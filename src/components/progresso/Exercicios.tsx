@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Flame, Plus, Trash2, Search, Sparkles, ChevronLeft, Minus } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Flame, Plus, Trash2, Search, Sparkles, ChevronLeft, Minus, Timer } from 'lucide-react'
 import { ATIVIDADES, caloriasExercicio, PESO_PADRAO } from '../../lib/exercicios'
 import type { Atividade } from '../../lib/exercicios'
 import { exerciciosDoDia, adicionarExercicio, removerExercicio, estimarExercicio } from '../../lib/progresso'
@@ -8,6 +9,33 @@ import { semAcento } from '../../lib/alimentosBase'
 import { Button, Textarea } from '../UI'
 import { Folha } from '../nutricao/AdicionarAlimento'
 import { fmt } from '../nutricao/Graficos'
+import { useContadorTreino } from '../treino/ContadorTreino'
+import { passoTempo, type ExercicioPlano } from '../../lib/treinoModel'
+
+/** Séries, execução e descanso sugeridos para o contador de cada atividade (ex.: boxe 10 × 30 s / 30 s). */
+function intervaloPadrao(a: Atividade): { series: number; exec: number; desc: number } {
+  if (a.id === 'pular-corda') return { series: 10, exec: 60, desc: 30 }
+  if (a.id.startsWith('corrida') || a.id === 'remo' || a.id === 'escada') return { series: 8, exec: 60, desc: 60 }
+  if (a.id.startsWith('bike') || a.id === 'spinning' || a.id === 'eliptico') return { series: 10, exec: 30, desc: 30 }
+  if (a.id.startsWith('musculacao')) return { series: 4, exec: 40, desc: 60 }
+  return { series: 10, exec: 30, desc: 30 }
+}
+const mss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+const lerPref = () => { try { return localStorage.getItem('r2-diario-contador') === '1' } catch { return false } }
+const gravarPref = (v: boolean) => { try { localStorage.setItem('r2-diario-contador', v ? '1' : '0') } catch { /* sem armazenamento */ } }
+
+function Passo({ rotulo, valor, onMenos, onMais, podeMenos, podeMais }: {
+  rotulo: string; valor: string; onMenos: () => void; onMais: () => void; podeMenos: boolean; podeMais: boolean
+}) {
+  return (
+    <div className="flex items-center gap-2" role="group" aria-label={rotulo}>
+      <span className="flex-1 text-sm text-zinc-300">{rotulo}</span>
+      <button type="button" onClick={onMenos} disabled={!podeMenos} aria-label={`Diminuir ${rotulo}`} className="w-10 h-9 rounded-lg bg-zinc-900 text-zinc-300 text-xs active:bg-zinc-700 disabled:opacity-30">▼</button>
+      <span className="w-14 text-center text-lg font-bold tabular-nums text-zinc-50">{valor}</span>
+      <button type="button" onClick={onMais} disabled={!podeMais} aria-label={`Aumentar ${rotulo}`} className="w-10 h-9 rounded-lg bg-zinc-900 text-zinc-300 text-xs active:bg-zinc-700 disabled:opacity-30">▲</button>
+    </div>
+  )
+}
 
 const DURACOES = [15, 30, 45, 60, 90]
 
@@ -73,6 +101,29 @@ function FolhaExercicio({ userId, data, pesoKg, onClose, onSalvo }: {
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')
   const peso = pesoKg ?? PESO_PADRAO
+  // Contador de intervalos (boxe 30 s / 30 s, HIIT, tiros…): mesmo contador do treino; no fim grava o tempo feito
+  const [comContador, setComContador] = useState(lerPref)
+  const [intervalo, setIntervalo] = useState({ series: 10, exec: 30, desc: 30 })
+  const [salvouPeloContador, setSalvouPeloContador] = useState(false)
+  const exContador: ExercicioPlano | null = escolhida ? {
+    id: `avulso-${escolhida.id}`, nome: escolhida.nome.replace(/\s*\(.*\)$/, ''), grupos_musculares: [], tipo: 'cardio', met: escolhida.met,
+    series: intervalo.series, repeticoes: '', tempo_execucao_segundos: intervalo.exec, tempo_descanso_segundos: intervalo.desc,
+  } : null
+  const contador = useContadorTreino({
+    user: { id: userId }, treino: null, diaIdx: 0, dia: exContador ? { dia: 'diário', exercicios: [exContador] } : null, onSessao: () => {},
+    avulso: async (ex, feitas) => {
+      const seg = feitas * ex.tempo_execucao_segundos + Math.max(0, feitas - 1) * ex.tempo_descanso_segundos
+      const min = seg / 60
+      const kcal = caloriasExercicio(escolhida?.met ?? 8, peso, min)
+      const nome = `${escolhida?.nome ?? ex.nome} · ${feitas} × ${mss(ex.tempo_execucao_segundos)}${ex.tempo_descanso_segundos ? ` / ${mss(ex.tempo_descanso_segundos)}` : ''}`
+      await adicionarExercicio(userId, { nome: nome.slice(0, 100), duracao_min: Math.max(1, Math.round(min)), calorias: kcal, origem: 'lista', data })
+      setSalvouPeloContador(true)
+      return `No diário: ${Math.max(1, Math.round(min))} min · ${fmt(kcal)} kcal`
+    },
+    aoFechar: () => { if (salvouPeloContador) onSalvo() },
+  })
+  const escolher = (a: Atividade) => { setEscolhida(a); setMinutos(a.id.startsWith('musculacao') ? 60 : 30); setIntervalo(intervaloPadrao(a)) }
+  const alternarContador = () => { setComContador(v => { gravarPref(!v); return !v }) }
 
   const lista = useMemo(() => {
     const q = semAcento(busca.trim())
@@ -93,13 +144,52 @@ function FolhaExercicio({ userId, data, pesoKg, onClose, onSalvo }: {
 
   if (escolhida) {
     const kcal = caloriasExercicio(escolhida.met, peso, minutos)
-    return (
+    const segIntervalo = intervalo.series * intervalo.exec + (intervalo.series - 1) * intervalo.desc
+    const kcalIntervalo = caloriasExercicio(escolhida.met, peso, segIntervalo / 60)
+    const chave = (
+      <button type="button" role="switch" aria-checked={comContador} aria-label="Usar contador" onClick={alternarContador}
+        className="w-full mt-5 flex items-center gap-3 bg-zinc-800/60 rounded-2xl px-3.5 py-3 text-left">
+        <Timer className="w-5 h-5 text-orange-300 shrink-0" />
+        <span className="flex-1">
+          <span className="block text-sm font-semibold text-zinc-100">Usar contador</span>
+          <span className="block text-[11px] text-zinc-500">Séries com tempo e descanso, com voz (ex.: 30 s intenso, 30 s descanso)</span>
+        </span>
+        <span className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${comContador ? 'bg-orange-500' : 'bg-zinc-700'}`}>
+          <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${comContador ? 'translate-x-4' : ''}`} />
+        </span>
+      </button>
+    )
+    const rodape = comContador
+      ? <Button size="lg" className="w-full" disabled={contador.preparando || !exContador} onClick={() => exContador && contador.iniciar([exContador])}>
+          {contador.preparando ? 'Preparando áudio...' : `▶ Iniciar contador · ${mss(segIntervalo)}`}
+        </Button>
+      : <Button size="lg" className="w-full" loading={carregando} onClick={() => salvar({ nome: escolhida.nome, duracao_min: minutos, calorias: kcal, origem: 'lista' })}>Adicionar exercício</Button>
+    return (<>
       <Folha titulo={<button onClick={() => setEscolhida(null)} className="flex items-center gap-1 text-zinc-300 text-sm font-semibold -ml-1"><ChevronLeft className="w-5 h-5" />Voltar</button>} onClose={onClose}
-        rodape={<Button size="lg" className="w-full" loading={carregando} onClick={() => salvar({ nome: escolhida.nome, duracao_min: minutos, calorias: kcal, origem: 'lista' })}>Adicionar exercício</Button>}>
+        rodape={rodape}>
         <div className="animate-fade-up">
           <p className="text-xl font-bold text-zinc-50">{escolhida.icone} {escolhida.nome}</p>
           <p className="text-xs text-zinc-500 mt-1">Cálculo pelo seu peso ({peso.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg){pesoKg ? '' : ', registre seu peso para mais precisão'}.</p>
         </div>
+        {chave}
+        {comContador ? (
+          <>
+            <div className="mt-3 flex flex-col gap-2 bg-zinc-800/60 rounded-2xl p-3">
+              <Passo rotulo="Séries" valor={String(intervalo.series)} podeMenos={intervalo.series > 1} podeMais={intervalo.series < 20}
+                onMenos={() => setIntervalo(v => ({ ...v, series: v.series - 1 }))} onMais={() => setIntervalo(v => ({ ...v, series: v.series + 1 }))} />
+              <Passo rotulo="Execução" valor={mss(intervalo.exec)} podeMenos={intervalo.exec > 5} podeMais={intervalo.exec < 3600}
+                onMenos={() => setIntervalo(v => ({ ...v, exec: passoTempo(v.exec, -1, 5, 3600) }))} onMais={() => setIntervalo(v => ({ ...v, exec: passoTempo(v.exec, 1, 5, 3600) }))} />
+              <Passo rotulo="Descanso" valor={mss(intervalo.desc)} podeMenos={intervalo.desc > 0} podeMais={intervalo.desc < 600}
+                onMenos={() => setIntervalo(v => ({ ...v, desc: passoTempo(v.desc, -1, 0) }))} onMais={() => setIntervalo(v => ({ ...v, desc: passoTempo(v.desc, 1, 0) }))} />
+            </div>
+            <div className="mt-3 text-center bg-orange-500/10 border border-orange-500/20 rounded-2xl py-3">
+              <p className="text-2xl font-bold tabular-nums text-orange-300">{fmt(kcalIntervalo)} <span className="text-sm font-normal text-zinc-400">kcal · {mss(segIntervalo)}</span></p>
+              <p className="text-[11px] text-zinc-500 mt-0.5">Ao terminar (ou encerrar), o tempo feito vai para o diário.</p>
+            </div>
+            <div className="mt-3">{contador.opcoesSom}</div>
+            {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
+          </>
+        ) : (<>
         <p className="text-sm font-medium text-zinc-300 mt-5 mb-1.5">Duração</p>
         <div className="flex items-center gap-2 bg-zinc-800/60 rounded-2xl p-2">
           <button type="button" onClick={() => setMinutos(m => Math.max(5, m - 5))} aria-label="Menos 5 minutos" className="w-11 h-11 rounded-xl bg-zinc-900 flex items-center justify-center active:scale-95"><Minus className="w-5 h-5" /></button>
@@ -119,8 +209,10 @@ function FolhaExercicio({ userId, data, pesoKg, onClose, onSalvo }: {
           <p className="text-xs text-zinc-400 mt-0.5">kcal queimadas (estimativa)</p>
         </div>
         {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
+        </>)}
       </Folha>
-    )
+      {contador.overlay && createPortal(contador.overlay, document.body)}
+    </>)
   }
 
   return (
@@ -141,7 +233,7 @@ function FolhaExercicio({ userId, data, pesoKg, onClose, onSalvo }: {
           <ul className="mt-3 grid grid-cols-1 gap-1.5">
             {lista.map((a, i) => (
               <li key={a.id} className="animate-fade-up" style={{ animationDelay: `${Math.min(i, 12) * 20}ms` }}>
-                <button type="button" onClick={() => { setEscolhida(a); setMinutos(a.id.startsWith('musculacao') ? 60 : 30) }}
+                <button type="button" onClick={() => escolher(a)}
                   className="w-full flex items-center gap-3 bg-zinc-800/40 hover:bg-zinc-800/80 border border-zinc-800 rounded-xl px-3 py-2.5 text-left">
                   <span className="text-xl" aria-hidden>{a.icone}</span>
                   <span className="flex-1 text-sm font-medium text-zinc-100">{a.nome}</span>

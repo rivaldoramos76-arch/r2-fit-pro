@@ -32,8 +32,12 @@ function AvisoIphone() {
   )
 }
 
-export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
-  user: User | null; treino: TreinoInfo | null; diaIdx: number; dia: DiaInfo | null; onSessao: (s: Sessao) => void
+export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso, aoFechar }: {
+  user: Pick<User, 'id'> | null; treino: TreinoInfo | null; diaIdx: number; dia: DiaInfo | null; onSessao: (s: Sessao) => void
+  /** Exercício fora do plano (Diário): ao terminar ou encerrar, grava as séries feitas e devolve o texto de confirmação. */
+  avulso?: (ex: ExercicioPlano, seriesFeitas: number) => Promise<string>
+  /** Chamado ao fechar a tela de fim (botão Voltar). */
+  aoFechar?: () => void
 }) {
   const sistema = detectarSistema()
   const [vozes, setVozes] = useState<'carregando' | 'ok' | 'fallback'>('carregando')
@@ -58,6 +62,14 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
   const playerRef = useRef<TreinoPlayer | null>(null)
   const wakeRef = useRef<WakeLockSentinel | null>(null)
   const recuperando = useRef(false)
+  const feitasRef = useRef(0)
+  const avulsoSalvo = useRef(false)
+  const [msgAvulso, setMsgAvulso] = useState('')
+  const salvarAvulso = (ex: ExercicioPlano | undefined) => {
+    if (!avulso || !ex || avulsoSalvo.current || feitasRef.current === 0) return
+    avulsoSalvo.current = true
+    avulso(ex, feitasRef.current).then(setMsgAvulso).catch(() => setErroRegistro(true))
+  }
 
   // Vozes gravadas e preferências de som (as mesmas de Configurações)
   useEffect(() => {
@@ -70,7 +82,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
   // Nome de cada exercício para o anúncio do próximo no treino completo (gerado uma vez e guardado)
   const nomesDia = dia?.exercicios.map(e => e.nome).join('|') ?? ''
   useEffect(() => {
-    if (!nomesDia || vozes !== 'ok') return
+    if (!nomesDia || vozes !== 'ok' || avulso) return // avulso: um exercício só, sem anúncio de próximo
     let vivo = true
     carregarNomes(nomesDia.split('|')).then(n => { if (vivo) nomesRef.current = { ...nomesRef.current, ...n } })
     return () => { vivo = false }
@@ -189,17 +201,20 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     const clips = base ? { ...base, ...nomesRef.current } : null
     const cfg = lista.map(e => ({ series: e.series, execSeg: Math.max(5, e.tempo_execucao_segundos), descansoSeg: e.tempo_descanso_segundos, nome: e.nome }))
     const p = new TreinoPlayer(cfg, clips, {
-      onSerieConcluida: (i, serie) => { setSeriesSalvas(n => n + 1); registrar(lista[i], serie) },
+      onSerieConcluida: (i, serie) => { feitasRef.current++; setSeriesSalvas(n => n + 1); registrar(lista[i], serie) },
       onExercicioConcluido: i => { setRegistrados(r => [...r, i]) },
       onSeriesConcluidas: () => {},
       // Fim da última fala: desliga o som do contador na hora, para a música voltar ao volume normal
-      onFim: () => { setTela('concluido'); liberarWakeLock(); sairTelaCheia(); p.parar(); limparMidia() },
+      onFim: () => { setTela('concluido'); liberarWakeLock(); sairTelaCheia(); p.parar(); limparMidia(); salvarAvulso(lista[0]) },
     }, modoSom, { abaixarMusica: sistema === 'android' && prefsAudio.current?.abaixar_musica !== false })
     p.setVolume(volume)
     p.setMudo(mudo)
     playerRef.current = p
     setItens(lista)
     setRegistrados([])
+    feitasRef.current = 0
+    avulsoSalvo.current = false
+    setMsgAvulso('')
     setSeriesSalvas(0)
     setErroRegistro(false)
     setTreinoCompleto(false)
@@ -238,12 +253,14 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     sairTelaCheia()
     limparMidia()
     setTela('parado')
+    aoFechar?.()
   }
 
   const encerrar = () => {
     const multi = itens.length > 1
     const msg = multi
       ? 'Encerrar o treino agora? Tudo o que já foi feito fica no diário como treino incompleto.'
+      : avulso ? 'Encerrar agora? O tempo das séries já feitas vai para o diário.'
       : 'Encerrar agora? As séries já feitas ficam no diário como treino incompleto.'
     if (!confirm(msg)) return
     playerRef.current?.parar()
@@ -252,6 +269,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     sairTelaCheia()
     limparMidia()
     setTela('interrompido')
+    salvarAvulso(itens[0])
   }
 
   // --- Opções de som (ficam na tela do treino, antes de iniciar) ---
@@ -264,7 +282,8 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
       </span>
     </button>
   )
-  const opcoesSom: ReactNode = !ligado ? (
+  // No Diário (avulso) a chave fica na própria folha: aqui só o som
+  const opcoesSom: ReactNode = !ligado && !avulso ? (
     <section className="bg-zinc-900 border border-zinc-800 rounded-2xl px-3.5 py-2.5" aria-label="Som do contador">
       <div className="flex items-center gap-3">
         <p className="flex-1 text-xs text-zinc-400">Treinando <span className="text-zinc-200 font-semibold">sem contador</span>: marque na chave de cada exercício.</p>
@@ -299,7 +318,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
           onChange={e => mudarVolume(+e.target.value)} onPointerUp={() => salvarAudio({ volume })} onKeyUp={() => salvarAudio({ volume })}
           className="flex-1 min-w-0 h-1 accent-green-500 cursor-pointer" />
         <span className="text-xs text-zinc-500 w-9 text-right">{Math.round(volume * 100)}%</span>
-        {chaveContador}
+        {!avulso && chaveContador}
       </div>
       {erroAudio && <p className="text-sm text-red-400 mt-2">{erroAudio}</p>}
     </section>
@@ -322,11 +341,12 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
           {multi
             ? <p className="text-zinc-500 text-sm mt-1">{feitos.length} de {itens.length} exercícios concluídos</p>
             : <p className="text-zinc-500 text-sm mt-1">{ok ? `${itens[0]?.series ?? 0} séries finalizadas` : `${seriesSalvas} de ${itens[0]?.series ?? 0} séries feitas`}</p>}
-          {seriesSalvas > 0 && !erroRegistro && (
+          {avulso && msgAvulso && !erroRegistro && <p className="text-xs text-green-400 mt-3">✓ {msgAvulso}</p>}
+          {!avulso && seriesSalvas > 0 && !erroRegistro && (
             <p className="text-xs text-green-400 mt-3">✓ {treinoCompleto ? `${dia?.dia} completo` : ok && !multi ? 'Exercício registrado' : 'Treino incompleto'} · já está no seu diário</p>
           )}
           {!ok && seriesSalvas === 0 && <p className="text-xs text-zinc-500 mt-3">Nenhuma série chegou ao fim, então nada foi para o diário.</p>}
-          {erroRegistro && <p className="text-xs text-red-400 mt-3">Não foi possível registrar a conclusão de algum exercício. Confira na lista.</p>}
+          {erroRegistro && <p className="text-xs text-red-400 mt-3">{avulso ? 'Não foi possível salvar no diário. Confira a internet e adicione de novo.' : 'Não foi possível registrar a conclusão de algum exercício. Confira na lista.'}</p>}
         </div>
         {multi && feitos.length > 0 && (
           <ul className="text-sm text-zinc-400 flex flex-col gap-1">{feitos.map(e => <li key={e.id}>✓ {e.nome}</li>)}</ul>
