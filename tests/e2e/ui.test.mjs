@@ -159,6 +159,14 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       const perfil = { id: UID, nome: 'Cliente Teste', email: usuario.email, telefone: null, data_nascimento: null, avatar_url: null, created_at: '2026-10-01T00:00:00Z', versao_termos: '2026-10-22', aceite_termos_em: '2026-10-01T00:00:00Z', marketing_opt_in: false }
       return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? perfil : [perfil])
     }
+    if (p === '/rest/v1/support_tickets' && rota.request().method() === 'POST') {
+      const corpo = rota.request().postDataJSON()
+      gravacoes.push({ tabela: 'support_tickets', corpo })
+      // Simula o banco antes da migração: tipo novo recusado pela restrição de categoria
+      if (corpo.categoria === 'sugestao') return json({ code: '23514', message: 'violates check constraint' }, 400)
+      return json(null, 201)
+    }
+    if (p === '/rest/v1/user_settings' && rota.request().method() === 'POST') { gravacoes.push({ tabela: 'user_settings', corpo: rota.request().postDataJSON() }); return json(null) }
     if (p === '/rest/v1/user_settings') return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? { notificacoes: {}, audio: { volume: 0.8, mudo: false } } : [])
     if (nutricao && p === '/rest/v1/lembretes') {
       const metodo = rota.request().method()
@@ -255,7 +263,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       const w = window
       w.__agendados = []; w.__mediaPlays = 0
       const start = AudioBufferSourceNode.prototype.start
-      AudioBufferSourceNode.prototype.start = function (...a) { w.__agendados.push(a[0]); return start.apply(this, a) }
+      AudioBufferSourceNode.prototype.start = function (...a) { if (!this.loop) w.__agendados.push(a[0]); return start.apply(this, a) } // o chiado inaudível em loop (mantém o áudio vivo) não é fala
       const Orig = window.AudioContext
       window.AudioContext = class extends Orig { constructor(...a) { super(...a); w.__ctx = this } }
       const play = HTMLMediaElement.prototype.play
@@ -500,6 +508,31 @@ await t('início mostra o anel de calorias com meta, macros e refeições do dia
   await folha.getByLabel('Quantidade').fill('3')
   await folha.getByText('405').waitFor()
   await page.screenshot({ path: `${SHOTS}/porcoes.png` })
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('fale com o desenvolvedor: recado no fim do início vai para o suporte', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/dashboard')
+  const bloco = page.getByRole('region', { name: 'Fale com o desenvolvedor' })
+  await bloco.scrollIntoViewIfNeeded()
+  await bloco.getByRole('button', { name: 'Enviar recado' }).click()
+  await bloco.getByText(/pelo menos 10 letras/).waitFor()
+  await bloco.getByLabel('Sua mensagem').fill('Seria ótimo salvar treinos favoritos')
+  await bloco.getByRole('button', { name: 'Enviar recado' }).click()
+  await bloco.getByText(/Recebido!/).waitFor()
+  const env = page.gravacoes.filter(g => g.tabela === 'support_tickets')
+  assert.equal(env.length, 2, 'tenta sugestão e, recusada pelo banco, grava como outro')
+  assert.equal(env[1].corpo.categoria, 'outro')
+  assert.match(env[1].corpo.assunto, /^Sugestão: Seria ótimo/)
+  await bloco.getByRole('button', { name: 'Mandar outro recado' }).click()
+  await bloco.getByRole('radio', { name: '🐞 Reportar erro' }).click()
+  await bloco.getByLabel('Sua mensagem').fill('Ao salvar o almoço deu erro')
+  await bloco.getByRole('button', { name: 'Enviar recado' }).click()
+  await bloco.getByText(/Recebido!/).waitFor()
+  assert.equal(page.gravacoes.filter(g => g.tabela === 'support_tickets').pop().corpo.categoria, 'bug')
+  await page.screenshot({ path: `${SHOTS}/fale-dev.png` })
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
@@ -960,6 +993,13 @@ await t('contador: aviso de tela desbloqueada só no iPhone; no Android cada fal
     // iPhone: as falas ficam agendadas no Web Audio
     assert.ok(deve ? plays === 0 : plays >= 2, `falas em áudio curto: ${plays}`)
     assert.equal(await page.evaluate(() => window.__agendados.length), deve ? 19 : 0, 'onde a voz toca')
+    if (!deve) {
+      // App fora da frente / tela bloqueada: as falas que faltam passam para o relógio de áudio (não congela)
+      await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new Event('visibilitychange')) })
+      const emSegundo = await page.evaluate(() => window.__agendados.length)
+      assert.ok(emSegundo > 5, `falas agendadas em segundo plano: ${emSegundo}`)
+      await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); document.dispatchEvent(new Event('visibilitychange')) })
+    }
     await ctx.close()
   }
 })
@@ -973,6 +1013,27 @@ await t('contador: modo tela bloqueada usa a faixa contínua', async () => {
   await page.waitForTimeout(500)
   assert.equal(await page.evaluate(() => window.__mediaPlays), 1)
   assert.equal(await page.evaluate(() => window.__agendados.length), 0)
+  await ctx.close()
+})
+
+await t('contador pode ser desligado ao lado do volume: some o ▶ e o treino completo', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: 'dois' })
+  await page.goto(BASE + '/treino/t1/dia/0')
+  const chave = page.getByRole('switch', { name: 'Usar o contador' })
+  await chave.waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Iniciar', exact: true }).count(), 2)
+  await page.getByRole('button', { name: /Treino completo · 2 exercícios/ }).waitFor()
+  await chave.click()
+  await page.getByText('sem contador', { exact: false }).first().waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Iniciar', exact: true }).count(), 0, 'sem ▶ com o contador desligado')
+  assert.equal(await page.getByRole('button', { name: /Treino completo/ }).count(), 0)
+  assert.equal(await page.getByRole('switch', { name: 'Concluído' }).count(), 2, 'a chave Concluído continua')
+  await page.screenshot({ path: `${SHOTS}/sem-contador.png`, fullPage: true })
+  for (let i = 0; i < 30 && !page.gravacoes.some(g => g.tabela === 'user_settings'); i++) await page.waitForTimeout(100)
+  assert.equal(page.gravacoes.filter(g => g.tabela === 'user_settings').pop()?.corpo.audio.contador, false, 'preferência salva')
+  await page.getByRole('switch', { name: 'Usar o contador' }).click()
+  await page.getByRole('button', { name: /Treino completo · 2 exercícios/ }).waitFor()
+  assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
 
@@ -1016,12 +1077,12 @@ await t('card do exercício: séries, reps, execução, descanso e carga lado a 
   const chave = page.getByRole('switch', { name: 'Concluído' })
   assert.equal(await chave.getAttribute('aria-checked'), 'false')
   await chave.click()
-  await page.waitForFunction(() => document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'true')
+  await page.waitForFunction(() => document.querySelector('[role="switch"][aria-label="Concluído"]')?.getAttribute('aria-checked') === 'true')
   const marcado = page.gravacoes.filter(g => g.tabela === 'sessoes_treino').pop()
   assert.deepEqual(marcado.corpo.series_realizadas, { e1: 3 }); assert.equal(marcado.corpo.concluido, true)
   await page.screenshot({ path: `${SHOTS}/card-concluido.png` })
   await chave.click()
-  await page.waitForFunction(() => document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'false')
+  await page.waitForFunction(() => document.querySelector('[role="switch"][aria-label="Concluído"]')?.getAttribute('aria-checked') === 'false')
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })

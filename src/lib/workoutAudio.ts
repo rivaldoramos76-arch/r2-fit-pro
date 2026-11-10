@@ -21,6 +21,12 @@ export const CLIP_TEXTO: Record<string, string> = {
   trabalho: 'Trabalho!', repouso: 'Repouso!', fim: 'Exercício concluído! Todas as séries finalizadas.',
   proximo: 'Exercício finalizado! Próximo exercício:', treino_fim: 'Treino completo! Parabéns, todos os exercícios finalizados.',
 }
+// Anúncio da série depois da contagem regressiva (MP3 em /audio): primeira, do meio pelo número, última; única se for 1
+const NUM_SERIE = ['', '', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'catorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove']
+Object.assign(CLIP_TEXTO, { serie_unica: 'Série única!', serie_primeira: 'Primeira série!', serie_ultima: 'Última série!' },
+  Object.fromEntries(NUM_SERIE.map((n, i) => [`serie_${i}`, `Série ${n}!`]).filter((_, i) => i >= 2)))
+export const chaveSerie = (serie: number, total: number) =>
+  total <= 1 ? 'serie_unica' : serie === 1 ? 'serie_primeira' : serie >= total ? 'serie_ultima' : `serie_${serie}`
 export type Clipes = Record<string, Float32Array>
 export const chaveNome = (nome: string) => `nome:${nome.trim()}`
 export const textoDoClipe = (k: string) => (k.startsWith('nome:') ? k.slice(5) : CLIP_TEXTO[k] ?? k)
@@ -65,7 +71,9 @@ export function montarCronograma(cfg: ConfigCrono | ConfigCrono[], dur: Partial<
     const exec = Math.max(1, c.execSeg)
     const desc = Math.max(0, c.descansoSeg)
     for (let s = 1; s <= series; s++) {
-      contagem('countdown', s, e, 'trabalho')
+      // Depois do 5-4-3-2-1 a voz diz a série ("Primeira série!", "Série dois!", "Última série!"); sem o clipe, "Trabalho!"
+      const anuncio = chaveSerie(s, series)
+      contagem('countdown', s, e, tem(anuncio) ? anuncio : 'trabalho')
       fases.push({ tipo: 'work', serie: s, exercicio: e, inicio: t, fim: r3(t + exec), cues: [] })
       t = r3(t + exec)
       if (s < series) {
@@ -276,6 +284,23 @@ export function carregarClipes(): Promise<Clipes | null> {
   return atual
 }
 
+const cacheSeries = new Map<string, Promise<Float32Array | null>>()
+/** Clipes de anúncio de série que um treino precisa (`totais` = nº de séries de cada exercício). Os que falharem ficam de fora (vira "Trabalho!"). */
+export async function carregarSeries(totais: number[]): Promise<Clipes> {
+  const chaves = new Set<string>()
+  for (const n of totais) for (let s = 1; s <= Math.min(20, Math.max(1, Math.round(n))); s++) chaves.add(chaveSerie(s, n))
+  const pares = await Promise.all([...chaves].map(async k => {
+    let p = cacheSeries.get(k)
+    if (!p) {
+      p = fetch(`/audio/${k}.mp3`).then(r => (r.ok ? r.arrayBuffer() : null)).then(d => (d ? prepararVoz(d) : null)).catch(() => null)
+      cacheSeries.set(k, p)
+      p.then(v => { if (!v?.length) cacheSeries.delete(k) })
+    }
+    return [k, await p] as const
+  }))
+  return Object.fromEntries(pares.filter(([, v]) => v && v.length)) as Clipes
+}
+
 export function duracoes(clips: Clipes): Record<ClipKey, number> {
   return Object.fromEntries(Object.entries(clips).map(([k, v]) => [k, v.length / TAXA]))
 }
@@ -377,6 +402,9 @@ export class TreinoPlayer {
   private urlsDuck: string[] = []
   private relogio: ScriptProcessorNode | null = null
   private proximoDuck = 0
+  /** App fora da frente ou tela bloqueada: as falas passam a ser agendadas direto no Web Audio. */
+  private emSegundoPlano = false
+  private manterVivo: AudioBufferSourceNode | null = null
   // modo voz
   private t0 = 0
   private pausadoEm: number | null = null
@@ -451,8 +479,60 @@ export class TreinoPlayer {
       if (ctx.state !== 'running' && !this.pausaPedida && !this.pausadoMix) this.interrompido = true
     })
     if (this.abaixarMusica) this.prepararAbaixar(ctx)
+    this.ligarManterVivo(ctx)
     await ctx.resume()
     this.agendarDe(0)
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') this.segundoPlano(true)
+  }
+
+  /**
+   * Um chiado muito baixo (~ -94 dBFS), inaudível e abaixo do limiar em que o navegador considera "tocando som"
+   * (não pede foco de áudio nem mexe na música), mas diferente de silêncio absoluto: assim o sistema não
+   * suspende o áudio do contador quando o app sai da frente ou a tela bloqueia.
+   */
+  private ligarManterVivo(ctx: Ctx) {
+    try {
+      const n = Math.round(ctx.sampleRate * 2)
+      const b = ctx.createBuffer(1, n, ctx.sampleRate)
+      const d = b.getChannelData(0)
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * 2e-5
+      const s = ctx.createBufferSource()
+      s.buffer = b; s.loop = true
+      s.connect(ctx.destination)
+      s.start()
+      this.manterVivo = s
+    } catch { /* sem isso o contador ainda funciona com o app na frente */ }
+  }
+
+  /**
+   * Chamado quando o app sai da frente / a tela bloqueia (true) e quando volta (false).
+   * Em segundo plano o navegador pode congelar a página, então as falas que o <audio> tocaria (Android)
+   * passam a ser agendadas no próprio Web Audio, que segue tocando sozinho no tempo certo.
+   */
+  segundoPlano(oculto: boolean) {
+    if (this.modo !== 'mix' || !this.abaixarMusica || !this.ctx || this.parado) return
+    const ctx = this.ctx
+    this.emSegundoPlano = oculto
+    for (const f of this.fontes) { try { f.stop() } catch { /* já parou */ } }
+    this.fontes = []
+    const t = ctx.currentTime - this.t0Ctx
+    if (!oculto) {
+      // De volta: o <audio> reassume a partir do próximo aviso
+      this.proximoDuck = this.crono.cues.findIndex(c => c.t >= t - 0.05)
+      if (this.proximoDuck < 0) this.proximoDuck = this.crono.cues.length
+      return
+    }
+    this.soltarMusica()
+    for (const cue of this.crono.cues) {
+      if (cue.t < t + 0.05) continue
+      const b = this.buffers[cue.clip]
+      if (!b) continue
+      const src = ctx.createBufferSource()
+      src.buffer = b
+      src.connect(this.entrada ?? this.ganho!)
+      src.start(this.t0Ctx + cue.t)
+      this.fontes.push(src)
+    }
   }
 
   private prepararAbaixar(ctx: Ctx) {
@@ -477,7 +557,7 @@ export class TreinoPlayer {
 
   /** Android: toca cada fala no seu <audio> na hora certa (o relógio é o do Web Audio, que segue com a tela bloqueada). */
   private marcarAbaixar() {
-    if (!this.ctx || this.parado || this.pausadoMix || this.interrompido || !this.abaixarMusica) return
+    if (!this.ctx || this.parado || this.pausadoMix || this.interrompido || !this.abaixarMusica || this.emSegundoPlano) return
     const t = this.ctx.currentTime - this.t0Ctx
     const cues = this.crono.cues
     while (this.proximoDuck < cues.length && cues[this.proximoDuck].t - 0.03 <= t) {
@@ -510,7 +590,7 @@ export class TreinoPlayer {
     this.proximoDuck = this.crono.cues.findIndex(c => c.t >= pos - 0.05)
     if (this.proximoDuck < 0) this.proximoDuck = this.crono.cues.length
     for (const cue of this.crono.cues) {
-      if (this.abaixarMusica) break // Android: as falas tocam em <audio> (marcarAbaixar)
+      if (this.abaixarMusica && !this.emSegundoPlano) break // Android: as falas tocam em <audio> (marcarAbaixar)
       if (cue.t < pos - 0.05) continue
       const b = this.buffers[cue.clip]
       if (!b) continue
@@ -632,6 +712,8 @@ export class TreinoPlayer {
     for (const f of this.fontes) { try { f.stop() } catch { /* já parou */ } }
     this.fontes = []
     if (this.relogio) { this.relogio.onaudioprocess = null; this.relogio.disconnect() }
+    try { this.manterVivo?.stop() } catch { /* já parou */ }
+    this.manterVivo = null
     for (const v of Object.values(this.vozes)) v.pause()
     for (const u of this.urlsDuck) URL.revokeObjectURL(u)
     this.urlsDuck = []

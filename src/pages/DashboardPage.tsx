@@ -13,6 +13,7 @@ import type { Refeicao } from '../lib/diario'
 import { AnelCalorias, BarraMacro, fmt } from '../components/nutricao/Graficos'
 import InstalarApp from '../components/InstalarApp'
 import AvisoRenovacao from '../components/AvisoRenovacao'
+import FaleComDesenvolvedor from '../components/FaleComDesenvolvedor'
 import { useNaoLidas } from '../lib/acompanhamento'
 import CartaoAgua from '../components/progresso/CartaoAgua'
 import GraficoPeso from '../components/progresso/GraficoPeso'
@@ -219,6 +220,8 @@ export default function DashboardPage() {
           <p className="text-xs text-zinc-500 mt-0.5 flex items-center">{lastDieta ? 'Seu plano alimentar' : 'Gerada por IA'}<ChevronRight className="w-3.5 h-3.5" /></p>
         </Link>
       </div>
+
+      {user && <FaleComDesenvolvedor userId={user.id} />}
     </div>
   )
 }

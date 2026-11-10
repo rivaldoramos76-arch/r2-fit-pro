@@ -133,7 +133,7 @@ export default function TreinoDiaPage() {
             {sessaoFinalizada && sessao?.data_fim && ` · finalizado em ${new Date(sessao.data_fim).toLocaleDateString('pt-BR')}`}
           </p>
           {sessaoFinalizada && cartao && <CompartilharCartao cartao={cartao} rotulo="Compartilhar treino" className="w-full mt-3" />}
-          {exercicios.length > 1 && (
+          {exercicios.length > 1 && contador.ligado && (
             <>
               <button onClick={() => contador.iniciar(sequencia)} disabled={contador.preparando}
                 className="w-full mt-3 py-3 rounded-xl bg-green-500 text-zinc-950 font-bold hover:bg-green-400 active:scale-[0.98] transition disabled:opacity-60">
@@ -184,10 +184,12 @@ export default function TreinoDiaPage() {
                       <button onClick={() => setExecucao(x => (x === ex.id ? null : ex.id))} aria-label={`Como fazer ${ex.nome}`}
                         className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-700 text-sm">ⓘ</button>
                     ))}
-                  <button onClick={() => contador.iniciar([ex])} disabled={contador.preparando} aria-label={ok ? 'Refazer' : 'Iniciar'}
-                    className={`w-9 h-8 shrink-0 rounded-lg text-sm font-bold transition active:scale-95 disabled:opacity-60 ${ok ? 'bg-zinc-800 text-zinc-200 border border-zinc-700' : 'bg-green-500 text-zinc-950 hover:bg-green-400'}`}>
-                    ▶
-                  </button>
+                  {contador.ligado && (
+                    <button onClick={() => contador.iniciar([ex])} disabled={contador.preparando} aria-label={ok ? 'Refazer' : 'Iniciar'}
+                      className={`w-9 h-8 shrink-0 rounded-lg text-sm font-bold transition active:scale-95 disabled:opacity-60 ${ok ? 'bg-zinc-800 text-zinc-200 border border-zinc-700' : 'bg-green-500 text-zinc-950 hover:bg-green-400'}`}>
+                      ▶
+                    </button>
+                  )}
                   <ChaveConcluido ligado={ok} ocupado={marcando === ex.id} onTrocar={() => alternarConcluido(ex)} />
                   <button onClick={() => setMenu(m => (m === ex.id ? null : ex.id))} aria-label="Mais opções" aria-expanded={menu === ex.id}
                     className={`w-6 h-8 shrink-0 rounded-md text-base leading-none ${menu === ex.id ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500'}`}>⋯</button>

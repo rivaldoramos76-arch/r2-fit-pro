@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { CATALOGO, GRUPOS } from '../src/data/exercicios'
 import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
-import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar } from '../src/lib/workoutAudio'
+import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar, chaveSerie, textoDoClipe } from '../src/lib/workoutAudio'
 import { passoReps, passoCarga, lerTempo, mss } from '../src/components/treino/AjustesExercicio'
 import { normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
@@ -56,7 +56,9 @@ await t('cronograma: ordem e sem sobreposição', () => {
   const tipos = c.fases.map(f => f.tipo)
   assert.deepEqual(tipos, ['countdown','work','rest_countdown','rest','countdown','work','rest_countdown','rest','countdown','work','final'])
   for (let i = 1; i < c.fases.length; i++) assert.equal(c.fases[i].inicio, c.fases[i-1].fim)
-  const cd = c.fases[0].cues.map(x => x.clip); assert.deepEqual(cd, ['5','4','3','2','1','trabalho'])
+  // Depois da contagem a voz diz a série: primeira, pelo número no meio, última
+  const cd = c.fases[0].cues.map(x => x.clip); assert.deepEqual(cd, ['5','4','3','2','1','serie_primeira'])
+  assert.equal(c.fases[4].cues.at(-1)!.clip, 'serie_2'); assert.equal(c.fases[8].cues.at(-1)!.clip, 'serie_ultima')
   assert.deepEqual(c.fases[2].cues.map(x=>x.clip), ['5','4','3','2','1','repouso'])
   assert.equal(c.cues.filter(x => x.clip === 'fim').length, 1)
   const work = c.fases[1]; assert.equal(Math.round((work.fim - work.inicio)*1000), 30000)
@@ -76,7 +78,8 @@ await t('faixa WAV: tamanho e posição dos clipes', () => {
   const sr = 16000
   const tom = (d: number) => Float32Array.from({ length: Math.round(d*sr) }, (_, i) => 0.5*Math.sin(i/5))
   const clips = { '5': tom(.5), '4': tom(.5), '3': tom(.5), '2': tom(.5), '1': tom(.5), trabalho: tom(.7), repouso: tom(.7), fim: tom(2) }
-  const c = montarCronograma({ series: 2, execSeg: 5, descansoSeg: 5 }, { '5': .5,'4':.5,'3':.5,'2':.5,'1':.5, trabalho:.7, repouso:.7, fim:2 })
+  const c = montarCronograma({ series: 2, execSeg: 5, descansoSeg: 5 }, { '5': .5,'4':.5,'3':.5,'2':.5,'1':.5, trabalho:.7, repouso:.7, fim:2 }, k => k in clips)
+  assert.equal(c.fases[0].cues.at(-1)!.clip, 'trabalho', 'sem o clipe da série, fala "Trabalho!"')
   const blob = renderizarFaixa(c, clips, sr)
   assert.equal(blob.size, 44 + Math.ceil(c.total*sr)*2)
   return blob.arrayBuffer().then(ab => {
@@ -201,5 +204,10 @@ await t('setas da carga: kg, par de halteres, vazio e texto livre', () => {
 await t('tempo digitado no card: 1:30, 130, 45 e 90', () => {
   assert.equal(lerTempo('1:30'), 90); assert.equal(lerTempo('130'), 90); assert.equal(lerTempo('45'), 45); assert.equal(lerTempo('90'), 90)
   assert.equal(lerTempo('2.05'), 125); assert.equal(lerTempo('abc'), null); assert.equal(mss(90), '1:30'); assert.equal(mss(5), '0:05')
+})
+await t('anúncio da série: única, primeira, número e última', () => {
+  assert.equal(chaveSerie(1, 1), 'serie_unica'); assert.equal(chaveSerie(1, 4), 'serie_primeira')
+  assert.equal(chaveSerie(3, 4), 'serie_3'); assert.equal(chaveSerie(4, 4), 'serie_ultima')
+  assert.equal(textoDoClipe('serie_3'), 'Série três!'); assert.equal(textoDoClipe('serie_ultima'), 'Última série!')
 })
 console.log(`\n${ok} testes passaram`)

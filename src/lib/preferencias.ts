@@ -2,12 +2,13 @@ import { supabase } from './supabase'
 
 export interface PrefsNotificacoes { email_cobranca: boolean; email_novidades: boolean; lembrete_treino: boolean }
 /** modo: 'musica' = voz por cima da música; 'bloqueio' = segue com a tela bloqueada (pausa a música). */
-export interface PrefsAudio { volume: number; mudo: boolean; modo: 'musica' | 'bloqueio'; abaixar_musica: boolean }
+/** `contador`: false = treinar sem o contador (marca cada exercício à mão na chave Concluído). */
+export interface PrefsAudio { volume: number; mudo: boolean; modo: 'musica' | 'bloqueio'; abaixar_musica: boolean; contador: boolean }
 export interface Preferencias { notificacoes: PrefsNotificacoes; audio: PrefsAudio }
 
 const PADRAO: Preferencias = {
   notificacoes: { email_cobranca: true, email_novidades: false, lembrete_treino: false },
-  audio: { volume: 1, mudo: false, modo: 'musica', abaixar_musica: true },
+  audio: { volume: 1, mudo: false, modo: 'musica', abaixar_musica: true, contador: true },
 }
 
 export async function carregarPreferencias(userId: string): Promise<Preferencias> {

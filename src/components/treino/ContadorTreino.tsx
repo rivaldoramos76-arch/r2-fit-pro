@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 import { Pause, Play, X } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { concluirExercicio, type Sessao } from '../../lib/sessoes'
-import { TreinoPlayer, carregarClipes, estadoEm, type Clipes, type ModoSom } from '../../lib/workoutAudio'
+import { TreinoPlayer, carregarClipes, carregarSeries, estadoEm, type Clipes, type ModoSom } from '../../lib/workoutAudio'
 import { carregarNomes } from '../../lib/vozNomes'
 import { carregarPreferencias, salvarPreferencias, type PrefsAudio } from '../../lib/preferencias'
 import { detectarSistema } from '../../lib/instalacao'
@@ -42,6 +42,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
   const [modoSom, setModoSom] = useState<ModoSom>('musica')
   const [volume, setVolume] = useState(1)
   const [mudo, setMudo] = useState(false)
+  const [ligado, setLigado] = useState(true)
   const prefsAudio = useRef<PrefsAudio | null>(null)
 
   const [tela, setTela] = useState<Tela>('parado')
@@ -64,7 +65,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
   }, [])
   useEffect(() => {
     if (!user) return
-    carregarPreferencias(user.id).then(p => { prefsAudio.current = p.audio; setVolume(p.audio.volume); setMudo(p.audio.mudo); setModoSom(p.audio.modo) }).catch(() => {})
+    carregarPreferencias(user.id).then(p => { prefsAudio.current = p.audio; setVolume(p.audio.volume); setMudo(p.audio.mudo); setModoSom(p.audio.modo); setLigado(p.audio.contador !== false) }).catch(() => {})
   }, [user])
   // Nome de cada exercício para o anúncio do próximo no treino completo (gerado uma vez e guardado)
   const nomesDia = dia?.exercicios.map(e => e.nome).join('|') ?? ''
@@ -74,13 +75,22 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     carregarNomes(nomesDia.split('|')).then(n => { if (vivo) nomesRef.current = { ...nomesRef.current, ...n } })
     return () => { vivo = false }
   }, [nomesDia, vozes])
+  // Anúncio de cada série ("Primeira série!", "Série dois!", "Última série!") para as séries do dia
+  const seriesDia = dia?.exercicios.map(e => e.series).join('|') ?? ''
+  useEffect(() => {
+    if (!seriesDia || vozes !== 'ok') return
+    let vivo = true
+    carregarSeries(seriesDia.split('|').map(Number)).then(c => { if (vivo) nomesRef.current = { ...nomesRef.current, ...c } })
+    return () => { vivo = false }
+  }, [seriesDia, vozes])
 
   const salvarAudio = (parcial: Partial<PrefsAudio>) => {
-    const audio = { ...(prefsAudio.current ?? { volume, mudo, modo: modoSom, abaixar_musica: true }), ...parcial }
+    const audio = { ...(prefsAudio.current ?? { volume, mudo, modo: modoSom, abaixar_musica: true, contador: ligado }), ...parcial }
     prefsAudio.current = audio
     if (user) salvarPreferencias(user.id, { audio }).catch(() => {})
   }
   const escolherModo = (m: ModoSom) => { setModoSom(m); salvarAudio({ modo: m }) }
+  const alternarContador = () => { const v = !ligado; setLigado(v); salvarAudio({ contador: v }) }
   const mudarVolume = (v: number) => { setVolume(v); playerRef.current?.setVolume(v) }
   const alternarMudo = () => { const m = !mudo; setMudo(m); playerRef.current?.setMudo(m); salvarAudio({ mudo: m }) }
 
@@ -145,9 +155,15 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     }
     const id = setInterval(tick, 100)
     // O sistema solta o "tela ligada" quando o app sai da frente: pede de novo ao voltar
-    const vis = () => { if (document.visibilityState === 'visible') { tick(); pedirWakeLock() } }
+    const vis = () => {
+      const oculto = document.visibilityState === 'hidden'
+      // Fora da frente / tela bloqueada: as falas passam para o relógio de áudio, que não congela
+      playerRef.current?.segundoPlano(oculto)
+      if (!oculto) { tick(); pedirWakeLock() }
+    }
     document.addEventListener('visibilitychange', vis)
-    return () => { clearInterval(id); document.removeEventListener('visibilitychange', vis) }
+    window.addEventListener('pagehide', vis)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', vis); window.removeEventListener('pagehide', vis) }
   }, [tela])
 
   const estado = playerRef.current && tela === 'rodando' ? estadoEm(playerRef.current.crono, t) : null
@@ -239,7 +255,23 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
   }
 
   // --- Opções de som (ficam na tela do treino, antes de iniciar) ---
-  const opcoesSom: ReactNode = (
+  const chaveContador = (
+    <button type="button" role="switch" aria-checked={ligado} aria-label="Usar o contador" onClick={alternarContador}
+      className="shrink-0 flex items-center gap-1.5">
+      <span className={`text-[11px] ${ligado ? 'text-zinc-400' : 'text-zinc-500'}`}>Contador</span>
+      <span className={`relative w-9 h-5 rounded-full transition-colors ${ligado ? 'bg-green-500' : 'bg-zinc-700'}`}>
+        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${ligado ? 'translate-x-4' : ''}`} />
+      </span>
+    </button>
+  )
+  const opcoesSom: ReactNode = !ligado ? (
+    <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4" aria-label="Som do contador">
+      <div className="flex items-center gap-3">
+        <p className="flex-1 text-sm text-zinc-400">Treinando <span className="text-zinc-200 font-semibold">sem contador</span>. Marque cada exercício na chave ao lado do nome quando terminar.</p>
+        {chaveContador}
+      </div>
+    </section>
+  ) : (
     <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4" aria-label="Som do contador">
       <p className="text-sm font-semibold text-zinc-200 mb-2">Som do contador</p>
       {vozes === 'fallback' ? (
@@ -266,8 +298,9 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
         <button type="button" onClick={alternarMudo} className="text-sm shrink-0" aria-label={mudo ? 'Ativar som' : 'Silenciar'}>{mudo ? '🔇' : '🔊'}</button>
         <input type="range" min={0} max={1} step={0.05} value={volume} aria-label="Volume"
           onChange={e => mudarVolume(+e.target.value)} onPointerUp={() => salvarAudio({ volume })} onKeyUp={() => salvarAudio({ volume })}
-          className="flex-1 h-1 accent-green-500 cursor-pointer" />
+          className="flex-1 min-w-0 h-1 accent-green-500 cursor-pointer" />
         <span className="text-xs text-zinc-500 w-9 text-right">{Math.round(volume * 100)}%</span>
+        {chaveContador}
       </div>
       <p className="text-[11px] text-zinc-600 mt-2">Durante a contagem a tela fica ligada e escurecida, só com o tempo. Não precisa bloquear o celular.</p>
       {erroAudio && <p className="text-sm text-red-400 mt-2">{erroAudio}</p>}
@@ -394,5 +427,5 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     )
   }
 
-  return { iniciar, preparando: vozes === 'carregando', rodando: tela !== 'parado', opcoesSom: tela === 'parado' ? opcoesSom : null, overlay }
+  return { iniciar, ligado, preparando: vozes === 'carregando', rodando: tela !== 'parado', opcoesSom: tela === 'parado' ? opcoesSom : null, overlay }
 }

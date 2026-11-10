@@ -11,7 +11,7 @@ import { Badge, Button, Card, Input, Select, Textarea } from '../components/UI'
 const CATEGORIAS = [
   ['conta', 'Conta e login'], ['assinatura', 'Assinatura'], ['pagamento', 'Pagamento e cobrança'],
   ['treino', 'Treinos'], ['dieta', 'Dieta'], ['calorias', 'Contador de calorias'],
-  ['privacidade', 'Privacidade e dados (LGPD)'], ['bug', 'Erro no aplicativo'], ['outro', 'Outro assunto'],
+  ['privacidade', 'Privacidade e dados (LGPD)'], ['bug', 'Erro no aplicativo'], ['sugestao', 'Sugestão'], ['dificuldade', 'Dificuldade para usar'], ['outro', 'Outro assunto'],
 ] as const
 
 const STATUS: Record<string, { texto: string; cor: 'green' | 'yellow' | 'blue' | 'zinc' }> = {
