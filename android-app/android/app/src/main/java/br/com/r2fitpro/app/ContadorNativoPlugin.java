@@ -78,7 +78,11 @@ public class ContadorNativoPlugin extends Plugin {
     @PluginMethod
     public void testarRelogio(PluginCall call) {
         pedirNotificacao();
-        ContadorServico.avisarFase(getContext(), "⌚ Teste do relógio", "Se apareceu no relógio, os avisos de trabalho e descanso vão chegar.", 10000);
+        // Espera alguns segundos: muitos relógios (Galaxy Wearable, Zepp…) só repassam com a tela do celular bloqueada
+        int atraso = Math.max(0, Math.min(60, call.getInt("atraso", 0)));
+        android.content.Context c = getContext().getApplicationContext();
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() ->
+            ContadorServico.avisarFase(c, "⌚ Teste do relógio", "Se apareceu no relógio, os avisos de trabalho e descanso vão chegar.", 15000), atraso * 1000L);
         call.resolve();
     }
 

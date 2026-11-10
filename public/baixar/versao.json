@@ -1,5 +1,5 @@
 {
-  "versionCode": 5,
-  "versionName": "1.3.0",
-  "novidades": "Botão para testar os avisos no relógio."
+  "versionCode": 6,
+  "versionName": "1.4.0",
+  "novidades": "Teste do relógio espera 10 segundos para você bloquear a tela."
 }

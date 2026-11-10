@@ -56,8 +56,8 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
     if (!n) return
     setMsgRelogio('Enviando aviso de teste…')
     // App antigo (sem o teste) recusa a chamada na hora: avisa para atualizar em vez de não fazer nada
-    Promise.resolve().then(() => n.testarRelogio())
-      .then(() => setMsgRelogio('Aviso de teste enviado. Bloqueie a tela do celular: muitos relógios só mostram com o celular bloqueado. Se não chegar, libere o R2 Fit Pro nas notificações do app do relógio (Galaxy Wearable, Zepp, Mi Fitness, Garmin Connect…).'))
+    Promise.resolve().then(() => n.testarRelogio({ atraso: 10 }))
+      .then(() => setMsgRelogio('🔒 Bloqueie a tela do celular agora: o aviso de teste chega em 10 segundos. Muitos relógios (como os Galaxy) só mostram com o celular bloqueado. Se não chegar, abra o app do relógio (Galaxy Wearable, Zepp, Mi Fitness, Garmin Connect…) → Notificações e ligue o R2 Fit Pro.'))
       .catch(() => setMsgRelogio('Atualize o app para a versão mais nova (r2fitpro.com.br/baixar/r2-fit-pro.apk) para usar o teste.'))
   }
   const alternarAvisos = () => setAvisosRelogio(v => { try { localStorage.setItem('r2-avisos-relogio', v ? '0' : '1') } catch { /* sem armazenamento */ } return !v })
