@@ -17,8 +17,8 @@ function ChaveConcluido({ ligado, ocupado, onTrocar }: { ligado: boolean; ocupad
   return (
     <button type="button" role="switch" aria-checked={ligado} aria-label="Concluído" onClick={onTrocar} disabled={ocupado}
       className="flex flex-col items-center gap-0.5 px-1 shrink-0 disabled:opacity-60">
-      <span className={`relative w-10 h-6 rounded-full transition-colors ${ligado ? 'bg-green-500' : 'bg-zinc-700'}`}>
-        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${ligado ? 'translate-x-4' : ''}`} />
+      <span className={`relative w-9 h-5 rounded-full transition-colors ${ligado ? 'bg-green-500' : 'bg-zinc-700'}`}>
+        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${ligado ? 'translate-x-4' : ''}`} />
       </span>
       <span className={`text-[9px] leading-none ${ligado ? 'text-green-400 font-semibold' : 'text-zinc-500'}`}>Concluído</span>
     </button>
@@ -171,22 +171,20 @@ export default function TreinoDiaPage() {
             const ok = feitos.has(ex.id)
             const parcial = ok ? 0 : seriesFeitas(sessao, ex.id)
             return (
-              <div key={ex.id} className={`rounded-2xl border p-3 ${ok ? 'bg-green-500/5 border-green-500/30' : 'bg-zinc-900 border-zinc-800'}`}>
+              <div key={ex.id} className={`rounded-2xl border p-2.5 ${ok ? 'bg-green-500/5 border-green-500/30' : 'bg-zinc-900 border-zinc-800'}`}>
                 <div className="flex items-center gap-2.5">
                   <span className={`w-6 h-6 rounded-md text-[11px] font-bold flex items-center justify-center shrink-0 ${ok ? 'bg-green-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
                     {ok ? '✓' : i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-zinc-100 leading-tight truncate">{ex.nome}</p>
-                    {parcial > 0
-                      ? <p className="text-[11px] font-semibold text-amber-400 truncate">{parcial} de {ex.series} séries feitas · treino incompleto</p>
-                      : ex.grupos_musculares.length > 0 && <p className="text-[11px] text-zinc-500 truncate">{ex.grupos_musculares.join(' · ')}</p>}
+                    {parcial > 0 && <p className="text-[10px] font-semibold text-amber-400 truncate leading-tight">{parcial} de {ex.series} séries feitas · treino incompleto</p>}
                   </div>
                   {!contador.rodando && (animacaoDe(ex.nome)
                     ? execucao !== ex.id && <MiniExecucao nome={ex.nome} onAbrir={() => setExecucao(ex.id)} />
                     : (ex.instrucoes || ex.dica) && (
                       <button onClick={() => setExecucao(x => (x === ex.id ? null : ex.id))} aria-label={`Como fazer ${ex.nome}`}
-                        className="w-9 h-9 shrink-0 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-700 text-sm">ⓘ</button>
+                        className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-700 text-sm">ⓘ</button>
                     ))}
                 </div>
                 {execucao === ex.id && !contador.rodando && (
@@ -197,15 +195,15 @@ export default function TreinoDiaPage() {
                   </div>
                 )}
                 <AjustesExercicio ex={ex} onSalvar={e => atualizarExercicios(l => l.map(x => (x.id === e.id ? e : x)))} />
-                <div className="flex items-center gap-1.5 mt-2.5">
+                <div className="flex items-center gap-1.5 mt-2">
                   <button onClick={() => contador.iniciar([ex])} disabled={contador.preparando}
-                    className={`flex-1 h-9 rounded-xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-60 ${ok ? 'bg-zinc-800 text-zinc-200 border border-zinc-700' : 'bg-green-500 text-zinc-950 hover:bg-green-400'}`}>
+                    className={`flex-1 h-8 rounded-lg text-sm font-bold transition active:scale-[0.98] disabled:opacity-60 ${ok ? 'bg-zinc-800 text-zinc-200 border border-zinc-700' : 'bg-green-500 text-zinc-950 hover:bg-green-400'}`}>
                     ▶ {ok ? 'Refazer' : 'Iniciar'}
                   </button>
                   <ChaveConcluido ligado={ok} ocupado={marcando === ex.id} onTrocar={() => alternarConcluido(ex)} />
-                  <button onClick={() => mover(i, -1)} disabled={i === 0} className="w-8 h-9 rounded-lg text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para cima">↑</button>
-                  <button onClick={() => mover(i, 1)} disabled={i === exercicios.length - 1} className="w-8 h-9 rounded-lg text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
-                  <button onClick={() => remover(ex)} className="w-8 h-9 rounded-lg text-sm bg-zinc-900 text-red-400/80 border border-zinc-800" aria-label="Remover">🗑</button>
+                  <button onClick={() => mover(i, -1)} disabled={i === 0} className="w-8 h-8 rounded-lg text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para cima">↑</button>
+                  <button onClick={() => mover(i, 1)} disabled={i === exercicios.length - 1} className="w-8 h-8 rounded-lg text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
+                  <button onClick={() => remover(ex)} className="w-8 h-8 rounded-lg text-sm bg-zinc-900 text-red-400/80 border border-zinc-800" aria-label="Remover">🗑</button>
                 </div>
               </div>
             )
