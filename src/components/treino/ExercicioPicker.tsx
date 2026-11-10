@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Equipamento, ExercicioCatalogo, GrupoMuscular } from '../../data/exercicios'
-import { passoTempo, uid, type ExercicioPlano } from '../../lib/treinoModel'
+import { maxExecucao, passoTempo, uid, type ExercicioPlano } from '../../lib/treinoModel'
+import { buscarCardio, CARDIO, type Cardio } from '../../data/cardio'
 import { Spinner } from '../UI'
 
 type ModuloBusca = typeof import('../../lib/busca') & typeof import('../../data/exercicios')
@@ -72,6 +73,7 @@ export function ExercicioForm({ inicial, titulo, subtitulo, onSalvar, onCancelar
   onCancelar: () => void
 }) {
   const [e, setE] = useState(inicial)
+  const cardio = e.tipo === 'cardio'
   const set = <K extends keyof ExercicioPlano>(k: K, v: ExercicioPlano[K]) => setE(x => ({ ...x, [k]: v }))
   return (
     <div className="flex flex-col gap-4">
@@ -79,24 +81,28 @@ export function ExercicioForm({ inicial, titulo, subtitulo, onSalvar, onCancelar
         <h3 className="font-bold text-zinc-100 text-lg leading-tight">{titulo}</h3>
         {subtitulo && <p className="text-sm text-zinc-500 mt-0.5">{subtitulo}</p>}
       </div>
-      {!e.catalogo_id && (
+      {!e.catalogo_id && !cardio && (
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-zinc-400">Nome do exercício</span>
           <input value={e.nome} onChange={ev => set('nome', ev.target.value)} className={CAMPO} />
         </label>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <Num label="Séries" valor={e.series} passo={1} min={1} max={20} onChange={v => set('series', v)} />
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-zinc-400">Repetições</span>
-          <input value={e.repeticoes} onChange={ev => set('repeticoes', ev.target.value)} placeholder="8-12" className={`${CAMPO} h-10`} />
-        </label>
-        <label className="flex flex-col gap-1.5 col-span-2">
-          <span className="text-xs text-zinc-400">Carga <span className="text-zinc-600">(opcional)</span></span>
-          <input value={e.carga ?? ''} onChange={ev => set('carga', ev.target.value || undefined)} placeholder="Ex.: 20 kg, 2×10 kg, elástico médio" className={CAMPO} />
-        </label>
-        <Tempo label="Execução" valor={e.tempo_execucao_segundos} min={5} max={600} sufixo="duração de uma série" onChange={v => set('tempo_execucao_segundos', v)} />
-        <Tempo label="Descanso" valor={e.tempo_descanso_segundos} min={0} max={600} sufixo="entre as séries" onChange={v => set('tempo_descanso_segundos', v)} />
+        <Num label="Séries" valor={e.series} passo={1} min={1} max={20} sufixo={cardio ? 'rounds' : undefined} onChange={v => set('series', v)} />
+        {!cardio && (
+          <>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs text-zinc-400">Repetições</span>
+              <input value={e.repeticoes} onChange={ev => set('repeticoes', ev.target.value)} placeholder="8-12" className={`${CAMPO} h-10`} />
+            </label>
+            <label className="flex flex-col gap-1.5 col-span-2">
+              <span className="text-xs text-zinc-400">Carga <span className="text-zinc-600">(opcional)</span></span>
+              <input value={e.carga ?? ''} onChange={ev => set('carga', ev.target.value || undefined)} placeholder="Ex.: 20 kg, 2×10 kg, elástico médio" className={CAMPO} />
+            </label>
+          </>
+        )}
+        <Tempo label="Execução" valor={e.tempo_execucao_segundos} min={5} max={maxExecucao(e)} sufixo={cardio ? 'cada round' : 'duração de uma série'} onChange={v => set('tempo_execucao_segundos', v)} />
+        <Tempo label="Descanso" valor={e.tempo_descanso_segundos} min={0} max={600} sufixo={cardio ? 'entre rounds' : 'entre as séries'} onChange={v => set('tempo_descanso_segundos', v)} />
       </div>
       <div className="grid grid-cols-2 gap-3 pt-1">
         <button onClick={onCancelar} className="py-3 rounded-xl font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700">Cancelar</button>
@@ -120,6 +126,15 @@ export function exercicioDoCatalogo(c: ExercicioCatalogo, grupos: Record<GrupoMu
     tempo_execucao_segundos: composto ? 40 : 35,
     tempo_descanso_segundos: composto ? 90 : 60,
     instrucoes: c.instrucoes,
+  }
+}
+
+const fmtSeg = (s: number) => (s >= 60 ? `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ''}` : `${s} s`)
+
+export function exercicioDeCardio(c: Cardio): ExercicioPlano {
+  return {
+    id: uid('e'), nome: c.nome, grupos_musculares: ['Cardio'], tipo: 'cardio', met: c.met,
+    series: c.series, repeticoes: '', tempo_execucao_segundos: c.exec, tempo_descanso_segundos: c.desc, instrucoes: c.dica,
   }
 }
 
@@ -164,6 +179,7 @@ export default function ExercicioPicker({ gruposDoTreino, equipamentos, onAdicio
   }, [mod, q, soMeus, equipamentos, gruposDoTreino])
 
   const escolher = (c: ExercicioCatalogo) => mod && setSelecionado(exercicioDoCatalogo(c, mod.GRUPOS))
+  const cardios = useMemo(() => (q.trim() ? buscarCardio(q) : CARDIO), [q])
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" onClick={onFechar}>
@@ -213,11 +229,41 @@ export default function ExercicioPicker({ gruposDoTreino, equipamentos, onAdicio
                 </div>
               )}
               {estado === 'pronto' && !q.trim() && (
+                <section aria-label="Cardio e HIIT" className="pt-3">
+                  <p className="px-4 pb-1.5 text-[11px] font-semibold text-zinc-500 uppercase tracking-wide">Cardio e HIIT · com contador</p>
+                  <div className="flex gap-1.5 overflow-x-auto px-4 pb-1 overscroll-contain">
+                    {CARDIO.map(c => (
+                      <button key={c.id} onClick={() => setSelecionado(exercicioDeCardio(c))}
+                        className="shrink-0 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-semibold text-zinc-200 hover:border-green-500/50 whitespace-nowrap">
+                        {c.icone} {c.nome}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {estado === 'pronto' && !q.trim() && (
                 <p className="px-4 pt-3 pb-1 text-[11px] font-semibold text-zinc-500 uppercase tracking-wide">
                   {gruposDoTreino.length ? 'Sugestões para este treino' : 'Exercícios do catálogo'}
                 </p>
               )}
-              {estado === 'pronto' && resultados.length === 0 && (
+              {estado === 'pronto' && q.trim() && cardios.length > 0 && (
+                <ul className="divide-y divide-zinc-800/70 border-b border-zinc-800/70" aria-label="Cardio e HIIT encontrados">
+                  {cardios.map(c => (
+                    <li key={c.id}>
+                      <button onClick={() => setSelecionado(exercicioDeCardio(c))} className="w-full text-left px-4 py-3 hover:bg-zinc-900 active:bg-zinc-900 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-zinc-100 font-medium truncate">{c.icone} {c.nome}</p>
+                          <p className="text-xs text-zinc-500 mt-0.5 truncate">
+                            <span className="text-green-400/90">Cardio · HIIT</span> · {c.series > 1 ? `${c.series} × ${fmtSeg(c.exec)} / ${fmtSeg(c.desc)} descanso` : fmtSeg(c.exec)}
+                          </p>
+                        </div>
+                        <span className="w-8 h-8 rounded-lg bg-green-500/15 text-green-400 flex items-center justify-center text-lg shrink-0">+</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {estado === 'pronto' && resultados.length === 0 && !(q.trim() && cardios.length) && (
                 <div className="text-center py-10 px-6">
                   <p className="text-zinc-300 font-semibold">Nenhum exercício encontrado para "{q}"</p>
                   <p className="text-sm text-zinc-500 mt-1">

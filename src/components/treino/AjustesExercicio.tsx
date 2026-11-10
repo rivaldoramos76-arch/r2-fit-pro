@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { passoTempo, type ExercicioPlano } from '../../lib/treinoModel'
+import { maxExecucao, passoTempo, type ExercicioPlano } from '../../lib/treinoModel'
 
 type Valores = Pick<ExercicioPlano, 'series' | 'repeticoes' | 'tempo_execucao_segundos' | 'tempo_descanso_segundos' | 'carga'>
 const valoresDe = (e: ExercicioPlano): Valores => ({
@@ -106,13 +106,15 @@ export default function AjustesExercicio({ ex, onSalvar }: { ex: ExercicioPlano;
 
   const repsMais = passoReps(v.repeticoes, 1), repsMenos = passoReps(v.repeticoes, -1)
   const cargaMais = passoCarga(v.carga, 1), cargaMenos = passoCarga(v.carga, -1)
+  const cardio = ex.tipo === 'cardio'
   const tempo = (campo: 'tempo_execucao_segundos' | 'tempo_descanso_segundos', rotulo: string, min: number) => {
     const t = v[campo]
+    const max = campo === 'tempo_execucao_segundos' ? maxExecucao(ex) : 600
     return {
       rotulo, valor: mss(t), teclado: 'numeric' as const,
-      aoSair: (txt: string) => { const s = lerTempo(txt); if (s !== null) mudar({ [campo]: lim(s, min, 600) }) },
-      onMais: () => mudar({ [campo]: passoTempo(t, 1, min) }), onMenos: () => mudar({ [campo]: passoTempo(t, -1, min) }),
-      podeMais: t < 600, podeMenos: t > min,
+      aoSair: (txt: string) => { const s = lerTempo(txt); if (s !== null) mudar({ [campo]: lim(s, min, max) }) },
+      onMais: () => mudar({ [campo]: passoTempo(t, 1, min, max) }), onMenos: () => mudar({ [campo]: passoTempo(t, -1, min, max) }),
+      podeMais: t < max, podeMenos: t > min,
     }
   }
   const campos: Record<Campo, { titulo: string } & Parameters<typeof Barra>[0]> = {
@@ -137,10 +139,11 @@ export default function AjustesExercicio({ ex, onSalvar }: { ex: ExercicioPlano;
       podeMais: cargaMais !== null, podeMenos: !!v.carga?.trim() && cargaMenos !== null,
     },
   }
-  const ordem: Campo[] = ['series', 'reps', 'exec', 'desc', 'carga']
+  // Cardio / HIIT: só séries (rounds), execução e descanso
+  const ordem: Campo[] = cardio ? ['series', 'exec', 'desc'] : ['series', 'reps', 'exec', 'desc', 'carga']
   return (
     <div className="mt-1.5" translate="no">
-      <div className="grid gap-1" style={{ gridTemplateColumns: '0.8fr 1.1fr 1.1fr 1.1fr 1.3fr' }}>
+      <div className="grid gap-1" style={{ gridTemplateColumns: cardio ? '1fr 1fr 1fr' : '0.8fr 1.1fr 1.1fr 1.1fr 1.3fr' }}>
         {ordem.map(c => {
           const f = campos[c], on = ativo === c
           return (

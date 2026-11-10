@@ -1087,6 +1087,38 @@ await t('card do exercício: séries, reps, execução, descanso e carga lado a 
   await ctx.close()
 })
 
+await t('cardio e HIIT: boxe entra no treino com séries, execução e descanso e usa o contador', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: 'dois' })
+  await page.goto(BASE + '/treino/t1/dia/0')
+  await page.getByRole('button', { name: '+ Adicionar exercício' }).click()
+  const folha = page.getByRole('dialog', { name: 'Adicionar exercício' })
+  await folha.getByRole('region', { name: 'Cardio e HIIT' }).getByRole('button', { name: /Boxe no saco/ }).click()
+  await folha.getByText('rounds', { exact: true }).waitFor()
+  assert.equal(await folha.getByText('Repetições').count(), 0, 'cardio sem repetições')
+  assert.equal(await folha.getByText('Carga', { exact: false }).count(), 0, 'cardio sem carga')
+  assert.equal(await folha.getByLabel('Execução: segundos').inputValue(), '30')
+  assert.equal(await folha.getByLabel('Descanso: segundos').inputValue(), '30')
+  await page.screenshot({ path: `${SHOTS}/cardio-form.png` })
+  await folha.getByRole('button', { name: 'Adicionar ao treino' }).click()
+  // Busca também acha o cardio pelo nome popular
+  await folha.getByLabel('Buscar exercício').fill('boxe')
+  await folha.getByRole('list', { name: 'Cardio e HIIT encontrados' }).getByText('Boxe no saco').waitFor()
+  await folha.getByRole('button', { name: 'Concluir' }).click()
+  let ex
+  for (let i = 0; i < 40 && !ex; i++) {
+    await page.waitForTimeout(100)
+    ex = page.gravacoes.filter(g => g.tabela === 'treinos').pop()?.corpo.plano.dias[0].exercicios.find(e => e.nome === 'Boxe no saco')
+  }
+  assert.equal(ex.tipo, 'cardio'); assert.equal(ex.series, 10); assert.equal(ex.tempo_execucao_segundos, 30); assert.equal(ex.tempo_descanso_segundos, 30)
+  assert.ok(ex.met > 5, 'gasto do boxe')
+  await page.getByText('Boxe no saco').first().waitFor()
+  assert.equal(await page.getByRole('button', { name: /^Reps:/ }).count(), 2, 'card do boxe sem reps')
+  assert.equal(await page.getByRole('button', { name: 'Iniciar', exact: true }).count(), 3, 'boxe tem o ▶ do contador')
+  await page.screenshot({ path: `${SHOTS}/cardio-card.png`, fullPage: true })
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
 await t('treino completo: faz os exercícios em sequência, anuncia o próximo pelo nome e registra cada um', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: 'dois' })
   await page.goto(BASE + '/treino/t1/dia/0')

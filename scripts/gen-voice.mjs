@@ -63,7 +63,8 @@ async function emLotes(itens, n, fn) {
 async function nomesDoCatalogo() {
   const src = await readFile(new URL('../src/data/exercicios.ts', import.meta.url), 'utf8')
   const corpo = src.slice(src.indexOf('const RAW'), src.indexOf('export const CATALOGO'))
-  return [...corpo.matchAll(/^\s*\['([^']+)'/gm)].map(m => m[1])
+  const cardio = await readFile(new URL('../src/data/cardio.ts', import.meta.url), 'utf8')
+  return [...corpo.matchAll(/^\s*\['([^']+)'/gm)].map(m => m[1]).concat([...cardio.matchAll(/nome: '([^']+)'/g)].map(m => m[1]))
 }
 
 async function main() {

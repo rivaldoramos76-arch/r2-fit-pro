@@ -64,6 +64,9 @@ export interface ExercicioPlano {
   tempo_descanso_segundos: number
   instrucoes?: string
   dica?: string
+  /** Cardio / HIIT (boxe, corrida, bike…): só séries, execução e descanso; `met` estima o gasto no diário */
+  tipo?: 'cardio'
+  met?: number
 }
 
 export interface DiaTreino {
@@ -197,12 +200,13 @@ export function normalizarExercicio(raw: Record<string, unknown>, idPadrao: stri
     grupos_musculares: Array.isArray(raw.grupos_musculares) ? raw.grupos_musculares.map(g => str(g)) : [],
     equipamento: raw.equipamento ? str(raw.equipamento) : undefined,
     series: Math.round(num(raw.series, 3)),
-    repeticoes: str(raw.repeticoes, '10-12') || '10-12',
+    repeticoes: raw.tipo === 'cardio' ? str(raw.repeticoes) : str(raw.repeticoes, '10-12') || '10-12',
     carga: raw.carga ? str(raw.carga) : undefined,
     tempo_execucao_segundos: Math.round(num(raw.tempo_execucao_segundos, 40)),
     tempo_descanso_segundos: Math.round(num(raw.tempo_descanso_segundos, 60)),
     instrucoes: raw.instrucoes ? str(raw.instrucoes) : undefined,
     dica: raw.dica ? str(raw.dica) : undefined,
+    ...(raw.tipo === 'cardio' ? { tipo: 'cardio' as const, met: num(raw.met, 8) } : {}),
   }
 }
 
@@ -300,3 +304,6 @@ export function passoTempo(seg: number, dir: 1 | -1, min: number, max = 600): nu
   const alvo = dir > 0 ? Math.floor(seg / 5) * 5 + 5 : Math.ceil(seg / 5) * 5 - 5
   return Math.min(max, Math.max(min, alvo))
 }
+
+/** Tempo máximo de uma série: 10 min na musculação, 60 min no cardio (corrida, bike, caminhada contínuas). */
+export const maxExecucao = (e: Pick<ExercicioPlano, 'tipo'>) => (e.tipo === 'cardio' ? 3600 : 600)
