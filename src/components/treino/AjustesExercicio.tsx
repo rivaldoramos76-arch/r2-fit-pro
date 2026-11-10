@@ -23,6 +23,26 @@ export function passoReps(reps: string, delta: number): string | null {
   return `${a + delta}-${b + delta}`
 }
 
+const kg = (n: number) => `${String(Math.round(n * 10) / 10).replace('.', ',')} kg`
+/** Carga em kg com passo de 1 kg: "20 kg" → "21 kg"; "2×10 kg" muda o peso de cada um; vazio sobe a partir de 1 kg; abaixo de 1 kg fica sem carga. Devolve null para texto livre (ex.: "elástico médio"). */
+export function passoCarga(carga: string | undefined, delta: number): string | null {
+  const c = (carga ?? '').trim()
+  if (!c) return delta > 0 ? kg(delta) : null
+  const num = (x: string) => +x.replace(',', '.')
+  const par = c.match(/^(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(?:kg)?$/i)
+  if (par) { const v = num(par[2]) + delta; return v < 1 ? c : `${par[1]}×${kg(v)}` }
+  const um = c.match(/^(\d+(?:[.,]\d+)?)\s*(?:kg)?$/i)
+  if (!um) return null
+  const v = num(um[1]) + delta
+  return v < 1 ? '' : kg(v)
+}
+/** Número digitado sem unidade vira "N kg" ao salvar. */
+const normalizarCarga = (c: string | undefined) => {
+  const t = (c ?? '').trim()
+  if (!t) return undefined
+  return /^\d+(?:[.,]\d+)?$/.test(t) ? kg(+t.replace(',', '.')) : t
+}
+
 const SETA = 'w-full h-7 rounded-md text-zinc-300 bg-zinc-900/70 active:bg-zinc-700 disabled:opacity-25 text-xs leading-none'
 const CAIXA = 'w-full h-9 rounded-md bg-zinc-950 border border-zinc-700 text-center text-base font-semibold text-zinc-100 focus:outline-none focus:border-green-500'
 
@@ -58,7 +78,7 @@ function Tempo({ rotulo, total, min, max, onChange }: { rotulo: string; total: n
 }
 
 /**
- * Séries, repetições, execução, descanso e carga editáveis direto no card. Salva sozinho
+ * Séries, repetições, execução, descanso e carga (com setas e digitação) editáveis direto no card. Salva sozinho
  * pouco depois da última mudança (e ao sair da tela), sem botão de salvar.
  */
 export default function AjustesExercicio({ ex, onSalvar }: { ex: ExercicioPlano; onSalvar: (e: ExercicioPlano) => void }) {
@@ -73,7 +93,7 @@ export default function AjustesExercicio({ ex, onSalvar }: { ex: ExercicioPlano;
   const mudar = (patch: Partial<Valores>) => setV(atual => {
     const novo = { ...atual, ...patch }
     if (!iguais(novo, atual)) {
-      pendente.current = { ...ex, ...novo, carga: novo.carga?.trim() ? novo.carga : undefined }
+      pendente.current = { ...ex, ...novo, carga: normalizarCarga(novo.carga) }
       clearTimeout(timer.current)
       timer.current = setTimeout(() => { const p = pendente.current; pendente.current = null; if (p) salvarRef.current(p) }, 700)
     }
@@ -108,12 +128,15 @@ export default function AjustesExercicio({ ex, onSalvar }: { ex: ExercicioPlano;
           <span className={titulo}>Descanso <span className="normal-case tracking-normal text-zinc-600">min : seg</span></span>
           <Tempo rotulo="Descanso" total={v.tempo_descanso_segundos} min={0} max={600} onChange={s => mudar({ tempo_descanso_segundos: s })} />
         </div>
+        <div className={`${bloco} col-span-2`}>
+          <span className={titulo}>Carga <span className="normal-case tracking-normal text-zinc-600">kg · opcional</span></span>
+          <Passo rotulo="Carga" valor={v.carga ?? ''} numerico={false} largura="w-28"
+            onTexto={t => mudar({ carga: t.slice(0, 40) })}
+            onMais={() => { const c = passoCarga(v.carga, 1); if (c !== null) mudar({ carga: c }) }}
+            onMenos={() => { const c = passoCarga(v.carga, -1); if (c !== null) mudar({ carga: c }) }}
+            podeMais={passoCarga(v.carga, 1) !== null} podeMenos={!!v.carga?.trim() && passoCarga(v.carga, -1) !== null} />
+        </div>
       </div>
-      <label className="flex items-center gap-2 bg-zinc-800/60 rounded-xl px-3 py-1.5">
-        <span className="text-[10px] text-zinc-500 uppercase tracking-wide shrink-0">Carga</span>
-        <input value={v.carga ?? ''} onChange={e => mudar({ carga: e.target.value.slice(0, 60) })} placeholder="opcional · ex.: 20 kg"
-          aria-label="Carga" className="flex-1 min-w-0 bg-transparent text-base text-zinc-100 placeholder:text-zinc-600 focus:outline-none" />
-      </label>
     </div>
   )
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { CATALOGO, GRUPOS } from '../src/data/exercicios'
 import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
 import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar } from '../src/lib/workoutAudio'
-import { passoReps } from '../src/components/treino/AjustesExercicio'
+import { passoReps, passoCarga } from '../src/components/treino/AjustesExercicio'
 import { normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
 let ok = 0
@@ -191,5 +191,11 @@ await t('setas das repetições: número único e faixa', () => {
   assert.equal(passoReps('10', 1), '11'); assert.equal(passoReps('1', -1), '1')
   assert.equal(passoReps('8-12', 1), '9-13'); assert.equal(passoReps('8 - 12', -1), '7-11')
   assert.equal(passoReps('1-3', -1), '1-3'); assert.equal(passoReps('até a falha', 1), null)
+})
+await t('setas da carga: kg, par de halteres, vazio e texto livre', () => {
+  assert.equal(passoCarga('20 kg', 1), '21 kg'); assert.equal(passoCarga('20', -1), '19 kg'); assert.equal(passoCarga('12,5 kg', 1), '13,5 kg')
+  assert.equal(passoCarga('2×10 kg', 1), '2×11 kg'); assert.equal(passoCarga('2x1 kg', -1), '2x1 kg')
+  assert.equal(passoCarga('', 1), '1 kg'); assert.equal(passoCarga(undefined, -1), null); assert.equal(passoCarga('1 kg', -1), '')
+  assert.equal(passoCarga('elástico médio', 1), null)
 })
 console.log(`\n${ok} testes passaram`)

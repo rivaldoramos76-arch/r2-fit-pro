@@ -989,7 +989,8 @@ await t('editar exercício direto no card: setas e digitação em séries, reps,
   await desc.getByLabel('Descanso: segundos', { exact: true }).fill('25')
   await desc.getByRole('button', { name: 'Aumentar Descanso: segundos', exact: true }).click()
   await page.getByRole('group', { name: 'Execução' }).getByLabel('Execução: segundos', { exact: true }).fill('45')
-  await page.getByLabel('Carga', { exact: true }).fill('20 kg')
+  await page.getByLabel('Carga', { exact: true }).fill('20')
+  await page.getByRole('button', { name: 'Aumentar Carga', exact: true }).click()
   await page.screenshot({ path: `${SHOTS}/editar-no-card.png`, fullPage: true })
   // Salva sozinho logo depois da última mudança
   let ex
@@ -997,10 +998,10 @@ await t('editar exercício direto no card: setas e digitação em séries, reps,
     await page.waitForTimeout(100)
     const salvo = page.gravacoes.filter(g => g.tabela === 'treinos').pop()
     ex = salvo?.corpo.plano.dias[0].exercicios[0]
-    if (ex?.carga === '20 kg') break
+    if (ex?.carga === '21 kg') break
   }
   assert.equal(ex.series, 3); assert.equal(ex.repeticoes, '9-13')
-  assert.equal(ex.tempo_descanso_segundos, 90); assert.equal(ex.tempo_execucao_segundos, 45); assert.equal(ex.carga, '20 kg')
+  assert.equal(ex.tempo_descanso_segundos, 90); assert.equal(ex.tempo_execucao_segundos, 45); assert.equal(ex.carga, '21 kg')
   assert.equal(await desc.getByLabel('Descanso: segundos', { exact: true }).inputValue(), '30')
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
