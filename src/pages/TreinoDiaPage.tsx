@@ -120,33 +120,27 @@ export default function TreinoDiaPage() {
       </div>
 
       {exercicios.length > 0 && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-          <div className="flex items-center justify-between text-sm mb-2">
-            <span className="text-zinc-400">{sessaoFinalizada ? 'Treino concluído 🎉' : 'Progresso desta sessão'}</span>
-            <span className="font-semibold text-zinc-100 tabular-nums">{concluidos}/{exercicios.length}</span>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-3.5 py-3">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-zinc-400 shrink-0">{sessaoFinalizada ? 'Concluído 🎉' : 'Progresso'}</span>
+            <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+              <div className="h-full bg-green-500 transition-all" style={{ width: `${(concluidos / exercicios.length) * 100}%` }} />
+            </div>
+            <span className="font-semibold text-zinc-100 tabular-nums shrink-0">{concluidos}/{exercicios.length}</span>
           </div>
-          <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
-            <div className="h-full bg-green-500 transition-all" style={{ width: `${(concluidos / exercicios.length) * 100}%` }} />
-          </div>
-          <p className="text-xs text-zinc-500 mt-2">
-            {treinoDia.duracao_estimada_min} min estimados · {exercicios.reduce((s, e) => s + e.series, 0)} séries
+          <p className="text-[11px] text-zinc-500 mt-1.5">
+            {treinoDia.duracao_estimada_min} min · {exercicios.reduce((s, e) => s + e.series, 0)} séries
             {sessaoFinalizada && sessao?.data_fim && ` · finalizado em ${new Date(sessao.data_fim).toLocaleDateString('pt-BR')}`}
+            {(sessaoFinalizada || concluidos > 0) && (
+              <> · <button onClick={recomecar} className="font-semibold text-green-400 hover:text-green-300">↻ Nova sessão</button></>
+            )}
           </p>
-          {sessaoFinalizada && cartao && <CompartilharCartao cartao={cartao} rotulo="Compartilhar treino" className="w-full mt-3" />}
-          {exercicios.length > 1 && contador.ligado && (
-            <>
-              <button onClick={() => contador.iniciar(sequencia)} disabled={contador.preparando}
-                className="w-full mt-3 py-3 rounded-xl bg-green-500 text-zinc-950 font-bold hover:bg-green-400 active:scale-[0.98] transition disabled:opacity-60">
-                {contador.preparando ? 'Preparando áudio...' : `▶ Treino completo · ${sequencia.length} exercícios`}
-              </button>
-              <p className="text-[11px] text-zinc-500 mt-1.5 leading-relaxed">
-                Faz {sequencia.length < exercicios.length ? 'os que faltam' : 'todos'} em sequência: ao terminar um, a voz anuncia o próximo, conta o descanso e já começa o seguinte.
-              </p>
-            </>
-          )}
-          {(sessaoFinalizada || concluidos > 0) && (
-            <button onClick={recomecar} className="mt-3 text-xs font-semibold text-green-400 hover:text-green-300">
-              ↻ Começar nova sessão deste treino
+          {sessaoFinalizada && cartao && <CompartilharCartao cartao={cartao} rotulo="Compartilhar treino" className="w-full mt-2.5" />}
+          {exercicios.length > 1 && (
+            <button onClick={() => contador.iniciar(sequencia)} disabled={contador.preparando}
+              title={`Faz ${sequencia.length < exercicios.length ? 'os que faltam' : 'todos'} em sequência: a voz anuncia o próximo, conta o descanso e já começa o seguinte.`}
+              className="w-full mt-2.5 py-2.5 rounded-xl bg-green-500 text-zinc-950 text-sm font-bold hover:bg-green-400 active:scale-[0.98] transition disabled:opacity-60">
+              {contador.preparando ? 'Preparando áudio...' : `▶ Treino completo · ${sequencia.length} exercícios`}
             </button>
           )}
         </div>

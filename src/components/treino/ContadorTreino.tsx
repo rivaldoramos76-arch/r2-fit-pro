@@ -265,36 +265,35 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
     </button>
   )
   const opcoesSom: ReactNode = !ligado ? (
-    <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4" aria-label="Som do contador">
+    <section className="bg-zinc-900 border border-zinc-800 rounded-2xl px-3.5 py-2.5" aria-label="Som do contador">
       <div className="flex items-center gap-3">
-        <p className="flex-1 text-sm text-zinc-400">Treinando <span className="text-zinc-200 font-semibold">sem contador</span>. Marque cada exercício na chave ao lado do nome quando terminar.</p>
+        <p className="flex-1 text-xs text-zinc-400">Treinando <span className="text-zinc-200 font-semibold">sem contador</span>: marque na chave de cada exercício.</p>
         {chaveContador}
       </div>
     </section>
   ) : (
-    <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4" aria-label="Som do contador">
-      <p className="text-sm font-semibold text-zinc-200 mb-2">Som do contador</p>
+    <section className="bg-zinc-900 border border-zinc-800 rounded-2xl px-3.5 py-3" aria-label="Som do contador">
       {vozes === 'fallback' ? (
-        <p className="text-xs text-zinc-500">Vozes gravadas indisponíveis: usando a voz do navegador. Neste modo, mantenha a tela ligada.</p>
+        <p className="text-[11px] text-zinc-500">Vozes gravadas indisponíveis: usando a voz do navegador. Neste modo, mantenha a tela ligada.</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-1 bg-zinc-950 border border-zinc-800 rounded-xl p-1" role="radiogroup" aria-label="Modo do som">
+          <div className="grid grid-cols-2 gap-1 bg-zinc-950 border border-zinc-800 rounded-xl p-0.5" role="radiogroup" aria-label="Modo do som">
             {([['musica', '🎵 Por cima da música'], ['bloqueio', '🔒 Tela bloqueada']] as const).map(([m, r]) => (
               <button key={m} type="button" role="radio" aria-checked={modoSom === m} onClick={() => escolherModo(m)}
-                className={`py-2 rounded-lg text-xs font-semibold transition ${modoSom === m ? 'bg-green-500 text-zinc-950' : 'text-zinc-400'}`}>{r}</button>
+                className={`py-1.5 rounded-lg text-[11px] font-semibold transition ${modoSom === m ? 'bg-green-500 text-zinc-950' : 'text-zinc-400'}`}>{r}</button>
             ))}
           </div>
-          <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
+          <p className="text-[11px] text-zinc-500 mt-1.5 leading-snug">
             {modoSom === 'musica'
               ? sistema === 'iphone'
-                ? 'A voz toca junto com a sua música enquanto a tela estiver desbloqueada.'
-                : 'A voz toca junto com a sua música, que abaixa um pouco só durante os avisos. Pode trocar de app ou bloquear a tela.'
-              : 'Segue tocando com a tela bloqueada, mas o celular pausa a sua música durante o exercício.'}
+                ? 'Toca junto com a música, com a tela desbloqueada.'
+                : 'Toca junto com a música, que abaixa nos avisos. Pode trocar de app ou bloquear.'
+              : 'Toca com a tela bloqueada, mas pausa a sua música.'}
           </p>
           {sistema === 'iphone' && modoSom === 'musica' && <AvisoIphone />}
         </>
       )}
-      <div className="flex items-center gap-3 mt-3" aria-label="Volume do contador">
+      <div className="flex items-center gap-3 mt-2" aria-label="Volume do contador">
         <button type="button" onClick={alternarMudo} className="text-sm shrink-0" aria-label={mudo ? 'Ativar som' : 'Silenciar'}>{mudo ? '🔇' : '🔊'}</button>
         <input type="range" min={0} max={1} step={0.05} value={volume} aria-label="Volume"
           onChange={e => mudarVolume(+e.target.value)} onPointerUp={() => salvarAudio({ volume })} onKeyUp={() => salvarAudio({ volume })}
@@ -302,7 +301,6 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
         <span className="text-xs text-zinc-500 w-9 text-right">{Math.round(volume * 100)}%</span>
         {chaveContador}
       </div>
-      <p className="text-[11px] text-zinc-600 mt-2">Durante a contagem a tela fica ligada e escurecida, só com o tempo. Não precisa bloquear o celular.</p>
       {erroAudio && <p className="text-sm text-red-400 mt-2">{erroAudio}</p>}
     </section>
   )

@@ -1016,7 +1016,7 @@ await t('contador: modo tela bloqueada usa a faixa contínua', async () => {
   await ctx.close()
 })
 
-await t('contador pode ser desligado ao lado do volume: some o ▶ e o treino completo', async () => {
+await t('contador pode ser desligado ao lado do volume: some o ▶, o treino completo continua', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: 'dois' })
   await page.goto(BASE + '/treino/t1/dia/0')
   const chave = page.getByRole('switch', { name: 'Usar o contador' })
@@ -1026,7 +1026,7 @@ await t('contador pode ser desligado ao lado do volume: some o ▶ e o treino co
   await chave.click()
   await page.getByText('sem contador', { exact: false }).first().waitFor()
   assert.equal(await page.getByRole('button', { name: 'Iniciar', exact: true }).count(), 0, 'sem ▶ com o contador desligado')
-  assert.equal(await page.getByRole('button', { name: /Treino completo/ }).count(), 0)
+  await page.getByRole('button', { name: /Treino completo · 2 exercícios/ }).waitFor() // treino completo não sai
   assert.equal(await page.getByRole('switch', { name: 'Concluído' }).count(), 2, 'a chave Concluído continua')
   await page.screenshot({ path: `${SHOTS}/sem-contador.png`, fullPage: true })
   for (let i = 0; i < 30 && !page.gravacoes.some(g => g.tabela === 'user_settings'); i++) await page.waitForTimeout(100)
