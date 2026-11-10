@@ -28,7 +28,7 @@ export function MiniExecucao({ nome, onAbrir }: { nome: string; onAbrir: () => v
   if (!base) return null
   return (
     <button type="button" onClick={onAbrir} aria-label={`Ver execução de ${nome}`}
-      className="shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 opacity-90 hover:opacity-100">
+      className="shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 opacity-90 hover:opacity-100">
       <Video base={base} nome={nome} className="w-full h-full object-cover pointer-events-none" />
     </button>
   )

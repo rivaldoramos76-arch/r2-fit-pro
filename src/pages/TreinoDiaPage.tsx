@@ -3,14 +3,27 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTreino } from '../lib/treinoApi'
 import { descreverGrupos, equipamentosCobertos, type ExercicioPlano, type PlanoTreino } from '../lib/treinoModel'
-import { desmarcarExercicio, emAndamento, exercicioConcluido, novaSessao, seriesFeitas, sessaoAtual, type Sessao } from '../lib/sessoes'
+import { concluirExercicio, desmarcarExercicio, emAndamento, exercicioConcluido, novaSessao, seriesFeitas, sessaoAtual, type Sessao } from '../lib/sessoes'
 import ExercicioPicker from '../components/treino/ExercicioPicker'
 import AjustesExercicio from '../components/treino/AjustesExercicio'
 import { Spinner } from '../components/UI'
 import CompartilharCartao from '../components/CompartilharCartao'
 import { cartaoTreino } from '../lib/cartoesBase'
 import { useContadorTreino } from '../components/treino/ContadorTreino'
-import { ExecucaoAmpliada, MiniExecucao } from '../components/treino/ExecucaoAnimada'
+import { ExecucaoAmpliada, MiniExecucao, animacaoDe } from '../components/treino/ExecucaoAnimada'
+
+/** Chave deslizante "Concluído". */
+function ChaveConcluido({ ligado, ocupado, onTrocar }: { ligado: boolean; ocupado: boolean; onTrocar: () => void }) {
+  return (
+    <button type="button" role="switch" aria-checked={ligado} aria-label="Concluído" onClick={onTrocar} disabled={ocupado}
+      className="flex flex-col items-center gap-0.5 px-1 shrink-0 disabled:opacity-60">
+      <span className={`relative w-10 h-6 rounded-full transition-colors ${ligado ? 'bg-green-500' : 'bg-zinc-700'}`}>
+        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${ligado ? 'translate-x-4' : ''}`} />
+      </span>
+      <span className={`text-[9px] leading-none ${ligado ? 'text-green-400 font-semibold' : 'text-zinc-500'}`}>Concluído</span>
+    </button>
+  )
+}
 
 // --- Página ---
 
@@ -24,6 +37,7 @@ export default function TreinoDiaPage() {
   const [picker, setPicker] = useState(false)
   const [aviso, setAviso] = useState('')
   const [execucao, setExecucao] = useState<string | null>(null)
+  const [marcando, setMarcando] = useState<string | null>(null)
   const aoRegistrar = useCallback((s: Sessao) => setSessao(s), [])
   const contador = useContadorTreino({
     user, treino: treino ? { id: treino.id, nome: treino.nome } : null, diaIdx,
@@ -66,6 +80,20 @@ export default function TreinoDiaPage() {
     const c = [...l];[c[i], c[j]] = [c[j], c[i]]
     return c
   })
+
+  // Chave "Concluído": liga sozinha quando todas as séries são feitas; à mão, marca todas as séries (vai para o diário) ou desfaz
+  const alternarConcluido = async (ex: ExercicioPlano) => {
+    if (!user || marcando) return
+    setMarcando(ex.id)
+    try {
+      if (feitos.has(ex.id)) { if (sessao) setSessao(await desmarcarExercicio(sessao, ex.id)) }
+      else setSessao(await concluirExercicio({
+        userId: user.id, treinoId: treino.id, treinoNome: treino.nome, dia: diaIdx, exercicioId: ex.id, series: ex.series,
+        exerciciosDoTreino: exercicios.map(e => ({ id: e.id, series: e.series })),
+      }))
+    } catch { setAviso('Não foi possível salvar. Verifique sua conexão.') }
+    setMarcando(null)
+  }
 
   const remover = (ex: ExercicioPlano) => {
     if (confirm(`Remover "${ex.nome}" deste treino?`)) atualizarExercicios(l => l.filter(e => e.id !== ex.id))
@@ -143,36 +171,42 @@ export default function TreinoDiaPage() {
             const ok = feitos.has(ex.id)
             const parcial = ok ? 0 : seriesFeitas(sessao, ex.id)
             return (
-              <div key={ex.id} className={`rounded-2xl border p-4 ${ok ? 'bg-green-500/5 border-green-500/30' : 'bg-zinc-900 border-zinc-800'}`}>
-                <div className="flex items-start gap-3">
-                  <span className={`w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center shrink-0 ${ok ? 'bg-green-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
+              <div key={ex.id} className={`rounded-2xl border p-3 ${ok ? 'bg-green-500/5 border-green-500/30' : 'bg-zinc-900 border-zinc-800'}`}>
+                <div className="flex items-center gap-2.5">
+                  <span className={`w-6 h-6 rounded-md text-[11px] font-bold flex items-center justify-center shrink-0 ${ok ? 'bg-green-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
                     {ok ? '✓' : i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-zinc-100 leading-snug">{ex.nome}</p>
-                    {ex.grupos_musculares.length > 0 && <p className="text-xs text-zinc-500 mt-0.5 truncate">{ex.grupos_musculares.join(' · ')}</p>}
-                    {ok && <p className="text-xs font-semibold text-green-400 mt-1">✓ Concluído</p>}
-                    {parcial > 0 && <p className="text-xs font-semibold text-amber-400 mt-1">{parcial} de {ex.series} séries feitas · treino incompleto</p>}
+                    <p className="text-sm font-semibold text-zinc-100 leading-tight truncate">{ex.nome}</p>
+                    {parcial > 0
+                      ? <p className="text-[11px] font-semibold text-amber-400 truncate">{parcial} de {ex.series} séries feitas · treino incompleto</p>
+                      : ex.grupos_musculares.length > 0 && <p className="text-[11px] text-zinc-500 truncate">{ex.grupos_musculares.join(' · ')}</p>}
                   </div>
-                  {execucao !== ex.id && !contador.rodando && <MiniExecucao nome={ex.nome} onAbrir={() => setExecucao(ex.id)} />}
+                  {!contador.rodando && (animacaoDe(ex.nome)
+                    ? execucao !== ex.id && <MiniExecucao nome={ex.nome} onAbrir={() => setExecucao(ex.id)} />
+                    : (ex.instrucoes || ex.dica) && (
+                      <button onClick={() => setExecucao(x => (x === ex.id ? null : ex.id))} aria-label={`Como fazer ${ex.nome}`}
+                        className="w-9 h-9 shrink-0 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-700 text-sm">ⓘ</button>
+                    ))}
                 </div>
-                {execucao === ex.id && !contador.rodando && <ExecucaoAmpliada nome={ex.nome} onFechar={() => setExecucao(null)} />}
+                {execucao === ex.id && !contador.rodando && (
+                  <div className="mt-2">
+                    <ExecucaoAmpliada nome={ex.nome} onFechar={() => setExecucao(null)} />
+                    {ex.instrucoes && <p className="text-xs text-zinc-400 mt-2 leading-relaxed">{ex.instrucoes}</p>}
+                    {ex.dica && <p className="text-xs text-yellow-500/80 mt-1">💡 {ex.dica}</p>}
+                  </div>
+                )}
                 <AjustesExercicio ex={ex} onSalvar={e => atualizarExercicios(l => l.map(x => (x.id === e.id ? e : x)))} />
-                {ex.instrucoes && <p className="text-xs text-zinc-500 mt-2 leading-relaxed">{ex.instrucoes}</p>}
-                {ex.dica && <p className="text-xs text-yellow-500/80 mt-1">💡 {ex.dica}</p>}
-                <div className="flex items-center gap-1.5 mt-3">
+                <div className="flex items-center gap-1.5 mt-2.5">
                   <button onClick={() => contador.iniciar([ex])} disabled={contador.preparando}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-60 ${ok ? 'bg-zinc-800 text-zinc-200 border border-zinc-700' : 'bg-green-500 text-zinc-950 hover:bg-green-400'}`}>
+                    className={`flex-1 h-9 rounded-xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-60 ${ok ? 'bg-zinc-800 text-zinc-200 border border-zinc-700' : 'bg-green-500 text-zinc-950 hover:bg-green-400'}`}>
                     ▶ {ok ? 'Refazer' : 'Iniciar'}
                   </button>
-                  <button onClick={() => mover(i, -1)} disabled={i === 0} className="px-2.5 py-2.5 rounded-xl text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para cima">↑</button>
-                  <button onClick={() => mover(i, 1)} disabled={i === exercicios.length - 1} className="px-2.5 py-2.5 rounded-xl text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
-                  <button onClick={() => remover(ex)} className="px-2.5 py-2.5 rounded-xl text-sm bg-zinc-900 text-red-400/80 border border-zinc-800" aria-label="Remover">🗑</button>
+                  <ChaveConcluido ligado={ok} ocupado={marcando === ex.id} onTrocar={() => alternarConcluido(ex)} />
+                  <button onClick={() => mover(i, -1)} disabled={i === 0} className="w-8 h-9 rounded-lg text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para cima">↑</button>
+                  <button onClick={() => mover(i, 1)} disabled={i === exercicios.length - 1} className="w-8 h-9 rounded-lg text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
+                  <button onClick={() => remover(ex)} className="w-8 h-9 rounded-lg text-sm bg-zinc-900 text-red-400/80 border border-zinc-800" aria-label="Remover">🗑</button>
                 </div>
-                {(ok || parcial > 0) && sessao && (
-                  <button onClick={async () => setSessao(await desmarcarExercicio(sessao, ex.id))}
-                    className="mt-2 text-[11px] text-zinc-500 hover:text-zinc-300">Desmarcar conclusão</button>
-                )}
               </div>
             )
           })}

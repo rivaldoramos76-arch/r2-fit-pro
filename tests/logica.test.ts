@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { CATALOGO, GRUPOS } from '../src/data/exercicios'
 import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
 import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar } from '../src/lib/workoutAudio'
-import { passoReps, passoCarga } from '../src/components/treino/AjustesExercicio'
+import { passoReps, passoCarga, lerTempo, mss } from '../src/components/treino/AjustesExercicio'
 import { normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
 let ok = 0
@@ -197,5 +197,9 @@ await t('setas da carga: kg, par de halteres, vazio e texto livre', () => {
   assert.equal(passoCarga('2×10 kg', 1), '2×11 kg'); assert.equal(passoCarga('2x1 kg', -1), '2x1 kg')
   assert.equal(passoCarga('', 1), '1 kg'); assert.equal(passoCarga(undefined, -1), null); assert.equal(passoCarga('1 kg', -1), '')
   assert.equal(passoCarga('elástico médio', 1), null)
+})
+await t('tempo digitado no card: 1:30, 130, 45 e 90', () => {
+  assert.equal(lerTempo('1:30'), 90); assert.equal(lerTempo('130'), 90); assert.equal(lerTempo('45'), 45); assert.equal(lerTempo('90'), 90)
+  assert.equal(lerTempo('2.05'), 125); assert.equal(lerTempo('abc'), null); assert.equal(mss(90), '1:30'); assert.equal(mss(5), '0:05')
 })
 console.log(`\n${ok} testes passaram`)

@@ -976,7 +976,7 @@ await t('contador: modo tela bloqueada usa a faixa contínua', async () => {
   await ctx.close()
 })
 
-await t('editar exercício direto no card: setas e digitação em séries, reps, execução, descanso e carga', async () => {
+await t('card do exercício: séries, reps, execução, descanso e carga lado a lado e chave de concluído', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
   await page.goto(BASE + '/treino/t1/dia/0')
   await page.getByRole('button', { name: 'Aumentar Séries', exact: true }).waitFor()
@@ -984,11 +984,11 @@ await t('editar exercício direto no card: setas e digitação em séries, reps,
   await page.getByRole('button', { name: 'Aumentar Séries', exact: true }).click()
   await page.getByLabel('Repetições', { exact: true }).fill('8-12')
   await page.getByRole('button', { name: 'Aumentar Repetições', exact: true }).click()
-  const desc = page.getByRole('group', { name: 'Descanso' })
-  await desc.getByLabel('Descanso: minutos', { exact: true }).fill('1')
-  await desc.getByLabel('Descanso: segundos', { exact: true }).fill('25')
-  await desc.getByRole('button', { name: 'Aumentar Descanso: segundos', exact: true }).click()
-  await page.getByRole('group', { name: 'Execução' }).getByLabel('Execução: segundos', { exact: true }).fill('45')
+  await page.getByLabel('Descanso', { exact: true }).fill('1:25')
+  await page.getByLabel('Descanso', { exact: true }).press('Enter')
+  await page.getByRole('button', { name: 'Aumentar Descanso', exact: true }).click()
+  await page.getByLabel('Execução', { exact: true }).fill('45')
+  await page.getByLabel('Execução', { exact: true }).press('Enter')
   await page.getByLabel('Carga', { exact: true }).fill('20')
   await page.getByRole('button', { name: 'Aumentar Carga', exact: true }).click()
   await page.screenshot({ path: `${SHOTS}/editar-no-card.png`, fullPage: true })
@@ -1001,8 +1001,18 @@ await t('editar exercício direto no card: setas e digitação em séries, reps,
     if (ex?.carga === '21 kg') break
   }
   assert.equal(ex.series, 3); assert.equal(ex.repeticoes, '9-13')
-  assert.equal(ex.tempo_descanso_segundos, 90); assert.equal(ex.tempo_execucao_segundos, 45); assert.equal(ex.carga, '21 kg')
-  assert.equal(await desc.getByLabel('Descanso: segundos', { exact: true }).inputValue(), '30')
+  assert.equal(ex.tempo_descanso_segundos, 100); assert.equal(ex.tempo_execucao_segundos, 45); assert.equal(ex.carga, '21 kg')
+  assert.equal(await page.getByLabel('Descanso', { exact: true }).inputValue(), '1:40')
+  // Chave "Concluído": marca à mão (todas as séries vão para o diário) e desmarca
+  const chave = page.getByRole('switch', { name: 'Concluído' })
+  assert.equal(await chave.getAttribute('aria-checked'), 'false')
+  await chave.click()
+  await page.waitForFunction(() => document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'true')
+  const marcado = page.gravacoes.filter(g => g.tabela === 'sessoes_treino').pop()
+  assert.deepEqual(marcado.corpo.series_realizadas, { e1: 3 }); assert.equal(marcado.corpo.concluido, true)
+  await page.screenshot({ path: `${SHOTS}/card-concluido.png` })
+  await chave.click()
+  await page.waitForFunction(() => document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'false')
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
