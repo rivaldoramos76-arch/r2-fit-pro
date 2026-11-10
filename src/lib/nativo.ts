@@ -8,6 +8,8 @@ export interface ContadorNativo {
   parar(): Promise<void>
   volume(o: { volume: number; mudo: boolean }): Promise<void>
   telaLigada(o: { ligada: boolean }): Promise<void>
+  /** App 1.3+: notificação de teste igual à de uma fase */
+  testarRelogio(): Promise<void>
 }
 
 interface CapacitorGlobal {

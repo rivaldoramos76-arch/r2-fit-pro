@@ -50,6 +50,14 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
   const [ligado, setLigado] = useState(true)
   // App instalado: notificação a cada fase (TRABALHO / DESCANSO), que vibra e aparece no relógio pareado
   const [avisosRelogio, setAvisosRelogio] = useState(() => { try { return localStorage.getItem('r2-avisos-relogio') !== '0' } catch { return true } })
+  const [msgRelogio, setMsgRelogio] = useState('')
+  const testarRelogio = () => {
+    const n = contadorNativo()
+    if (!n) return
+    n.testarRelogio()
+      .then(() => setMsgRelogio('Aviso de teste enviado. Bloqueie a tela do celular: muitos relógios só mostram com o celular bloqueado. Se não chegar, libere o R2 Fit Pro nas notificações do app do relógio (Galaxy Wearable, Zepp, Mi Fitness, Garmin Connect…).'))
+      .catch(() => setMsgRelogio('Atualize o app para a versão mais nova (r2fitpro.com.br/baixar/r2-fit-pro.apk) para usar o teste.'))
+  }
   const alternarAvisos = () => setAvisosRelogio(v => { try { localStorage.setItem('r2-avisos-relogio', v ? '0' : '1') } catch { /* sem armazenamento */ } return !v })
   const prefsAudio = useRef<PrefsAudio | null>(null)
 
@@ -313,6 +321,12 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
               <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${avisosRelogio ? 'translate-x-4' : ''}`} />
             </span>
           </button>
+          {avisosRelogio && (
+            <div className="mt-1.5">
+              <button type="button" onClick={testarRelogio} className="text-[11px] font-semibold text-green-400">⌚ Testar no relógio</button>
+              {msgRelogio && <p className="text-[11px] text-zinc-500 mt-1 leading-snug">{msgRelogio}</p>}
+            </div>
+          )}
         </>
       ) : vozes === 'fallback' ? (
         <p className="text-[11px] text-zinc-500">Vozes gravadas indisponíveis: usando a voz do navegador. Neste modo, mantenha a tela ligada.</p>

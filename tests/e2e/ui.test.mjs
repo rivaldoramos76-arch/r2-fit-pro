@@ -1078,12 +1078,15 @@ await t('app Android instalado: contador nativo recebe as falas e o cronograma; 
   await page.addInitScript(() => {
     const chamadas = []; window.__nativo = chamadas
     const reg = nome => (...a) => { chamadas.push([nome, a[0]]); return Promise.resolve() }
-    const plugin = { preparar: reg('preparar'), tocar: reg('tocar'), pausar: reg('pausar'), parar: reg('parar'), volume: reg('volume'), telaLigada: reg('telaLigada') }
+    const plugin = { preparar: reg('preparar'), tocar: reg('tocar'), pausar: reg('pausar'), parar: reg('parar'), volume: reg('volume'), telaLigada: reg('telaLigada'), testarRelogio: reg('testarRelogio') }
     window.Capacitor = { isNativePlatform: () => true, isPluginAvailable: n => n === 'ContadorNativo', registerPlugin: () => plugin, Plugins: { ContadorNativo: plugin } }
   })
   await page.goto(BASE + '/treino/t1/dia/0')
   await page.getByText(/App instalado: a voz toca por cima da música/).waitFor()
   assert.equal(await page.getByRole('switch', { name: 'Avisos no relógio' }).getAttribute('aria-checked'), 'true', 'avisos no relógio ligados')
+  await page.getByRole('button', { name: '⌚ Testar no relógio' }).click()
+  await page.getByText(/Aviso de teste enviado/).waitFor()
+  assert.ok(await page.evaluate(() => window.__nativo.some(c => c[0] === 'testarRelogio')), 'teste do relógio pelo app')
   assert.equal(await page.getByRole('radio', { name: /Tela bloqueada/ }).count(), 0, 'no app não precisa escolher o modo')
   await page.getByRole('button', { name: 'Iniciar', exact: true }).click()
   await page.getByRole('button', { name: 'Pausar' }).waitFor()

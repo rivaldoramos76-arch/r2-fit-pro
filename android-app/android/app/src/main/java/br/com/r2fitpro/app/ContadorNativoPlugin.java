@@ -74,6 +74,14 @@ public class ContadorNativoPlugin extends Plugin {
         }
     }
 
+    /** Notificação de teste igual à de uma fase, para conferir se chega no relógio. */
+    @PluginMethod
+    public void testarRelogio(PluginCall call) {
+        pedirNotificacao();
+        ContadorServico.avisarFase(getContext(), "⌚ Teste do relógio", "Se apareceu no relógio, os avisos de trabalho e descanso vão chegar.", 10000);
+        call.resolve();
+    }
+
     @PluginMethod
     public void pausar(PluginCall call) { ContadorMotor.get(getContext()).pausar(); call.resolve(); }
 

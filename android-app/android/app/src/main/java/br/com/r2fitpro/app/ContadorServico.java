@@ -20,11 +20,14 @@ public class ContadorServico extends Service {
     private static final String CANAL_FASES = "fases";
     static final int ID_FIXA = 1, ID_FASE = 2, ID_FASE_B = 3;
     private static int idFase = ID_FASE;
+    /** O serviço está rodando (só então a notificação fixa acompanha a fase). */
+    private static volatile boolean rodando = false;
     private PowerManager.WakeLock trava;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String titulo = intent != null && intent.getStringExtra("titulo") != null ? intent.getStringExtra("titulo") : "Contador";
+        rodando = true;
         Notification n = fixa(this, "R2 Fit Pro · contador ativo", titulo);
         if (Build.VERSION.SDK_INT >= 29) startForeground(ID_FIXA, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         else startForeground(ID_FIXA, n);
@@ -101,8 +104,8 @@ public class ContadorServico extends Service {
         idFase = idFase == ID_FASE ? ID_FASE_B : ID_FASE;
         nm.notify(idFase, n);
         nm.cancel(anterior);
-        // A notificação fixa acompanha a fase atual
-        nm.notify(ID_FIXA, fixa(c, titulo, texto));
+        // A notificação fixa acompanha a fase atual (só com o contador rodando; o teste do relógio não cria uma)
+        if (rodando) nm.notify(ID_FIXA, fixa(c, titulo, texto));
     }
 
     static void limparAvisos(Context c) {
@@ -113,6 +116,7 @@ public class ContadorServico extends Service {
 
     @Override
     public void onDestroy() {
+        rodando = false;
         if (trava != null && trava.isHeld()) trava.release();
         super.onDestroy();
     }
