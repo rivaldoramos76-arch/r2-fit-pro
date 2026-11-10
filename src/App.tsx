@@ -38,6 +38,7 @@ import { ListaAlunos, PainelAluno } from './pages/AlunosPage'
 import { Spinner } from './components/UI'
 import WelcomeSplash from './components/WelcomeSplash'
 import { ehAppNativo } from './lib/nativo'
+import AvisoAtualizacaoApp from './components/AvisoAtualizacaoApp'
 
 function Inicio() {
   const { user, loading } = useAuth()
@@ -133,6 +134,7 @@ export default function App() {
           <AppRoutes />
           <WelcomeSplash />
           <SincronizarApp />
+          <AvisoAtualizacaoApp />
         </AcessoProvider>
       </AuthProvider>
     </BrowserRouter>

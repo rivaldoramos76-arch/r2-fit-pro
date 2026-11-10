@@ -60,3 +60,19 @@ export function lembretesNativo(): LembretesNativo | null {
   pluginLembretes = (c.registerPlugin?.<LembretesNativo>('LembretesNativo') ?? (c.Plugins?.LembretesNativo as LembretesNativo | undefined)) ?? null
   return pluginLembretes
 }
+
+/** Versão do app instalado (versionCode do Android), pelo plugin App do Capacitor. */
+export async function versaoDoApp(): Promise<{ codigo: number; nome: string } | null> {
+  const c = cap()
+  if (!c?.isNativePlatform?.() || !c.isPluginAvailable?.('App')) return null
+  const app = (c.registerPlugin?.<{ getInfo(): Promise<{ build: string; version: string }> }>('App')
+    ?? (c.Plugins?.App as { getInfo(): Promise<{ build: string; version: string }> } | undefined))
+  const info = await app?.getInfo().catch(() => null)
+  return info ? { codigo: Number(info.build) || 0, nome: info.version } : null
+}
+
+/**
+ * Download do APK por um endereço fora do app: o app abre esse link no navegador do celular,
+ * que baixa o arquivo e oferece instalar (dentro do app o download não funciona).
+ */
+export const LINK_APK = 'https://r2-fit-pro.vercel.app/baixar/r2-fit-pro.apk'

@@ -824,6 +824,32 @@ await t('receitas: montar com ingredientes da busca e adicionar ao diário por p
   await ctx.close()
 })
 
+await t('app Android desatualizado: aviso de versão nova com download pelo navegador', async () => {
+  const wv = 'Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0 Mobile Safari/537.36'
+  const versao = await (await fetch(BASE + '/baixar/versao.json')).json()
+  for (const [build, deve] of [[String(versao.versionCode - 1), true], [String(versao.versionCode), false]]) {
+    const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', userAgent: wv, instalado: false })
+    await page.addInitScript(b => {
+      const app = { getInfo: async () => ({ build: b, version: '1.0' }) }
+      window.Capacitor = { isNativePlatform: () => true, isPluginAvailable: n => n === 'App', registerPlugin: () => app, Plugins: { App: app } }
+    }, build)
+    await page.goto(BASE + '/dashboard')
+    const aviso = page.getByRole('status', { name: 'Nova versão do app' })
+    if (deve) {
+      await aviso.waitFor()
+      assert.equal(await aviso.getByRole('link', { name: 'Atualizar agora' }).getAttribute('href'), 'https://r2-fit-pro.vercel.app/baixar/r2-fit-pro.apk', 'abre fora do app')
+      await page.screenshot({ path: `${SHOTS}/app-atualizar.png` })
+      await aviso.getByRole('button', { name: 'Agora não' }).click()
+      await aviso.waitFor({ state: 'detached' })
+    } else {
+      await page.waitForTimeout(1500)
+      assert.equal(await aviso.count(), 0, 'versão em dia: sem aviso')
+    }
+    assert.deepEqual(page.consoleErros, [])
+    await ctx.close()
+  }
+})
+
 await t('lembretes no app Android: alarmes do celular em vez do Web Push', async () => {
   const wv = 'Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0 Mobile Safari/537.36'
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, userAgent: wv, instalado: false })

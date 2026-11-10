@@ -33,7 +33,10 @@ R2_ASSINATURA=/caminho/assinatura.properties ./gradlew assembleRelease
 ```
 
 Antes de gerar de novo, aumente `versionCode` (e `versionName`) em `android/app/build.gradle`.
-Depois copie o APK para `public/baixar/r2-fit-pro.apk` (download em https://r2fitpro.com.br/baixar/r2-fit-pro.apk).
+Depois copie o APK para `public/baixar/r2-fit-pro.apk` (download em https://r2fitpro.com.br/baixar/r2-fit-pro.apk)
+e atualize `public/baixar/versao.json` (`versionCode`, `versionName`, `novidades`). Ao publicar o site, quem
+estiver com uma versão menor vê o aviso "Nova versão do R2 Fit Pro" (`src/components/AvisoAtualizacaoApp.tsx`);
+o botão abre o download pelo navegador do celular (endereço r2-fit-pro.vercel.app, fora do app).
 
 ## Assinatura
 

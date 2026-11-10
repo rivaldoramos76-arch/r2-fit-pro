@@ -56,6 +56,15 @@
           "value": "no-cache"
         }
       ]
+    },
+    {
+      "source": "/baixar/versao.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
     }
   ]
 }
