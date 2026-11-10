@@ -7,6 +7,7 @@ import { chamarApi, ErroApi } from '../lib/api'
 import { carregarPreferencias, salvarPreferencias, type Preferencias } from '../lib/preferencias'
 import { traduzirErroAuth, validarSenha } from '../lib/formatos'
 import { Button, Card, Input, Select, Spinner, Textarea } from '../components/UI'
+import { CartaoVersaoApp } from '../components/AvisoAtualizacaoApp'
 
 function Interruptor({ rotulo, descricao, valor, onChange, desabilitado }: { rotulo: string; descricao?: string; valor: boolean; onChange: (v: boolean) => void; desabilitado?: boolean }) {
   return (
@@ -121,6 +122,8 @@ export default function ConfiguracoesPage() {
     <div className="flex flex-col gap-5">
       <h1 className="text-2xl font-bold">Configurações</h1>
       {msg && <p role={msg.tipo === 'erro' ? 'alert' : 'status'} className={`text-sm rounded-xl px-3 py-2 border ${msg.tipo === 'erro' ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-green-400 bg-green-500/10 border-green-500/20'}`}>{msg.texto}</p>}
+
+      <CartaoVersaoApp />
 
       <Card>
         <h2 className="font-semibold">Notificações</h2>

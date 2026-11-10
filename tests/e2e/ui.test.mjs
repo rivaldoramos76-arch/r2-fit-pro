@@ -837,13 +837,18 @@ await t('app Android desatualizado: aviso de versão nova com download pelo nave
     const aviso = page.getByRole('status', { name: 'Nova versão do app' })
     if (deve) {
       await aviso.waitFor()
-      assert.equal(await aviso.getByRole('link', { name: 'Atualizar agora' }).getAttribute('href'), 'https://r2-fit-pro.vercel.app/baixar/r2-fit-pro.apk', 'abre fora do app')
+      assert.equal(await aviso.getByRole('link', { name: 'Atualizar agora' }).getAttribute('href'), `https://r2-fit-pro.vercel.app/baixar/${versao.arquivo}`, 'abre fora do app, arquivo com a versão no nome')
       await page.screenshot({ path: `${SHOTS}/app-atualizar.png` })
       await aviso.getByRole('button', { name: 'Agora não' }).click()
       await aviso.waitFor({ state: 'detached' })
+      await page.goto(BASE + '/configuracoes')
+      await page.getByText(`Versão instalada: 1.0 (${build})`).waitFor()
+      assert.equal(await page.getByRole('link', { name: `Baixar a versão ${versao.versionName}` }).count(), 1, 'atualizar também por Configurações')
     } else {
       await page.waitForTimeout(1500)
       assert.equal(await aviso.count(), 0, 'versão em dia: sem aviso')
+      await page.goto(BASE + '/configuracoes')
+      await page.getByText('Você está na versão mais nova.').waitFor()
     }
     assert.deepEqual(page.consoleErros, [])
     await ctx.close()
