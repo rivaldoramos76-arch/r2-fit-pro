@@ -18,7 +18,8 @@ import androidx.core.app.NotificationCompat;
 public class ContadorServico extends Service {
     private static final String CANAL = "contador";
     private static final String CANAL_FASES = "fases";
-    static final int ID_FIXA = 1, ID_FASE = 2;
+    static final int ID_FIXA = 1, ID_FASE = 2, ID_FASE_B = 3;
+    private static int idFase = ID_FASE;
     private PowerManager.WakeLock trava;
 
     @Override
@@ -91,15 +92,23 @@ public class ContadorServico extends Service {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVibrate(new long[] { 0, 250, 120, 250 })
             .setTimeoutAfter(Math.max(3000, durMs + 1500))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setStyle(new NotificationCompat.BigTextStyle().bigText(texto))
             .build();
-        nm.cancel(ID_FASE);
-        nm.notify(ID_FASE, n);
+        // Cada fase é uma notificação nova (id alternado): os apps de relógio repassam notificação nova,
+        // mas muitos ignoram a atualização de uma que já existe. A anterior sai logo depois.
+        int anterior = idFase;
+        idFase = idFase == ID_FASE ? ID_FASE_B : ID_FASE;
+        nm.notify(idFase, n);
+        nm.cancel(anterior);
         // A notificação fixa acompanha a fase atual
         nm.notify(ID_FIXA, fixa(c, titulo, texto));
     }
 
     static void limparAvisos(Context c) {
-        ((NotificationManager) c.getSystemService(NOTIFICATION_SERVICE)).cancel(ID_FASE);
+        NotificationManager nm = (NotificationManager) c.getSystemService(NOTIFICATION_SERVICE);
+        nm.cancel(ID_FASE);
+        nm.cancel(ID_FASE_B);
     }
 
     @Override
