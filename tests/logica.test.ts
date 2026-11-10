@@ -3,7 +3,7 @@ import { CATALOGO, GRUPOS } from '../src/data/exercicios'
 import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
 import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar, chaveSerie, textoDoClipe } from '../src/lib/workoutAudio'
 import { passoReps, passoCarga, lerTempo, mss } from '../src/components/treino/AjustesExercicio'
-import { normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
+import { passoTempo, normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
 let ok = 0
 const t = (n: string, f: () => void | Promise<void>) => Promise.resolve(f()).then(() => { ok++; console.log('✓', n) })
@@ -200,6 +200,11 @@ await t('setas da carga: kg, par de halteres, vazio e texto livre', () => {
   assert.equal(passoCarga('2×10 kg', 1), '2×11 kg'); assert.equal(passoCarga('2x1 kg', -1), '2x1 kg')
   assert.equal(passoCarga('', 1), '1 kg'); assert.equal(passoCarga(undefined, -1), null); assert.equal(passoCarga('1 kg', -1), '')
   assert.equal(passoCarga('elástico médio', 1), null)
+})
+await t('setas de execução e descanso: sempre de 5 em 5 segundos', () => {
+  assert.equal(passoTempo(60, 1, 0), 65); assert.equal(passoTempo(60, -1, 0), 55); assert.equal(passoTempo(90, 1, 0), 95)
+  assert.equal(passoTempo(3, 1, 5), 5); assert.equal(passoTempo(3, -1, 0), 0); assert.equal(passoTempo(47, 1, 0), 50); assert.equal(passoTempo(47, -1, 0), 45)
+  assert.equal(passoTempo(5, -1, 5), 5); assert.equal(passoTempo(0, -1, 0), 0); assert.equal(passoTempo(600, 1, 0), 600)
 })
 await t('tempo digitado no card: 1:30, 130, 45 e 90', () => {
   assert.equal(lerTempo('1:30'), 90); assert.equal(lerTempo('130'), 90); assert.equal(lerTempo('45'), 45); assert.equal(lerTempo('90'), 90)

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ExercicioPlano } from '../../lib/treinoModel'
+import { passoTempo, type ExercicioPlano } from '../../lib/treinoModel'
 
 type Valores = Pick<ExercicioPlano, 'series' | 'repeticoes' | 'tempo_execucao_segundos' | 'tempo_descanso_segundos' | 'carga'>
 const valoresDe = (e: ExercicioPlano): Valores => ({
@@ -106,12 +106,12 @@ export default function AjustesExercicio({ ex, onSalvar }: { ex: ExercicioPlano;
 
   const repsMais = passoReps(v.repeticoes, 1), repsMenos = passoReps(v.repeticoes, -1)
   const cargaMais = passoCarga(v.carga, 1), cargaMenos = passoCarga(v.carga, -1)
-  const tempo = (campo: 'tempo_execucao_segundos' | 'tempo_descanso_segundos', rotulo: string, passo: number, min: number) => {
+  const tempo = (campo: 'tempo_execucao_segundos' | 'tempo_descanso_segundos', rotulo: string, min: number) => {
     const t = v[campo]
     return {
       rotulo, valor: mss(t), teclado: 'numeric' as const,
       aoSair: (txt: string) => { const s = lerTempo(txt); if (s !== null) mudar({ [campo]: lim(s, min, 600) }) },
-      onMais: () => mudar({ [campo]: lim(t + passo, min, 600) }), onMenos: () => mudar({ [campo]: lim(t - passo, min, 600) }),
+      onMais: () => mudar({ [campo]: passoTempo(t, 1, min) }), onMenos: () => mudar({ [campo]: passoTempo(t, -1, min) }),
       podeMais: t < 600, podeMenos: t > min,
     }
   }
@@ -128,8 +128,8 @@ export default function AjustesExercicio({ ex, onSalvar }: { ex: ExercicioPlano;
       onMais: () => { if (repsMais) mudar({ repeticoes: repsMais }) }, onMenos: () => { if (repsMenos) mudar({ repeticoes: repsMenos }) },
       podeMais: !!repsMais, podeMenos: !!repsMenos && repsMenos !== v.repeticoes,
     },
-    exec: { titulo: 'Execução', ...tempo('tempo_execucao_segundos', 'Execução', 5, 5) },
-    desc: { titulo: 'Descanso', ...tempo('tempo_descanso_segundos', 'Descanso', 15, 0) },
+    exec: { titulo: 'Execução', ...tempo('tempo_execucao_segundos', 'Execução', 5) },
+    desc: { titulo: 'Descanso', ...tempo('tempo_descanso_segundos', 'Descanso', 0) },
     carga: {
       titulo: 'Carga', rotulo: 'Carga', valor: v.carga ?? '', teclado: 'text',
       onTexto: t => mudar({ carga: t.slice(0, 40) }),

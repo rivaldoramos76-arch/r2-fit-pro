@@ -294,3 +294,9 @@ export function proximoTreino(plano: PlanoTreino, ultimoDiaConcluido: number | n
   const idx = plano.dias.findIndex(d => d.letra === prox)
   return idx >= 0 ? idx : 0
 }
+
+/** Tempo de 5 em 5 s, sempre caindo num múltiplo de 5 (0:03 → ▲ 0:05, ▼ 0:00), dentro de [min, max]. */
+export function passoTempo(seg: number, dir: 1 | -1, min: number, max = 600): number {
+  const alvo = dir > 0 ? Math.floor(seg / 5) * 5 + 5 : Math.ceil(seg / 5) * 5 - 5
+  return Math.min(max, Math.max(min, alvo))
+}

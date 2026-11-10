@@ -1069,8 +1069,8 @@ await t('card do exercício: séries, reps, execução, descanso e carga lado a 
     if (ex?.carga === '21 kg') break
   }
   assert.equal(ex.series, 3); assert.equal(ex.repeticoes, '9-13')
-  assert.equal(ex.tempo_descanso_segundos, 100); assert.equal(ex.tempo_execucao_segundos, 45); assert.equal(ex.carga, '21 kg')
-  assert.equal(await chip('Descanso').innerText().then(t => t.replace(/\s+/g, ' ').trim()), 'DESCANSO 1:40')
+  assert.equal(ex.tempo_descanso_segundos, 90, 'descanso sobe de 5 em 5'); assert.equal(ex.tempo_execucao_segundos, 45); assert.equal(ex.carga, '21 kg')
+  assert.equal(await chip('Descanso').innerText().then(t => t.replace(/\s+/g, ' ').trim()), 'DESCANSO 1:30')
   await chip('Carga').click()
   assert.equal(await page.getByRole('button', { name: 'Aumentar Carga', exact: true }).count(), 0, 'tocar de novo fecha a barra')
   // Chave "Concluído": marca à mão (todas as séries vão para o diário) e desmarca

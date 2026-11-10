@@ -405,6 +405,7 @@ export class TreinoPlayer {
   /** App fora da frente ou tela bloqueada: as falas passam a ser agendadas direto no Web Audio. */
   private emSegundoPlano = false
   private manterVivo: AudioBufferSourceNode | null = null
+  private inicioFonte = new WeakMap<AudioBufferSourceNode, number>()
   // modo voz
   private t0 = 0
   private pausadoEm: number | null = null
@@ -513,26 +514,33 @@ export class TreinoPlayer {
     if (this.modo !== 'mix' || !this.abaixarMusica || !this.ctx || this.parado) return
     const ctx = this.ctx
     this.emSegundoPlano = oculto
-    for (const f of this.fontes) { try { f.stop() } catch { /* já parou */ } }
-    this.fontes = []
-    const t = ctx.currentTime - this.t0Ctx
+    const agora = ctx.currentTime
+    // A fala que já começou vai até o fim (não corta "Próximo exercício" ao sair ou voltar); só as futuras são refeitas
+    const ficam = this.fontes.filter(f => (this.inicioFonte.get(f) ?? Infinity) <= agora + 0.02)
+    for (const f of this.fontes) if (!ficam.includes(f)) { try { f.stop() } catch { /* já parou */ } }
+    this.fontes = ficam
+    const t = agora - this.t0Ctx
+    const cues = this.crono.cues
     if (!oculto) {
-      // De volta: o <audio> reassume a partir do próximo aviso
-      this.proximoDuck = this.crono.cues.findIndex(c => c.t >= t - 0.05)
-      if (this.proximoDuck < 0) this.proximoDuck = this.crono.cues.length
+      // De volta: o <audio> reassume a partir do próximo aviso que ainda não começou
+      this.proximoDuck = cues.findIndex(c => c.t > t + 0.02)
+      if (this.proximoDuck < 0) this.proximoDuck = cues.length
       return
     }
-    this.soltarMusica()
-    for (const cue of this.crono.cues) {
-      if (cue.t < t + 0.05) continue
+    // Indo para segundo plano: a fala que o <audio> está tocando termina sozinha; as que faltam vão para o Web Audio
+    for (let i = this.proximoDuck; i < cues.length; i++) {
+      const cue = cues[i]
       const b = this.buffers[cue.clip]
-      if (!b) continue
+      if (!b || cue.t < t - 0.5) continue
       const src = ctx.createBufferSource()
       src.buffer = b
       src.connect(this.entrada ?? this.ganho!)
-      src.start(this.t0Ctx + cue.t)
+      const quando = Math.max(agora, this.t0Ctx + cue.t)
+      src.start(quando)
+      this.inicioFonte.set(src, quando)
       this.fontes.push(src)
     }
+    this.proximoDuck = cues.length
   }
 
   private prepararAbaixar(ctx: Ctx) {
@@ -598,6 +606,7 @@ export class TreinoPlayer {
       src.buffer = b
       src.connect(this.entrada ?? this.ganho!)
       src.start(this.t0Ctx + cue.t)
+      this.inicioFonte.set(src, this.t0Ctx + cue.t)
       this.fontes.push(src)
     }
     this.interrompido = false

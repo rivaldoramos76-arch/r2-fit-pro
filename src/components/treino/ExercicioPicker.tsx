@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Equipamento, ExercicioCatalogo, GrupoMuscular } from '../../data/exercicios'
-import { uid, type ExercicioPlano } from '../../lib/treinoModel'
+import { passoTempo, uid, type ExercicioPlano } from '../../lib/treinoModel'
 import { Spinner } from '../UI'
 
 type ModuloBusca = typeof import('../../lib/busca') & typeof import('../../data/exercicios')
@@ -50,13 +50,13 @@ function Tempo({ label, valor, min, max, sufixo, onChange }: {
     <div className="flex flex-col gap-1.5 col-span-2" role="group" aria-label={label}>
       <span className="text-xs text-zinc-400">{label} <span className="text-zinc-600">(min : seg)</span></span>
       <div className="flex items-center gap-1.5">
-        <button type="button" onClick={() => onChange(lim(valor - 5))} aria-label={`Diminuir ${label}`} className="w-10 h-10 shrink-0 rounded-xl bg-zinc-800 text-zinc-100 font-bold">−</button>
+        <button type="button" onClick={() => onChange(passoTempo(valor, -1, min, max))} aria-label={`Diminuir ${label}`} className="w-10 h-10 shrink-0 rounded-xl bg-zinc-800 text-zinc-100 font-bold">−</button>
         <input type="number" inputMode="numeric" min={0} max={Math.floor(max / 60)} value={m} aria-label={`${label}: minutos`}
           onChange={ev => onChange(lim(num(ev.target.value) * 60 + s))} className={caixa} />
         <span className="text-zinc-500 font-bold">:</span>
         <input type="number" inputMode="numeric" min={0} max={59} value={String(s).padStart(2, '0')} aria-label={`${label}: segundos`}
           onChange={ev => onChange(lim(m * 60 + Math.min(59, num(ev.target.value))))} className={caixa} />
-        <button type="button" onClick={() => onChange(lim(valor + 5))} aria-label={`Aumentar ${label}`} className="w-10 h-10 shrink-0 rounded-xl bg-zinc-800 text-zinc-100 font-bold">+</button>
+        <button type="button" onClick={() => onChange(passoTempo(valor, 1, min, max))} aria-label={`Aumentar ${label}`} className="w-10 h-10 shrink-0 rounded-xl bg-zinc-800 text-zinc-100 font-bold">+</button>
         {sufixo && <span className="text-[11px] text-zinc-600 ml-1 leading-tight">{sufixo}</span>}
       </div>
     </div>
