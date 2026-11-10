@@ -1087,6 +1087,10 @@ await t('app Android instalado: contador nativo recebe as falas e o cronograma; 
   await page.getByRole('button', { name: '⌚ Testar no relógio' }).click()
   await page.getByText(/Aviso de teste enviado/).waitFor()
   assert.ok(await page.evaluate(() => window.__nativo.some(c => c[0] === 'testarRelogio')), 'teste do relógio pelo app')
+  // App instalado antigo, sem o teste: a chamada falha na hora e a tela pede para atualizar
+  await page.evaluate(() => { window.Capacitor.Plugins.ContadorNativo.testarRelogio = () => { throw new Error('not implemented') } })
+  await page.getByRole('button', { name: '⌚ Testar no relógio' }).click()
+  await page.getByText(/Atualize o app para a versão mais nova/).waitFor()
   assert.equal(await page.getByRole('radio', { name: /Tela bloqueada/ }).count(), 0, 'no app não precisa escolher o modo')
   await page.getByRole('button', { name: 'Iniciar', exact: true }).click()
   await page.getByRole('button', { name: 'Pausar' }).waitFor()
