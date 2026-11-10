@@ -11,6 +11,11 @@ sem gerar APK novo. A parte nativa existe para o que o navegador não deixa:
   some ao fim da fase (canal "Fases do treino (relógio)"). O celular repassa ao relógio/pulseira pareado.
   A notificação fixa do contador mostra a fase atual e não vai para o relógio. Chave "Avisos no relógio" nas
   opções de som do treino (só dentro do app).
+- **Lembretes** (`Lembretes`, `LembreteAlarme`, `LembretesNativoPlugin`): o Web Push não funciona dentro do app,
+  então os horários salvos em Lembretes viram alarmes do Android (reagendados ao reiniciar o celular). Na hora,
+  o app pergunta à Edge Function `r2-app` (`/lembrete`) se ainda vale avisar (refeição já registrada não toca);
+  sem internet, mostra o aviso padrão. O aparelho é registrado em `push_inscricoes` com endereço
+  `https://app.r2fitpro.com.br/android/<hash>` (`/inscrever`, `/desinscrever`), que o envio por Web Push ignora.
 - Tela sempre ligada durante o contador, câmera para o código de barras.
 
 Só é preciso gerar APK novo quando muda algo nesta pasta (código nativo, ícone, permissões).

@@ -36,6 +36,7 @@ Deno.serve(async req => {
   const ids = (adms ?? []).map(a => a.user_id as string).filter(id => id !== t.user_id)
   if (!ids.length) return resposta(200, { ok: true, enviados: 0 })
   const { data: inscricoes } = await admin.from('push_inscricoes').select('id, endpoint, p256dh, auth').in('user_id', ids)
+    .not('endpoint', 'like', 'https://app.r2fitpro.com.br/%') // app Android não recebe Web Push
   if (!inscricoes?.length) return resposta(200, { ok: true, enviados: 0 })
   const { data: cfg } = await admin.from('push_config').select('vapid_publica, vapid_privada').eq('id', true).maybeSingle()
   if (!cfg) return resposta(200, { ok: true, enviados: 0, sem_chaves: true })

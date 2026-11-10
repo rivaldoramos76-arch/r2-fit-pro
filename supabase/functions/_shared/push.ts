@@ -3,7 +3,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.49.4'
 import webpush from 'npm:web-push@3.6.7'
 import { log } from './http.ts'
 import { siteUrl } from './email.ts'
-import type { MensagemPush } from './lembretesLogic.ts'
+import { ehAparelhoApp, type MensagemPush } from './lembretesLogic.ts'
 
 interface Chaves { publica: string; privada: string }
 interface Inscricao { id: string; endpoint: string; p256dh: string; auth: string }
@@ -26,7 +26,9 @@ export async function chavesVapid(admin: SupabaseClient): Promise<Chaves> {
 }
 
 /** Envia uma notificação; inscrições que o navegador descartou (404/410) são apagadas. */
-export async function enviarPush(admin: SupabaseClient, chaves: Chaves, i: Inscricao, msg: MensagemPush): Promise<'ok' | 'expirada' | 'erro'> {
+export async function enviarPush(admin: SupabaseClient, chaves: Chaves, i: Inscricao, msg: MensagemPush): Promise<'ok' | 'expirada' | 'erro' | 'app'> {
+  // App Android: não usa Web Push (os lembretes são agendados no próprio aparelho)
+  if (ehAparelhoApp(i.endpoint)) return 'app'
   try {
     const req = webpush.generateRequestDetails(
       { endpoint: i.endpoint, keys: { p256dh: i.p256dh, auth: i.auth } },

@@ -30,3 +30,10 @@ export function lerInscricao(corpo: unknown): { endpoint: string; p256dh: string
   if (!/^[\w-]{20,200}$/.test(p256dh) || !/^[\w-]{8,100}$/.test(auth)) return null
   return { endpoint, p256dh, auth }
 }
+
+/** Aparelhos do app Android: guardados em push_inscricoes com este endereço (não recebem Web Push;
+ *  o próprio app agenda os alarmes e pergunta ao servidor, na hora, se o lembrete ainda vale). */
+export const ENDPOINT_APP = 'https://app.r2fitpro.com.br/android/'
+export const ehAparelhoApp = (endpoint: string) => endpoint.startsWith(ENDPOINT_APP)
+/** Identificador aleatório que o app gera e guarda (não é segredo de conta: só permite consultar lembretes). */
+export const tokenAppValido = (t: unknown): t is string => typeof t === 'string' && /^[A-Za-z0-9_-]{32,128}$/.test(t)

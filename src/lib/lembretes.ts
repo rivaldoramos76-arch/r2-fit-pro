@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import { chamarApi } from './api'
 import { detectarSistema, estaInstalado } from './instalacao'
 import { normalizarLembrete, type Lembrete } from './lembretesBase'
+import { lembretesNativo } from './nativo'
 
 // Lembretes por notificação: horários no banco (RLS) e inscrição do aparelho via Edge Function.
 
@@ -31,6 +32,19 @@ export async function salvarLembretes(userId: string, lista: Lembrete[], removid
     const { error } = await supabase.from('lembretes').insert(novos)
     if (error) throw new Error(error.message)
   }
+  await sincronizarLembretesApp(userId).catch(() => {})
+}
+
+/** App Android: passa os horários ligados para os alarmes do celular (chamado ao salvar e ao abrir o app). */
+export async function sincronizarLembretesApp(userId: string) {
+  const n = lembretesNativo()
+  if (!n) return
+  const lista = await listarLembretes(userId)
+  await n.agendar({
+    itens: lista.filter(l => l.ativo && l.id).map(l => ({
+      id: l.id!, tipo: l.tipo, hora: Number(l.horario.slice(0, 2)), minuto: Number(l.horario.slice(3, 5)), dias: l.dias,
+    })),
+  })
 }
 
 // --- Notificações neste aparelho ---
@@ -44,6 +58,11 @@ async function registro(): Promise<ServiceWorkerRegistration> {
 }
 
 export async function estadoPush(): Promise<EstadoPush> {
+  const n = lembretesNativo()
+  if (n) {
+    const e = await n.estado()
+    return e.permissao === 'denied' ? 'negado' : e.ativo && e.permissao === 'granted' ? 'ativo' : 'inativo'
+  }
   // No iPhone, notificação só funciona com o app adicionado à Tela de Início (iOS 16.4+)
   if (detectarSistema() === 'iphone' && !estaInstalado()) return 'instalar'
   if (!suporta()) return 'sem_suporte'
@@ -60,6 +79,15 @@ function chaveParaBytes(base64url: string): Uint8Array {
 
 /** Pede permissão, inscreve o aparelho no serviço de notificações e avisa o servidor. */
 export async function ativarPush(): Promise<EstadoPush> {
+  const n = lembretesNativo()
+  if (n) {
+    const e = await n.ativar()
+    if (e.permissao !== 'granted') return e.permissao === 'denied' ? 'negado' : 'inativo'
+    await chamarApi('app/inscrever', { token: e.token })
+    const { data } = await supabase.auth.getSession()
+    if (data.session?.user) await sincronizarLembretesApp(data.session.user.id)
+    return 'ativo'
+  }
   if (!suporta()) return 'sem_suporte'
   const permissao = await Notification.requestPermission()
   if (permissao !== 'granted') return permissao === 'denied' ? 'negado' : 'inativo'
@@ -75,6 +103,12 @@ export async function ativarPush(): Promise<EstadoPush> {
 }
 
 export async function desativarPush(): Promise<void> {
+  const n = lembretesNativo()
+  if (n) {
+    const e = await n.desativar()
+    await chamarApi('app/desinscrever', { token: e.token }).catch(() => {})
+    return
+  }
   const reg = await navigator.serviceWorker.getRegistration()
   const inscricao = await reg?.pushManager.getSubscription()
   if (!inscricao) return
@@ -82,4 +116,8 @@ export async function desativarPush(): Promise<void> {
   await inscricao.unsubscribe()
 }
 
-export const testarPush = () => chamarApi<{ enviados: number; falhas: number }>('lembretes', { acao: 'testar' })
+export async function testarPush(): Promise<{ enviados: number; falhas: number }> {
+  const n = lembretesNativo()
+  if (n) { await n.testar(); return { enviados: 1, falhas: 0 } }
+  return chamarApi<{ enviados: number; falhas: number }>('lembretes', { acao: 'testar' })
+}

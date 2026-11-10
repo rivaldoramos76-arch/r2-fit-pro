@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { AcessoProvider } from './context/AcessoContext'
@@ -36,6 +37,7 @@ import AmigosPage from './pages/AmigosPage'
 import { ListaAlunos, PainelAluno } from './pages/AlunosPage'
 import { Spinner } from './components/UI'
 import WelcomeSplash from './components/WelcomeSplash'
+import { ehAppNativo } from './lib/nativo'
 
 function Inicio() {
   const { user, loading } = useAuth()
@@ -114,6 +116,15 @@ function AppRoutes() {
   )
 }
 
+/** App Android: ao abrir (logado), confere os alarmes de lembrete com os horários salvos. */
+function SincronizarApp() {
+  const { user } = useAuth()
+  useEffect(() => {
+    if (user && ehAppNativo()) import('./lib/lembretes').then(m => m.sincronizarLembretesApp(user.id)).catch(() => {})
+  }, [user])
+  return null
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -121,6 +132,7 @@ export default function App() {
         <AcessoProvider>
           <AppRoutes />
           <WelcomeSplash />
+          <SincronizarApp />
         </AcessoProvider>
       </AuthProvider>
     </BrowserRouter>

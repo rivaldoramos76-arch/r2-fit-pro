@@ -39,3 +39,22 @@ export async function blobParaBase64(b: Blob): Promise<string> {
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
   return btoa(s)
 }
+
+export interface LembretesNativo {
+  estado(): Promise<EstadoLembretesApp>
+  ativar(): Promise<EstadoLembretesApp>
+  desativar(): Promise<EstadoLembretesApp>
+  agendar(o: { itens: { id: string; tipo: string; hora: number; minuto: number; dias: number[] }[] }): Promise<EstadoLembretesApp>
+  testar(): Promise<void>
+}
+export interface EstadoLembretesApp { permissao: 'granted' | 'denied' | 'prompt'; ativo: boolean; token: string }
+
+let pluginLembretes: LembretesNativo | null | undefined
+/** Lembretes do app Android: alarmes no próprio celular (o Web Push não funciona dentro do app). */
+export function lembretesNativo(): LembretesNativo | null {
+  if (pluginLembretes !== undefined) return pluginLembretes
+  const c = cap()
+  if (!c?.isNativePlatform?.() || !c.isPluginAvailable?.('LembretesNativo')) return (pluginLembretes = null)
+  pluginLembretes = (c.registerPlugin?.<LembretesNativo>('LembretesNativo') ?? (c.Plugins?.LembretesNativo as LembretesNativo | undefined)) ?? null
+  return pluginLembretes
+}

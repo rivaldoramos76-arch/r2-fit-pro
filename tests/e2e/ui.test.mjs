@@ -173,6 +173,7 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       if (metodo !== 'GET') { let corpo = null; try { corpo = rota.request().postDataJSON() } catch { /* DELETE sem corpo */ } gravacoes.push({ tabela: 'lembretes', metodo, corpo, url: rota.request().url() }); return json([]) }
       return json(LEMBRETES)
     }
+    if (p.startsWith('/functions/v1/r2-app/')) { gravacoes.push({ tabela: 'r2-app' + p.slice('/functions/v1/r2-app'.length), corpo: rota.request().postDataJSON() }); return json({ ok: true }) }
     if (p.startsWith('/functions/v1/r2-api/lembretes')) {
       const corpo = rota.request().postDataJSON()
       gravacoes.push({ tabela: 'r2-api/lembretes', corpo })
@@ -819,6 +820,41 @@ await t('receitas: montar com ingredientes da busca e adicionar ao diário por p
   await page.waitForTimeout(300)
   const prato = page.gravacoes.filter(x => x.tabela === 'food_logs' && x.metodo === 'POST').pop()?.corpo?.[0]
   assert.equal(prato?.quantidade, '150 g'); assert.ok(Math.abs(prato?.calorias - 148) <= 1, `150 g ≈ 148 kcal (${prato?.calorias})`); assert.equal(prato?.origem, 'receita')
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('lembretes no app Android: alarmes do celular em vez do Web Push', async () => {
+  const wv = 'Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0 Mobile Safari/537.36'
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, userAgent: wv, instalado: false })
+  await page.addInitScript(() => {
+    const chamadas = []; window.__nativo = chamadas
+    let estado = { permissao: 'prompt', ativo: false, token: 'a'.repeat(64) }
+    const lembretes = {
+      estado: async () => estado,
+      ativar: async () => { chamadas.push(['ativar']); estado = { ...estado, permissao: 'granted', ativo: true }; return estado },
+      desativar: async () => { chamadas.push(['desativar']); estado = { ...estado, ativo: false }; return estado },
+      agendar: async o => { chamadas.push(['agendar', o]); return estado },
+      testar: async () => { chamadas.push(['testar']) },
+    }
+    window.Capacitor = { isNativePlatform: () => true, isPluginAvailable: n => n === 'LembretesNativo', registerPlugin: n => (n === 'LembretesNativo' ? lembretes : null), Plugins: { LembretesNativo: lembretes } }
+  })
+  await page.goto(BASE + '/lembretes')
+  const aparelho = page.getByRole('region', { name: 'Notificações neste aparelho' })
+  await aparelho.getByRole('button', { name: 'Ativar notificações' }).click()
+  await aparelho.getByText('Notificações ativas neste aparelho').waitFor()
+  const insc = page.gravacoes.find(g => g.tabela === 'r2-app/inscrever')
+  assert.equal(insc?.corpo.token, 'a'.repeat(64), 'aparelho registrado no servidor')
+  assert.ok(!page.gravacoes.some(g => g.tabela === 'r2-api/lembretes' && g.corpo.acao === 'chave'), 'sem Web Push no app')
+  const ch = await page.evaluate(() => window.__nativo)
+  const ag = ch.filter(c => c[0] === 'agendar').pop()?.[1]
+  assert.ok(ag?.itens.length > 0 && ag.itens.every(i => i.id && i.tipo && i.hora >= 0 && i.minuto >= 0 && i.dias.length), 'horários passados para os alarmes')
+  await aparelho.getByRole('button', { name: 'Enviar teste' }).click()
+  await page.waitForFunction(() => window.__nativo.some(c => c[0] === 'testar'))
+  await page.screenshot({ path: `${SHOTS}/lembretes-app.png` })
+  await aparelho.getByRole('button', { name: 'Desativar' }).click()
+  await aparelho.getByRole('button', { name: 'Ativar notificações' }).waitFor()
+  assert.ok(page.gravacoes.some(g => g.tabela === 'r2-app/desinscrever'))
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })

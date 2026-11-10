@@ -47,7 +47,7 @@ export async function handleLembretes(req: Request): Promise<Response> {
       const chaves = await chavesVapid(admin)
       const msg = { titulo: 'Lembretes ativados ✅', corpo: 'É assim que os avisos do R2 Fit Pro vão aparecer.', url: '/lembretes', tag: 'r2-teste' }
       const resultados = await Promise.all(inscricoes.map(i => enviarPush(admin, chaves, i, msg)))
-      return json(req, { enviados: resultados.filter(r => r === 'ok').length, falhas: resultados.filter(r => r !== 'ok').length })
+      return json(req, { enviados: resultados.filter(r => r === 'ok').length, falhas: resultados.filter(r => r === 'erro' || r === 'expirada').length })
     }
 
     throw new ErroHttp(400, 'Ação inválida')
@@ -75,9 +75,10 @@ export async function handleCronLembretes(req: Request): Promise<Response> {
       return msg ? (inscricoes ?? []).filter(i => i.user_id === d.user_id).map(i => enviarPush(admin, chaves, i, msg)) : []
     })
     for (const s of await Promise.all(envios)) {
-      if (s === 'ok') r.enviados++; else if (s === 'expirada') r.expiradas++; else r.falhas++
+      if (s === 'ok') r.enviados++; else if (s === 'expirada') r.expiradas++; else if (s === 'erro') r.falhas++
     }
   }
   log('info', 'cron_lembretes', r)
   return resposta(200, { ok: true, ...r })
 }
+

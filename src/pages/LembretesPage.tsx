@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { ativarPush, desativarPush, estadoPush, listarLembretes, salvarLembretes, testarPush, type EstadoPush } from '../lib/lembretes'
 import { comPadroes, DIAS_CURTOS, MAX_AGUA, proximoHorarioAgua, REFEICOES, resumoDias, TODOS_OS_DIAS, type Lembrete, type TipoLembrete } from '../lib/lembretesBase'
 import { ErroApi } from '../lib/api'
+import { ehAppNativo } from '../lib/nativo'
 import { Button, Spinner } from '../components/UI'
 
 function Chave({ ativo, onChange, rotulo }: { ativo: boolean; onChange: (v: boolean) => void; rotulo: string }) {
@@ -69,7 +70,9 @@ function Aparelho({ estado, onMudar }: { estado: EstadoPush | null; onMudar: (e:
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-zinc-100">{estado === 'ativo' ? 'Notificações ativas neste aparelho' : 'Notificações neste aparelho'}</p>
           {estado === 'inativo' && <p className="text-sm text-zinc-400 mt-0.5">Ative para receber os lembretes mesmo com o app fechado.</p>}
-          {estado === 'negado' && <p className="text-sm text-zinc-400 mt-0.5">As notificações foram bloqueadas. Libere nas configurações do navegador (ícone de cadeado ao lado do endereço → Notificações → Permitir) e volte aqui.</p>}
+          {estado === 'negado' && (ehAppNativo()
+            ? <p className="text-sm text-zinc-400 mt-0.5">As notificações do app estão bloqueadas. Libere em Configurações do Android → Apps → R2 Fit Pro → Notificações e volte aqui.</p>
+            : <p className="text-sm text-zinc-400 mt-0.5">As notificações foram bloqueadas. Libere nas configurações do navegador (ícone de cadeado ao lado do endereço → Notificações → Permitir) e volte aqui.</p>)}
           {estado === 'sem_suporte' && <p className="text-sm text-zinc-400 mt-0.5">Este navegador não recebe notificações. No Android use o Chrome; no iPhone, adicione o app à Tela de Início.</p>}
           {estado === 'instalar' && (
             <div className="text-sm text-zinc-400 mt-1">
@@ -82,6 +85,7 @@ function Aparelho({ estado, onMudar }: { estado: EstadoPush | null; onMudar: (e:
             </div>
           )}
           {estado === 'ativo' && <p className="text-sm text-zinc-400 mt-0.5">Os lembretes ligados abaixo chegam aqui, mesmo com o app fechado.</p>}
+          {estado === 'ativo' && ehAppNativo() && <p className="text-xs text-zinc-500 mt-1.5">Em alguns celulares (Xiaomi, Samsung) libere o R2 Fit Pro na economia de bateria (Sem restrições) para os avisos chegarem na hora.</p>}
         </div>
       </div>
       {estado === 'inativo' && (

@@ -7,13 +7,15 @@ export class ErroApi extends Error {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function chamarApi<T = any>(rota: 'billing' | 'conta' | 'admin' | 'lembretes', corpo: Record<string, unknown>): Promise<T> {
+export async function chamarApi<T = any>(rota: 'billing' | 'conta' | 'admin' | 'lembretes' | 'app/inscrever' | 'app/desinscrever', corpo: Record<string, unknown>): Promise<T> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new ErroApi('Sua sessão expirou. Faça login novamente.', 'sem_sessao', 401)
   let resp: Response
   try {
-    resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/r2-api/${rota}`, {
+    // Rotas "app/..." ficam na função r2-app (app Android)
+    const funcao = rota.startsWith('app/') ? `r2-app/${rota.slice(4)}` : `r2-api/${rota}`
+    resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${funcao}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

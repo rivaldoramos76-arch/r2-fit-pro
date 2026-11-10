@@ -8,7 +8,7 @@ import {
   motivoRecusaCartao,
 } from '../supabase/functions/_shared/mpLogic'
 import { renderizarEmail } from '../supabase/functions/_shared/emailTemplates'
-import { mensagemLembrete, lerInscricao } from '../supabase/functions/_shared/lembretesLogic'
+import { mensagemLembrete, lerInscricao, ehAparelhoApp, tokenAppValido, ENDPOINT_APP } from '../supabase/functions/_shared/lembretesLogic'
 import { cpfValido, dataSP, refAvulso, lerReferencia, mapearStatusAsaas, normalizarPagamentoAsaas, normalizarAssinaturaAsaas, corpoAssinaturaAsaas, corpoCobrancaAvulsaAsaas, lerEventoAsaas, tokenIgual } from '../supabase/functions/_shared/asaasLogic'
 import { traduzirErroAuth } from '../src/lib/formatos'
 
@@ -162,6 +162,11 @@ await t('recusa do cartão: mensagem pelo motivo do Mercado Pago', () => {
   assert.match(motivoRecusaCartao('cc_rejected_other_reason')!, /banco emissor/)
   assert.equal(motivoRecusaCartao('accredited'), null)
   assert.equal(motivoRecusaCartao(null), null)
+})
+
+await t('lembretes no app Android: identificador do aparelho e endereço próprio (sem Web Push)', () => {
+  assert.ok(tokenAppValido('a'.repeat(64))); assert.ok(!tokenAppValido('curto')); assert.ok(!tokenAppValido('x'.repeat(64) + ' ')); assert.ok(!tokenAppValido(null))
+  assert.ok(ehAparelhoApp(ENDPOINT_APP + 'f'.repeat(64))); assert.ok(!ehAparelhoApp('https://fcm.googleapis.com/fcm/send/abc'))
 })
 
 await t('lembretes: mensagem por tipo e validação da inscrição do aparelho', () => {
