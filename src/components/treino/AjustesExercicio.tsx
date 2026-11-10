@@ -139,13 +139,13 @@ export default function AjustesExercicio({ ex, onSalvar }: { ex: ExercicioPlano;
   }
   const ordem: Campo[] = ['series', 'reps', 'exec', 'desc', 'carga']
   return (
-    <div className="mt-2" translate="no">
+    <div className="mt-1.5" translate="no">
       <div className="grid gap-1" style={{ gridTemplateColumns: '0.8fr 1.1fr 1.1fr 1.1fr 1.3fr' }}>
         {ordem.map(c => {
           const f = campos[c], on = ativo === c
           return (
             <button key={c} type="button" onClick={() => setAtivo(on ? null : c)} aria-pressed={on} aria-label={`${f.titulo}: ${f.valor || 'sem'}`}
-              className={`min-w-0 h-10 rounded-lg flex flex-col items-center justify-center border ${on ? 'bg-green-500/10 border-green-500/60' : 'bg-zinc-800/60 border-transparent'}`}>
+              className={`min-w-0 h-9 rounded-lg flex flex-col items-center justify-center border ${on ? 'bg-green-500/10 border-green-500/60' : 'bg-zinc-800/60 border-transparent'}`}>
               <span className="text-[8.5px] text-zinc-500 uppercase tracking-tight leading-none truncate max-w-full">{f.titulo}</span>
               <span className={`text-[13px] font-semibold leading-tight truncate max-w-full px-0.5 ${f.valor ? 'text-zinc-100' : 'text-zinc-600'}`}>{f.valor || '—'}</span>
             </button>

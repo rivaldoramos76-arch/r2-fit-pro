@@ -15,12 +15,11 @@ import { ExecucaoAmpliada, MiniExecucao, animacaoDe } from '../components/treino
 /** Chave deslizante "Concluído". */
 function ChaveConcluido({ ligado, ocupado, onTrocar }: { ligado: boolean; ocupado: boolean; onTrocar: () => void }) {
   return (
-    <button type="button" role="switch" aria-checked={ligado} aria-label="Concluído" onClick={onTrocar} disabled={ocupado}
-      className="flex flex-col items-center gap-0.5 px-1 shrink-0 disabled:opacity-60">
+    <button type="button" role="switch" aria-checked={ligado} aria-label="Concluído" title="Concluído" onClick={onTrocar} disabled={ocupado}
+      className="shrink-0 h-8 flex items-center disabled:opacity-60">
       <span className={`relative w-9 h-5 rounded-full transition-colors ${ligado ? 'bg-green-500' : 'bg-zinc-700'}`}>
         <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${ligado ? 'translate-x-4' : ''}`} />
       </span>
-      <span className={`text-[9px] leading-none ${ligado ? 'text-green-400 font-semibold' : 'text-zinc-500'}`}>Concluído</span>
     </button>
   )
 }
@@ -38,6 +37,7 @@ export default function TreinoDiaPage() {
   const [aviso, setAviso] = useState('')
   const [execucao, setExecucao] = useState<string | null>(null)
   const [marcando, setMarcando] = useState<string | null>(null)
+  const [menu, setMenu] = useState<string | null>(null)
   const aoRegistrar = useCallback((s: Sessao) => setSessao(s), [])
   const contador = useContadorTreino({
     user, treino: treino ? { id: treino.id, nome: treino.nome } : null, diaIdx,
@@ -171,22 +171,34 @@ export default function TreinoDiaPage() {
             const ok = feitos.has(ex.id)
             const parcial = ok ? 0 : seriesFeitas(sessao, ex.id)
             return (
-              <div key={ex.id} className={`rounded-2xl border p-2.5 ${ok ? 'bg-green-500/5 border-green-500/30' : 'bg-zinc-900 border-zinc-800'}`}>
-                <div className="flex items-center gap-2.5">
-                  <span className={`w-6 h-6 rounded-md text-[11px] font-bold flex items-center justify-center shrink-0 ${ok ? 'bg-green-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
-                    {ok ? '✓' : i + 1}
+              <div key={ex.id} className={`rounded-2xl border px-2.5 py-2 ${ok ? 'bg-green-500/5 border-green-500/30' : 'bg-zinc-900 border-zinc-800'}`}>
+                <div className="flex items-center gap-2">
+                  <span title={parcial > 0 ? `${parcial} de ${ex.series} séries feitas · treino incompleto` : undefined}
+                    className={`min-w-6 h-6 px-1 rounded-md text-[11px] font-bold flex items-center justify-center shrink-0 ${ok ? 'bg-green-500 text-zinc-950' : parcial > 0 ? 'bg-amber-500/15 text-amber-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                    {ok ? '✓' : parcial > 0 ? `${parcial}/${ex.series}` : i + 1}
                   </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-zinc-100 leading-tight truncate">{ex.nome}</p>
-                    {parcial > 0 && <p className="text-[10px] font-semibold text-amber-400 truncate leading-tight">{parcial} de {ex.series} séries feitas · treino incompleto</p>}
-                  </div>
+                  <p className="flex-1 min-w-0 text-[13px] font-semibold text-zinc-100 leading-[1.15] line-clamp-2">{ex.nome}</p>
                   {!contador.rodando && (animacaoDe(ex.nome)
                     ? execucao !== ex.id && <MiniExecucao nome={ex.nome} onAbrir={() => setExecucao(ex.id)} />
                     : (ex.instrucoes || ex.dica) && (
                       <button onClick={() => setExecucao(x => (x === ex.id ? null : ex.id))} aria-label={`Como fazer ${ex.nome}`}
                         className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-700 text-sm">ⓘ</button>
                     ))}
+                  <button onClick={() => contador.iniciar([ex])} disabled={contador.preparando} aria-label={ok ? 'Refazer' : 'Iniciar'}
+                    className={`w-9 h-8 shrink-0 rounded-lg text-sm font-bold transition active:scale-95 disabled:opacity-60 ${ok ? 'bg-zinc-800 text-zinc-200 border border-zinc-700' : 'bg-green-500 text-zinc-950 hover:bg-green-400'}`}>
+                    ▶
+                  </button>
+                  <ChaveConcluido ligado={ok} ocupado={marcando === ex.id} onTrocar={() => alternarConcluido(ex)} />
+                  <button onClick={() => setMenu(m => (m === ex.id ? null : ex.id))} aria-label="Mais opções" aria-expanded={menu === ex.id}
+                    className={`w-6 h-8 shrink-0 rounded-md text-base leading-none ${menu === ex.id ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500'}`}>⋯</button>
                 </div>
+                {menu === ex.id && (
+                  <div className="flex gap-1.5 mt-1.5">
+                    <button onClick={() => mover(i, -1)} disabled={i === 0} className="flex-1 h-8 rounded-lg text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para cima">↑ Subir</button>
+                    <button onClick={() => mover(i, 1)} disabled={i === exercicios.length - 1} className="flex-1 h-8 rounded-lg text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para baixo">↓ Descer</button>
+                    <button onClick={() => { setMenu(null); remover(ex) }} className="flex-1 h-8 rounded-lg text-xs bg-zinc-900 text-red-400/90 border border-zinc-800" aria-label="Remover">🗑 Remover</button>
+                  </div>
+                )}
                 {execucao === ex.id && !contador.rodando && (
                   <div className="mt-2">
                     <ExecucaoAmpliada nome={ex.nome} onFechar={() => setExecucao(null)} />
@@ -195,16 +207,6 @@ export default function TreinoDiaPage() {
                   </div>
                 )}
                 <AjustesExercicio ex={ex} onSalvar={e => atualizarExercicios(l => l.map(x => (x.id === e.id ? e : x)))} />
-                <div className="flex items-center gap-1.5 mt-2">
-                  <button onClick={() => contador.iniciar([ex])} disabled={contador.preparando}
-                    className={`flex-1 h-8 rounded-lg text-sm font-bold transition active:scale-[0.98] disabled:opacity-60 ${ok ? 'bg-zinc-800 text-zinc-200 border border-zinc-700' : 'bg-green-500 text-zinc-950 hover:bg-green-400'}`}>
-                    ▶ {ok ? 'Refazer' : 'Iniciar'}
-                  </button>
-                  <ChaveConcluido ligado={ok} ocupado={marcando === ex.id} onTrocar={() => alternarConcluido(ex)} />
-                  <button onClick={() => mover(i, -1)} disabled={i === 0} className="w-8 h-8 rounded-lg text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para cima">↑</button>
-                  <button onClick={() => mover(i, 1)} disabled={i === exercicios.length - 1} className="w-8 h-8 rounded-lg text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
-                  <button onClick={() => remover(ex)} className="w-8 h-8 rounded-lg text-sm bg-zinc-900 text-red-400/80 border border-zinc-800" aria-label="Remover">🗑</button>
-                </div>
               </div>
             )
           })}

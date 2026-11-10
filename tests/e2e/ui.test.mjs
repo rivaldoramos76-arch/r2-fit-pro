@@ -901,7 +901,7 @@ await t('contador: por cima da música toca só os avisos curtos, agendados, e r
   await page.getByRole('radio', { name: /Por cima da música/ }).waitFor()
   assert.equal(await page.getByRole('radio', { name: /Por cima da música/ }).getAttribute('aria-checked'), 'true', 'modo padrão')
   // Sem janela nem tela intermediária: "Iniciar" na lista já começa a contagem
-  await page.getByRole('button', { name: /^▶ Iniciar$/ }).click()
+  await page.getByRole('button', { name: 'Iniciar', exact: true }).click()
   await page.waitForTimeout(600)
   // Tela mínima: só séries, tempo e os ícones de pausar/encerrar (volume fica antes de iniciar)
   await page.getByRole('button', { name: 'Pausar' }).waitFor()
@@ -953,7 +953,7 @@ await t('contador: aviso de tela desbloqueada só no iPhone; no Android cada fal
       await page.getByRole('radio', { name: /Por cima da música/ }).click()
     }
     // Android pede ao sistema para abaixar a música durante os avisos (áudio curto silencioso); iPhone não
-    await page.getByRole('button', { name: /^▶ Iniciar$/ }).click()
+    await page.getByRole('button', { name: 'Iniciar', exact: true }).click()
     await page.waitForTimeout(2500)
     const plays = await page.evaluate(() => window.__mediaPlays)
     // Android: cada fala toca num áudio curto próprio (o sistema abaixa a música só durante a fala);
@@ -969,7 +969,7 @@ await t('contador: modo tela bloqueada usa a faixa contínua', async () => {
   await page.goto(BASE + '/treino/t1/dia/0')
   await page.getByRole('radio', { name: /Tela bloqueada/ }).click()
   await page.getByText(/pausa a sua música/).waitFor()
-  await page.getByRole('button', { name: /^▶ Iniciar$/ }).click()
+  await page.getByRole('button', { name: 'Iniciar', exact: true }).click()
   await page.waitForTimeout(500)
   assert.equal(await page.evaluate(() => window.__mediaPlays), 1)
   assert.equal(await page.evaluate(() => window.__agendados.length), 0)
