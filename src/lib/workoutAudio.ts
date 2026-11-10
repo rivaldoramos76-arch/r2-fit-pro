@@ -1,3 +1,4 @@
+import { blobParaBase64, type ContadorNativo } from './nativo'
 // Motor do contador de séries.
 //
 // Modo "com tela bloqueada": todo o exercício (contagens, "Trabalho!", "Repouso!", silêncio dos cronômetros e o
@@ -362,7 +363,9 @@ function definirSessaoAudio(tipo: 'ambient' | 'playback') {
 }
 
 export class TreinoPlayer {
-  readonly modo: 'mix' | 'audio' | 'voz'
+  /** 'nativo': app Android instalado, as falas tocam fora do navegador (tela bloqueada, por cima da música) */
+  readonly modo: 'mix' | 'audio' | 'voz' | 'nativo'
+  private nativo: ContadorNativo | null = null
   readonly crono: Cronograma
   private ouv: Ouvintes
   private concluidoAvisado = false
@@ -414,10 +417,11 @@ export class TreinoPlayer {
   private timer: ReturnType<typeof setInterval> | null = null
 
   constructor(cfg: ConfigCrono | ConfigCrono[], clips: Clipes | null, ouv: Ouvintes, modoSom: ModoSom = 'musica',
-    opcoes: { abaixarMusica?: boolean } = {}) {
+    opcoes: { abaixarMusica?: boolean; nativo?: ContadorNativo | null; titulo?: string } = {}) {
     this.ouv = ouv
     this.abaixarMusica = !!opcoes.abaixarMusica
-    this.modo = !clips ? 'voz' : modoSom === 'musica' ? 'mix' : 'audio'
+    this.modo = !clips ? 'voz' : opcoes.nativo ? 'nativo' : modoSom === 'musica' ? 'mix' : 'audio'
+    if (this.modo === 'nativo') { this.nativo = opcoes.nativo!; this.clips = clips; this.titulo = opcoes.titulo ?? 'Contador' }
     // Sem as vozes gravadas, o navegador fala qualquer texto; com elas, só entram os clipes que existem
     this.crono = montarCronograma(cfg, clips ? duracoes(clips) : {}, clips ? k => !!clips[k]?.length : () => true)
     if (this.modo === 'mix') this.clips = clips
@@ -442,11 +446,35 @@ export class TreinoPlayer {
   /** Deve ser chamado dentro do gesto do usuário (toque em "Iniciar"). */
   iniciar(): Promise<void> {
     if (this.modo === 'mix') return this.iniciarMix()
+    if (this.modo === 'nativo') return this.iniciarNativo()
     if (this.audio) { definirSessaoAudio('playback'); return this.tocarDe(0) }
     this.t0 = Date.now()
     this.timer = setInterval(() => this.tickVoz(), 80)
     this.tickVoz()
     return Promise.resolve()
+  }
+
+  private titulo = 'Contador'
+  /** App Android: manda só os clipes usados e o cronograma para o contador nativo; o relógio da tela é o de parede. */
+  private async iniciarNativo() {
+    const n = this.nativo!
+    const usados = [...new Set(this.crono.cues.map(c => c.clip))].filter(k => this.clips?.[k]?.length)
+    const clipes: Record<string, { wav: string; dur: number }> = {}
+    for (const k of usados) {
+      const d = this.clips![k]
+      clipes[k] = { wav: await blobParaBase64(wavDoClipe(d)), dur: d.length / TAXA }
+    }
+    await n.preparar({ clipes })
+    this.t0 = Date.now()
+    this.baseParede = this.t0
+    await this.tocarNativo(0)
+  }
+
+  private tocarNativo(desde: number) {
+    return this.nativo!.tocar({
+      cues: this.crono.cues.filter(c => this.clips?.[c.clip]?.length).map(c => ({ t: c.t, clip: c.clip })),
+      desde, volume: this.volume, mudo: this.mudo, titulo: this.titulo,
+    })
   }
 
   private async iniciarMix() {
@@ -630,10 +658,15 @@ export class TreinoPlayer {
 
   get pausado(): boolean {
     if (this.modo === 'mix') return this.pausadoMix
+    if (this.modo === 'nativo') return this.pausadoEm !== null
     return this.audio ? this.audio.paused && !this.audio.ended && !this.interrompido : this.pausadoEm !== null
   }
 
   pausar() {
+    if (this.modo === 'nativo') {
+      if (this.pausadoEm === null) { this.pausadoEm = Date.now(); this.nativo?.pausar().catch(() => {}) }
+      return
+    }
     if (this.modo === 'mix') {
       if (!this.ctx || this.pausadoMix) return
       this.pausadoMix = true
@@ -678,6 +711,12 @@ export class TreinoPlayer {
   }
 
   async retomar(): Promise<void> {
+    if (this.modo === 'nativo') {
+      if (this.pausadoEm === null) return
+      this.acumuladoPausa += Date.now() - this.pausadoEm
+      this.pausadoEm = null
+      return this.tocarNativo(this.tempo())
+    }
     if (this.modo === 'mix') {
       if (!this.ctx) return
       if (this.interrompido) return this.recuperar()
@@ -696,6 +735,7 @@ export class TreinoPlayer {
   }
 
   private aplicarVolume() {
+    if (this.nativo) this.nativo.volume({ volume: this.volume, mudo: this.mudo }).catch(() => {})
     if (this.ganho) this.ganho.gain.value = this.mudo ? 0 : this.volume
     for (const v of Object.values(this.vozes)) { v.volume = this.volume; v.muted = this.mudo }
   }
@@ -714,6 +754,7 @@ export class TreinoPlayer {
   }
 
   parar() {
+    if (this.nativo && !this.parado) this.nativo.parar().catch(() => {})
     this.parado = true
     this.soltarMusica()
     if (this.timer) clearInterval(this.timer)

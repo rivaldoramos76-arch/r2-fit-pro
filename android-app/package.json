@@ -1,0 +1,13 @@
+{
+  "name": "r2-fit-pro-android",
+  "private": true,
+  "description": "App Android do R2 Fit Pro: abre r2fitpro.com.br e acrescenta o contador nativo (tela bloqueada e por cima da música).",
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "appId": "br.com.r2fitpro.app",
+  "appName": "R2 Fit Pro",
+  "webDir": "www",
+  "server": {
+    "url": "https://r2fitpro.com.br",
+    "androidScheme": "https",
+    "allowNavigation": [
+      "r2fitpro.com.br",
+      "www.r2fitpro.com.br",
+      "*.supabase.co",
+      "*.asaas.com"
+    ]
+  },
+  "android": {
+    "backgroundColor": "#09090b"
+  },
+  "plugins": {
+    "SystemBars": {
+      "style": "DARK"
+    }
+  }
+}

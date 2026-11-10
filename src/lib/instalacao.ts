@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ehAppNativo } from './nativo'
 
 // Instalação do app na tela inicial (PWA).
 // O Chrome/Android avisa uma única vez que o app pode ser instalado (beforeinstallprompt);
@@ -28,6 +29,7 @@ export function detectarSistema(ua = navigator.userAgent): Sistema {
 
 /** Já está aberto como app instalado (tela inicial)? */
 export function estaInstalado(): boolean {
+  if (ehAppNativo()) return true
   return window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
 }
 
@@ -53,6 +55,7 @@ export function useInstalacao() {
 
 /** Navegador embutido de outro app (Instagram, Facebook, WhatsApp, TikTok…), que não instala apps. */
 export function navegadorEmbutido(ua = navigator.userAgent): boolean {
+  if (ehAppNativo()) return false
   return /Instagram|FBAN|FBAV|FB_IAB|FBIOS|Line\/|WhatsApp|TikTok|musical_ly|Snapchat|; wv\)/i.test(ua)
 }
 

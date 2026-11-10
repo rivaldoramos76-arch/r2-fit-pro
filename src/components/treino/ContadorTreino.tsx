@@ -10,6 +10,7 @@ import { TreinoPlayer, carregarClipes, carregarSeries, estadoEm, type Clipes, ty
 import { carregarNomes } from '../../lib/vozNomes'
 import { carregarPreferencias, salvarPreferencias, type PrefsAudio } from '../../lib/preferencias'
 import { detectarSistema } from '../../lib/instalacao'
+import { contadorNativo } from '../../lib/nativo'
 import type { ExercicioPlano } from '../../lib/treinoModel'
 
 type Tela = 'parado' | 'rodando' | 'concluido' | 'interrompido'
@@ -108,6 +109,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
 
   // Tela sempre ligada e tela cheia enquanto o contador está aberto
   const pedirWakeLock = async () => {
+    contadorNativo()?.telaLigada({ ligada: true }).catch(() => {})
     try {
       const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<WakeLockSentinel> } }).wakeLock
       if (wl && (!wakeRef.current || wakeRef.current.released)) {
@@ -115,7 +117,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
       }
     } catch { /* não suportado ou negado */ }
   }
-  const liberarWakeLock = () => { wakeRef.current?.release().catch(() => {}); wakeRef.current = null }
+  const liberarWakeLock = () => { contadorNativo()?.telaLigada({ ligada: false }).catch(() => {}); wakeRef.current?.release().catch(() => {}); wakeRef.current = null }
   const entrarTelaCheia = () => { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {}) }
   const sairTelaCheia = () => { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}) }
   /** Solta os controles de mídia do sistema (a música volta a ser a dona do som e do volume). */
@@ -206,7 +208,12 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
       onSeriesConcluidas: () => {},
       // Fim da última fala: desliga o som do contador na hora, para a música voltar ao volume normal
       onFim: () => { setTela('concluido'); liberarWakeLock(); sairTelaCheia(); p.parar(); limparMidia(); salvarAvulso(lista[0]) },
-    }, modoSom, { abaixarMusica: sistema === 'android' && prefsAudio.current?.abaixar_musica !== false })
+    }, modoSom, {
+      abaixarMusica: sistema === 'android' && prefsAudio.current?.abaixar_musica !== false,
+      // App Android instalado: contador nativo (tela bloqueada e por cima da música)
+      nativo: contadorNativo(),
+      titulo: lista.length > 1 ? `${dia?.dia ?? 'Treino'} · ${lista.length} exercícios` : lista[0]?.nome,
+    })
     p.setVolume(volume)
     p.setMudo(mudo)
     playerRef.current = p
@@ -292,7 +299,9 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
     </section>
   ) : (
     <section className="bg-zinc-900 border border-zinc-800 rounded-2xl px-3.5 py-3" aria-label="Som do contador">
-      {vozes === 'fallback' ? (
+      {contadorNativo() && vozes !== 'fallback' ? (
+        <p className="text-[11px] text-zinc-500 leading-snug">📱 App instalado: a voz toca por cima da música (que abaixa só nos avisos) e continua com a tela bloqueada.</p>
+      ) : vozes === 'fallback' ? (
         <p className="text-[11px] text-zinc-500">Vozes gravadas indisponíveis: usando a voz do navegador. Neste modo, mantenha a tela ligada.</p>
       ) : (
         <>

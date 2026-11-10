@@ -1035,6 +1035,41 @@ await t('contador: aviso de tela desbloqueada só no iPhone; no Android cada fal
   }
 })
 
+await t('app Android instalado: contador nativo recebe as falas e o cronograma; sem pedir instalação', async () => {
+  // WebView do app (UA com "; wv)"), sem modo standalone: o app nativo conta como instalado
+  const wv = 'Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0 Mobile Safari/537.36'
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true, userAgent: wv, instalado: false })
+  await page.addInitScript(() => {
+    const chamadas = []; window.__nativo = chamadas
+    const reg = nome => (...a) => { chamadas.push([nome, a[0]]); return Promise.resolve() }
+    const plugin = { preparar: reg('preparar'), tocar: reg('tocar'), pausar: reg('pausar'), parar: reg('parar'), volume: reg('volume'), telaLigada: reg('telaLigada') }
+    window.Capacitor = { isNativePlatform: () => true, isPluginAvailable: n => n === 'ContadorNativo', registerPlugin: () => plugin, Plugins: { ContadorNativo: plugin } }
+  })
+  await page.goto(BASE + '/treino/t1/dia/0')
+  await page.getByText(/App instalado: a voz toca por cima da música/).waitFor()
+  assert.equal(await page.getByRole('radio', { name: /Tela bloqueada/ }).count(), 0, 'no app não precisa escolher o modo')
+  await page.getByRole('button', { name: 'Iniciar', exact: true }).click()
+  await page.getByRole('button', { name: 'Pausar' }).waitFor()
+  await page.waitForFunction(() => window.__nativo.some(c => c[0] === 'tocar'))
+  const ch = await page.evaluate(() => window.__nativo)
+  const prep = ch.find(c => c[0] === 'preparar')[1], toc = ch.find(c => c[0] === 'tocar')[1]
+  assert.ok(prep.clipes['5'] && prep.clipes['5'].wav.length > 100 && prep.clipes['5'].dur > 0, 'clipe do 5 em WAV')
+  assert.ok(toc.cues.length > 10 && toc.cues[0].clip === '5' && toc.desde === 0, 'cronograma enviado')
+  assert.ok(toc.cues.every(c => prep.clipes[c.clip]), 'só falas que foram preparadas')
+  assert.ok(ch.some(c => c[0] === 'telaLigada' && c[1].ligada), 'tela ligada pelo app')
+  assert.equal(await page.evaluate(() => window.__agendados.length), 0, 'nada tocando no navegador')
+  await page.getByRole('button', { name: 'Pausar' }).click()
+  await page.waitForFunction(() => window.__nativo.some(c => c[0] === 'pausar'))
+  await page.waitForTimeout(1200)
+  await page.getByRole('button', { name: 'Retomar' }).click()
+  await page.waitForFunction(() => window.__nativo.filter(c => c[0] === 'tocar').length === 2)
+  const retomou = (await page.evaluate(() => window.__nativo.filter(c => c[0] === 'tocar')))[1][1]
+  assert.ok(retomou.desde > 0 && retomou.desde < 3, `retoma do ponto certo (${retomou.desde})`)
+  await page.getByRole('button', { name: 'Encerrar' }).click().catch(() => {})
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
 await t('contador: modo tela bloqueada usa a faixa contínua', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
   await page.goto(BASE + '/treino/t1/dia/0')
