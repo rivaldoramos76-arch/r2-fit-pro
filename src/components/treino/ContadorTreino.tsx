@@ -324,53 +324,69 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao }: {
       : fase.tipo === 'rest_countdown' || fase.tipo === 'rest' ? serieAtual : serieAtual - 1
     const trabalho = fase?.tipo === 'work' || fase?.tipo === 'countdown'
     const total = fase && (fase.tipo === 'work' || fase.tipo === 'rest') ? fase.fim - fase.inicio : 0
+    const frac = total > 0 && estado ? Math.max(0, Math.min(1, estado.restante / total)) : isContagem ? 1 : 0
+    const RAIO = 47, CIRC = 2 * Math.PI * RAIO
+    const corAnel = trabalho ? 'stroke-green-600/50' : 'stroke-sky-600/45'
+    const agora = new Date()
+    const hora = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`
     overlay = (
       <div className="fixed inset-0 z-[70] bg-black flex flex-col select-none" translate="no"
+        // O sistema tira a tela cheia quando se troca de app ou bloqueia a tela; o navegador só deixa voltar com um toque
+        onPointerDown={() => { if (!document.fullscreenElement) entrarTelaCheia() }}
         style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <p className="text-center text-[13px] text-zinc-700 tabular-nums pt-4" aria-label={`Hora atual ${hora}`}>{hora}</p>
         {itens.length > 1 && ex && (
-          <p className="text-center text-xs text-zinc-600 pt-5 px-6 truncate">Exercício {idxAtual + 1} de {itens.length} · {ex.nome}</p>
+          <p className="text-center text-[11px] text-zinc-700 pt-1 px-6 truncate">Exercício {idxAtual + 1} de {itens.length} · {ex.nome}</p>
         )}
-        <div className={`flex justify-center flex-wrap gap-1.5 px-6 ${itens.length > 1 ? 'pt-3' : 'pt-6'}`} aria-label={`Série ${serieAtual} de ${series}`}>
+        <div className="flex justify-center flex-wrap gap-1.5 px-6 pt-3" aria-label={`Série ${serieAtual} de ${series}`}>
           {Array.from({ length: series }).map((_, i) => (
-            <span key={i} className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-semibold border ${
-              i < seriesFeitas ? 'border-green-900 text-green-700' : i + 1 === serieAtual ? 'border-zinc-600 text-zinc-400' : 'border-zinc-900 text-zinc-700'}`}>
+            <span key={i} className={`w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-semibold border ${
+              i < seriesFeitas ? 'border-green-950 text-green-800' : i + 1 === serieAtual ? 'border-zinc-700 text-zinc-500' : 'border-zinc-900 text-zinc-800'}`}>
               {i < seriesFeitas ? '✓' : i + 1}
             </span>
           ))}
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          {isContagem && estado && (
-            estado.numero > 0
-              ? <p key={estado.numero} className="text-[34vw] sm:text-[12rem] leading-none font-light text-purple-400/60 tabular-nums">{estado.numero}</p>
-              : <p className="text-5xl font-light tracking-wide text-zinc-400">{fase?.tipo === 'countdown' ? 'TRABALHO' : 'DESCANSO'}</p>
-          )}
-          {(fase?.tipo === 'work' || fase?.tipo === 'rest') && estado && (
-            <>
-              <p className={`text-[26vw] sm:text-[10rem] leading-none font-light tabular-nums ${trabalho ? 'text-green-500/70' : 'text-sky-400/60'}`}>{mmss(Math.ceil(estado.restante))}</p>
-              <div className="w-40 h-0.5 bg-zinc-900 rounded-full overflow-hidden" aria-hidden>
-                <div className={`h-full ${trabalho ? 'bg-green-800' : 'bg-sky-900'}`} style={{ width: `${total > 0 ? (estado.restante / total) * 100 : 0}%`, transition: 'width 0.15s linear' }} />
+        <div className="flex-1 flex flex-col items-center justify-center gap-5 px-4">
+          {fase?.tipo !== 'final' && (
+            <div className="relative w-[80vw] max-w-[24rem] aspect-square flex items-center justify-center">
+              <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full -rotate-90" aria-hidden>
+                <circle cx="50" cy="50" r={RAIO} fill="none" strokeWidth="1.2" className="stroke-zinc-900" />
+                <circle cx="50" cy="50" r={RAIO} fill="none" strokeWidth="1.6" strokeLinecap="round" className={isContagem ? 'stroke-zinc-800' : corAnel}
+                  strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - frac)} style={{ transition: 'stroke-dashoffset 0.15s linear' }} />
+              </svg>
+              <div className="flex flex-col items-center">
+                {isContagem && estado && (
+                  estado.numero > 0
+                    ? <p key={estado.numero} className="text-[30vw] sm:text-[9rem] leading-none font-extralight text-purple-400/40 tabular-nums">{estado.numero}</p>
+                    : <p className="text-3xl font-light tracking-[0.2em] text-zinc-500">{fase?.tipo === 'countdown' ? 'TRABALHO' : 'DESCANSO'}</p>
+                )}
+                {(fase?.tipo === 'work' || fase?.tipo === 'rest') && estado && (
+                  <>
+                    <p className={`text-[21vw] sm:text-[6.5rem] leading-none font-extralight tabular-nums ${trabalho ? 'text-green-500/50' : 'text-sky-400/45'}`}>{mmss(Math.ceil(estado.restante))}</p>
+                    <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-700 mt-3">{trabalho ? 'trabalho' : 'descanso'}</p>
+                  </>
+                )}
               </div>
-              <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">{trabalho ? 'trabalho' : 'descanso'}</p>
-              {proximo && <p className="text-sm text-zinc-500 text-center px-6">Próximo: <span className="text-zinc-300">{proximo.nome}</span></p>}
-            </>
+            </div>
           )}
-          {fase?.tipo === 'final' && <p className="text-3xl font-light text-green-500/70">{itens.length > 1 ? 'Treino completo' : 'Séries finalizadas'}</p>}
+          {proximo && (fase?.tipo === 'rest') && <p className="text-xs text-zinc-600 text-center px-6">Próximo: <span className="text-zinc-400">{proximo.nome}</span></p>}
+          {fase?.tipo === 'final' && <p className="text-3xl font-light text-green-500/60">{itens.length > 1 ? 'Treino completo' : 'Séries finalizadas'}</p>}
           {precisaToque && (
             <button onClick={() => playerRef.current?.recuperar().then(() => setPrecisaToque(false)).catch(() => {})}
-              className="text-sm font-semibold px-4 py-2 rounded-xl bg-green-500 text-zinc-950 animate-pulse">Toque para continuar o áudio</button>
+              className="text-sm font-semibold px-4 py-2 rounded-xl bg-green-600/80 text-zinc-950 animate-pulse">Toque para continuar o áudio</button>
           )}
-          {pausado && <span className="text-xs font-semibold uppercase tracking-widest text-yellow-500/70">Pausado</span>}
+          {pausado && <span className="text-[11px] font-semibold uppercase tracking-widest text-yellow-600/60">Pausado</span>}
         </div>
 
         {fase?.tipo !== 'final' && (
-          <div className="flex justify-center gap-12 pb-10">
+          <div className="flex justify-center gap-14 pb-8">
             <button onClick={alternarPausa} aria-label={pausado ? 'Retomar' : 'Pausar'}
-              className={`w-14 h-14 rounded-full border flex items-center justify-center active:scale-95 transition ${pausado ? 'border-green-800 text-green-600' : 'border-zinc-800 text-zinc-500'}`}>
-              {pausado ? <Play className="w-6 h-6" /> : <Pause className="w-6 h-6" />}
+              className={`w-12 h-12 rounded-full border flex items-center justify-center active:scale-95 transition ${pausado ? 'border-green-900 text-green-700' : 'border-zinc-900 text-zinc-700'}`}>
+              {pausado ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
             </button>
-            <button onClick={encerrar} aria-label="Encerrar" className="w-14 h-14 rounded-full border border-zinc-800 text-zinc-600 flex items-center justify-center active:scale-95 transition">
-              <X className="w-6 h-6" />
+            <button onClick={encerrar} aria-label="Encerrar" className="w-12 h-12 rounded-full border border-zinc-900 text-zinc-700 flex items-center justify-center active:scale-95 transition">
+              <X className="w-5 h-5" />
             </button>
           </div>
         )}
