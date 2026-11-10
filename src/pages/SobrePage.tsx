@@ -1,11 +1,18 @@
 import { Link } from 'react-router-dom'
 import PublicLayout from '../components/PublicLayout'
 import { Documento, Secao } from '../components/Documento'
+import { useEffect, useState } from 'react'
 import { useConfig, ou } from '../lib/config'
+import { ehAppNativo, versaoDoApp } from '../lib/nativo'
 
 export default function SobrePage() {
   const { config } = useConfig()
   const e = config?.empresa
+  // Dentro do app Android, mostra a versão do app instalado (a do site é outra coisa)
+  const [app, setApp] = useState<string | null>(null)
+  useEffect(() => {
+    if (ehAppNativo()) versaoDoApp().then(v => v && setApp(`${v.nome} (${v.codigo})`)).catch(() => {})
+  }, [])
   return (
     <PublicLayout>
       <Documento titulo="Sobre o R2 Fit Pro">
@@ -23,7 +30,8 @@ export default function SobrePage() {
         </Secao>
         <Secao titulo="Documentos">
           <p><Link to="/termos" className="text-green-400 underline">Termos de Uso</Link> · <Link to="/privacidade" className="text-green-400 underline">Política de Privacidade</Link> · <Link to="/suporte" className="text-green-400 underline">Ajuda e Suporte</Link></p>
-          <p className="text-zinc-500">Versão do aplicativo: {__APP_VERSION__}</p>
+          {app && <p className="text-zinc-400">App Android instalado: versão {app}</p>}
+          <p className="text-zinc-500">Versão do site: {__APP_VERSION__}</p>
         </Secao>
       </Documento>
     </PublicLayout>
