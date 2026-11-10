@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { CATALOGO, GRUPOS } from '../src/data/exercicios'
 import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
 import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar } from '../src/lib/workoutAudio'
+import { passoReps } from '../src/components/treino/AjustesExercicio'
 import { normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
 let ok = 0
@@ -185,5 +186,10 @@ await t('um exercício só continua igual', () => {
   const c = montarCronograma({ series: 2, execSeg: 5, descansoSeg: 5 })
   assert.equal(c.marcos.length, 1); assert.equal(c.fases.filter(f => f.proximo != null).length, 0)
   assert.equal(c.cues.filter(x => x.clip === 'proximo').length, 0)
+})
+await t('setas das repetições: número único e faixa', () => {
+  assert.equal(passoReps('10', 1), '11'); assert.equal(passoReps('1', -1), '1')
+  assert.equal(passoReps('8-12', 1), '9-13'); assert.equal(passoReps('8 - 12', -1), '7-11')
+  assert.equal(passoReps('1-3', -1), '1-3'); assert.equal(passoReps('até a falha', 1), null)
 })
 console.log(`\n${ok} testes passaram`)

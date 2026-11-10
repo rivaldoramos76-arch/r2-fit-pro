@@ -4,16 +4,13 @@ import { useAuth } from '../context/AuthContext'
 import { useTreino } from '../lib/treinoApi'
 import { descreverGrupos, equipamentosCobertos, type ExercicioPlano, type PlanoTreino } from '../lib/treinoModel'
 import { desmarcarExercicio, emAndamento, exercicioConcluido, novaSessao, seriesFeitas, sessaoAtual, type Sessao } from '../lib/sessoes'
-import ExercicioPicker, { ExercicioForm } from '../components/treino/ExercicioPicker'
+import ExercicioPicker from '../components/treino/ExercicioPicker'
+import AjustesExercicio from '../components/treino/AjustesExercicio'
 import { Spinner } from '../components/UI'
 import CompartilharCartao from '../components/CompartilharCartao'
 import { cartaoTreino } from '../lib/cartoesBase'
 import { useContadorTreino } from '../components/treino/ContadorTreino'
 import { ExecucaoAmpliada, MiniExecucao } from '../components/treino/ExecucaoAnimada'
-
-function mmss(seg: number) {
-  return `${String(Math.floor(seg / 60)).padStart(2, '0')}:${String(seg % 60).padStart(2, '0')}`
-}
 
 // --- Página ---
 
@@ -25,7 +22,6 @@ export default function TreinoDiaPage() {
   const { treino, loading, salvar } = useTreino(id)
   const [sessao, setSessao] = useState<Sessao | null>(null)
   const [picker, setPicker] = useState(false)
-  const [editando, setEditando] = useState<ExercicioPlano | null>(null)
   const [aviso, setAviso] = useState('')
   const [execucao, setExecucao] = useState<string | null>(null)
   const aoRegistrar = useCallback((s: Sessao) => setSessao(s), [])
@@ -161,18 +157,7 @@ export default function TreinoDiaPage() {
                   {execucao !== ex.id && !contador.rodando && <MiniExecucao nome={ex.nome} onAbrir={() => setExecucao(ex.id)} />}
                 </div>
                 {execucao === ex.id && !contador.rodando && <ExecucaoAmpliada nome={ex.nome} onFechar={() => setExecucao(null)} />}
-                <div className="grid grid-cols-4 gap-1.5 mt-3 text-center">
-                  {[
-                    ['Séries', String(ex.series)], ['Reps', ex.repeticoes],
-                    ['Execução', mmss(ex.tempo_execucao_segundos)], ['Descanso', mmss(ex.tempo_descanso_segundos)],
-                  ].map(([r, v]) => (
-                    <div key={r} className="bg-zinc-800/60 rounded-lg py-1.5 px-1">
-                      <p className="text-[10px] text-zinc-500">{r}</p>
-                      <p className="text-sm font-semibold text-zinc-200 truncate">{v}</p>
-                    </div>
-                  ))}
-                </div>
-                {ex.carga && <p className="text-xs text-zinc-400 mt-2">Carga: <span className="text-zinc-200">{ex.carga}</span></p>}
+                <AjustesExercicio ex={ex} onSalvar={e => atualizarExercicios(l => l.map(x => (x.id === e.id ? e : x)))} />
                 {ex.instrucoes && <p className="text-xs text-zinc-500 mt-2 leading-relaxed">{ex.instrucoes}</p>}
                 {ex.dica && <p className="text-xs text-yellow-500/80 mt-1">💡 {ex.dica}</p>}
                 <div className="flex items-center gap-1.5 mt-3">
@@ -180,7 +165,6 @@ export default function TreinoDiaPage() {
                     className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-60 ${ok ? 'bg-zinc-800 text-zinc-200 border border-zinc-700' : 'bg-green-500 text-zinc-950 hover:bg-green-400'}`}>
                     ▶ {ok ? 'Refazer' : 'Iniciar'}
                   </button>
-                  <button onClick={() => setEditando(ex)} className="px-3 py-2.5 rounded-xl text-sm bg-zinc-800 text-zinc-300 border border-zinc-700" aria-label="Editar">✎</button>
                   <button onClick={() => mover(i, -1)} disabled={i === 0} className="px-2.5 py-2.5 rounded-xl text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para cima">↑</button>
                   <button onClick={() => mover(i, 1)} disabled={i === exercicios.length - 1} className="px-2.5 py-2.5 rounded-xl text-sm bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
                   <button onClick={() => remover(ex)} className="px-2.5 py-2.5 rounded-xl text-sm bg-zinc-900 text-red-400/80 border border-zinc-800" aria-label="Remover">🗑</button>
@@ -205,15 +189,6 @@ export default function TreinoDiaPage() {
           equipamentos={equipamentosCobertos(treino.plano.config.equipamentos)}
           onAdicionar={e => atualizarExercicios(l => [...l, e])}
           onFechar={() => setPicker(false)} />
-      )}
-      {editando && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" onClick={() => setEditando(null)}>
-          <div className="bg-zinc-900 border border-zinc-700 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-5 pb-8 max-h-[92dvh] overflow-y-auto" onClick={e => e.stopPropagation()} translate="no">
-            <ExercicioForm inicial={editando} titulo={editando.nome} subtitulo="Editar exercício" rotuloSalvar="Salvar"
-              onCancelar={() => setEditando(null)}
-              onSalvar={e => { setEditando(null); atualizarExercicios(l => l.map(x => (x.id === e.id ? e : x))) }} />
-          </div>
-        </div>
       )}
       {contador.overlay}
     </div>

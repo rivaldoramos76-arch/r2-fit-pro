@@ -976,21 +976,32 @@ await t('contador: modo tela bloqueada usa a faixa contínua', async () => {
   await ctx.close()
 })
 
-await t('editar exercício: execução e descanso em minutos e segundos', async () => {
+await t('editar exercício direto no card: setas e digitação em séries, reps, execução, descanso e carga', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
   await page.goto(BASE + '/treino/t1/dia/0')
-  await page.getByRole('button', { name: 'Editar' }).first().click()
-  const folha = page.getByRole('group', { name: 'Descanso' })
-  await folha.getByLabel('Descanso: minutos').fill('1')
-  await folha.getByLabel('Descanso: segundos').fill('30')
-  await page.getByRole('group', { name: 'Execução' }).getByLabel('Execução: segundos').fill('45')
-  await page.screenshot({ path: `${SHOTS}/editar-tempos.png` })
-  await page.getByRole('button', { name: 'Salvar' }).click()
-  await page.getByText('01:30').first().waitFor()
-  for (let i = 0; i < 30 && !page.gravacoes.some(g => g.tabela === 'treinos'); i++) await page.waitForTimeout(100)
-  const salvo = page.gravacoes.filter(g => g.tabela === 'treinos').pop()
-  const ex = salvo.corpo.plano.dias[0].exercicios[0]
-  assert.equal(ex.tempo_descanso_segundos, 90); assert.equal(ex.tempo_execucao_segundos, 45)
+  await page.getByRole('button', { name: 'Aumentar Séries', exact: true }).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Editar', exact: true }).count(), 0, 'sem o botão de lápis')
+  await page.getByRole('button', { name: 'Aumentar Séries', exact: true }).click()
+  await page.getByLabel('Repetições', { exact: true }).fill('8-12')
+  await page.getByRole('button', { name: 'Aumentar Repetições', exact: true }).click()
+  const desc = page.getByRole('group', { name: 'Descanso' })
+  await desc.getByLabel('Descanso: minutos', { exact: true }).fill('1')
+  await desc.getByLabel('Descanso: segundos', { exact: true }).fill('25')
+  await desc.getByRole('button', { name: 'Aumentar Descanso: segundos', exact: true }).click()
+  await page.getByRole('group', { name: 'Execução' }).getByLabel('Execução: segundos', { exact: true }).fill('45')
+  await page.getByLabel('Carga', { exact: true }).fill('20 kg')
+  await page.screenshot({ path: `${SHOTS}/editar-no-card.png`, fullPage: true })
+  // Salva sozinho logo depois da última mudança
+  let ex
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(100)
+    const salvo = page.gravacoes.filter(g => g.tabela === 'treinos').pop()
+    ex = salvo?.corpo.plano.dias[0].exercicios[0]
+    if (ex?.carga === '20 kg') break
+  }
+  assert.equal(ex.series, 3); assert.equal(ex.repeticoes, '9-13')
+  assert.equal(ex.tempo_descanso_segundos, 90); assert.equal(ex.tempo_execucao_segundos, 45); assert.equal(ex.carga, '20 kg')
+  assert.equal(await desc.getByLabel('Descanso: segundos', { exact: true }).inputValue(), '30')
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
