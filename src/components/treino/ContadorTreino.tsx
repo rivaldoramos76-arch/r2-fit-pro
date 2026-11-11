@@ -467,30 +467,38 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
         </div>
 
         {fase?.tipo !== 'final' && ex && (animacaoDe(ex.nome) || (onCarga && ex.tipo !== 'cardio')) && (
-          <div className="flex items-center justify-center gap-2.5 pb-5 px-6" onPointerDown={e => e.stopPropagation()}>
+          <div className="flex items-end justify-center gap-4 pb-5 px-6" onPointerDown={e => e.stopPropagation()}>
             {animacaoDe(ex.nome) && !cargaAberta && (
-              <div className="opacity-60"><MiniExecucao nome={ex.nome} onAbrir={() => setExecucaoAberta(true)} /></div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] text-zinc-500">visualizar exercício</span>
+                <div className="opacity-60"><MiniExecucao nome={ex.nome} tamanho="w-12 h-12" onAbrir={() => setExecucaoAberta(true)} /></div>
+              </div>
             )}
-            {onCarga && ex.tipo !== 'cardio' && (cargaAberta ? (
+            {onCarga && ex.tipo !== 'cardio' && (
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] text-zinc-500">editar carga</span>
+                {cargaAberta ? (
                 <div className="flex items-center gap-2" role="group" aria-label="Ajustar carga">
                   <button type="button" aria-label="Diminuir carga" disabled={passoCarga(ex.carga, -1) === null}
                     onClick={() => { const n = passoCarga(ex.carga, -1); if (n !== null) mudarCarga(ex.id, n) }}
-                    className="w-10 h-9 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▼</button>
+                    className="w-11 h-11 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▼</button>
                   <input aria-label="Carga" value={ex.carga ?? ''} placeholder="kg" inputMode="decimal" autoComplete="off"
                     onChange={e => mudarCarga(ex.id, e.target.value.slice(0, 40))}
                     onKeyDown={e => { if (e.key === 'Enter') setCargaAberta(false) }}
-                    className="w-28 h-9 rounded-lg bg-black border border-zinc-800 text-center text-base text-zinc-400 focus:outline-none focus:border-zinc-600" />
+                    className="w-32 h-11 rounded-lg bg-black border border-zinc-800 text-center text-lg text-zinc-400 focus:outline-none focus:border-zinc-600" />
                   <button type="button" aria-label="Aumentar carga" disabled={passoCarga(ex.carga, 1) === null}
                     onClick={() => { const n = passoCarga(ex.carga, 1); if (n !== null) mudarCarga(ex.id, n) }}
-                    className="w-10 h-9 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▲</button>
-                  <button type="button" onClick={() => setCargaAberta(false)} className="text-[11px] text-zinc-500 px-2 h-9">ok</button>
+                    className="w-11 h-11 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▲</button>
+                  <button type="button" onClick={() => setCargaAberta(false)} className="text-xs text-zinc-500 px-2 h-11">ok</button>
                 </div>
               ) : (
                 <button type="button" onClick={() => setCargaAberta(true)} aria-label={`Carga: ${ex.carga || 'sem carga'}. Tocar para mudar`}
-                  className="text-[11px] text-zinc-500 tracking-wide px-3 py-1.5 rounded-full border border-zinc-900">
+                  className="h-12 text-[13px] text-zinc-500 tracking-wide px-4 rounded-full border border-zinc-800">
                   carga · <span className="tabular-nums">{ex.carga || '—'}</span> ✎
                 </button>
-              ))}
+              )}
+              </div>
+            )}
           </div>
         )}
         {execucaoAberta && ex && (

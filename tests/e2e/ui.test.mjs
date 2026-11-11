@@ -1163,6 +1163,8 @@ await t('contador: carga e execução na própria tela da contagem; a carga já 
   await page.screenshot({ path: `${SHOTS}/contador-carga.png` })
   await page.getByRole('button', { name: 'ok' }).click()
   await page.getByRole('button', { name: `Carga: ${depois}. Tocar para mudar` }).waitFor()
+  await page.getByText('visualizar exercício').waitFor(); await page.getByText('editar carga').waitFor()
+  await page.screenshot({ path: `${SHOTS}/contador-rodape.png` })
   // Execução do exercício dentro da contagem: miniatura ao lado da carga, um toque amplia e outro fecha
   await page.getByRole('button', { name: 'Ver execução de Supino reto com barra' }).click()
   await page.getByRole('button', { name: 'Fechar execução' }).waitFor()
