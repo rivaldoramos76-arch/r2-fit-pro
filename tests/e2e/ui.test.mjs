@@ -42,6 +42,13 @@ const TREINO = { id: 't1', user_id: UID, nome: 'Treino teste', objetivo: 'Hipert
 const TREINO2 = { ...TREINO, plano: { versao: 2, dias: [{ id: 'd0', letra: 'A', dia: 'Treino A', exercicios: [
   { id: 'e1', nome: 'Supino reto com barra', series: 2, tempo_execucao_segundos: 3, tempo_descanso_segundos: 2 },
   { id: 'e2', nome: 'Remada curvada', series: 1, tempo_execucao_segundos: 3, tempo_descanso_segundos: 2 }] }] } }
+// Treino com dias da semana (A peito seg, B perna qua, C costas sex) para o treino perdido
+const TREINO3 = { ...TREINO, plano: { versao: 2, dias: [
+  { id: 'd0', letra: 'A', dia: 'Treino A', foco: 'Peito', grupos: ['peito'], exercicios: [{ id: 'e1', nome: 'Supino reto com barra', series: 4 }, { id: 'e2', nome: 'Crucifixo', series: 3 }] },
+  { id: 'd1', letra: 'B', dia: 'Treino B', foco: 'Perna', grupos: ['quadriceps'], exercicios: [{ id: 'e3', nome: 'Agachamento', series: 4 }] },
+  { id: 'd2', letra: 'C', dia: 'Treino C', foco: 'Costas', grupos: ['costas'], exercicios: [{ id: 'e4', nome: 'Remada curvada', series: 4 }] }],
+  agenda: [{ letra: 'A', diaSemana: 'Segunda' }, { letra: 'B', diaSemana: 'Quarta' }, { letra: 'C', diaSemana: 'Sexta' }] } }
+const treinoDoModo = m => (m === 'dois' ? TREINO2 : m === 'semana' ? TREINO3 : TREINO)
 const ALUNO_ID = '77777777-2222-4333-8444-555555555555'
 const ALUNOS = [
   { id: 'v1', aluno_id: ALUNO_ID, nome: 'Bia Souza', desde: '2026-10-01T10:00:00Z', ver_treinos: true, ver_diario: true, ver_peso: true, editar_planos: true,
@@ -219,8 +226,8 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       if (p.endsWith('metas_nutricionais')) return json(nutricao === 'sem_meta' ? [] : [META])
       return json([])
     }
-    if (treino && p === '/rest/v1/treinos' && rota.request().method() !== 'GET') { gravacoes.push({ tabela: 'treinos', metodo: rota.request().method(), corpo: rota.request().postDataJSON() }); return json({ ...(treino === 'dois' ? TREINO2 : TREINO), ...rota.request().postDataJSON() }) }
-    if (treino && p === '/rest/v1/treinos') { const tr = treino === 'dois' ? TREINO2 : TREINO; return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? tr : [tr]) }
+    if (treino && p === '/rest/v1/treinos' && rota.request().method() !== 'GET') { gravacoes.push({ tabela: 'treinos', metodo: rota.request().method(), corpo: rota.request().postDataJSON() }); return json({ ...treinoDoModo(treino), ...rota.request().postDataJSON() }) }
+    if (treino && p === '/rest/v1/treinos') { const tr = treinoDoModo(treino); return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? tr : [tr]) }
     if (treino && p === '/rest/v1/sessoes_treino') {
       if (rota.request().method() === 'GET') return json(sessaoE2e ? [sessaoE2e] : [])
       const corpo = rota.request().postDataJSON()
@@ -865,6 +872,64 @@ await t('app Android desatualizado: aviso de versão nova com download pelo nave
     assert.deepEqual(page.consoleErros, [])
     await ctx.close()
   }
+})
+
+await t('treino perdido: pergunta os dias na primeira vez e edita na tela do treino', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, treino: 'dois' })
+  await page.goto(BASE + '/dashboard')
+  const card = page.getByRole('region', { name: 'Dias de treino' })
+  await card.getByText('Em quais dias você treina?').waitFor()
+  assert.equal(await card.getByLabel('Treino de Segunda').inputValue(), 'A', 'sugere os dias pela frequência')
+  await card.getByLabel('Treino de Terça').selectOption('A')
+  await card.screenshot({ path: `${SHOTS}/semana-dias.png`, animations: 'disabled' })
+  await card.getByRole('button', { name: 'Salvar dias' }).click()
+  await page.getByText('Dias salvos. Se faltar um treino, eu aviso aqui.').waitFor()
+  const salvo = page.gravacoes.filter(g => g.tabela === 'treinos').pop()
+  assert.deepEqual(salvo.corpo.plano.agenda.map(s => s.diaSemana), ['Segunda', 'Terça', 'Quarta', 'Sexta'])
+  await page.goto(BASE + '/treino/t1')
+  await page.getByRole('button', { name: 'Editar dias' }).click()
+  await page.getByLabel('Treino de Domingo').selectOption('A')
+  await page.getByRole('button', { name: 'Salvar dias' }).click()
+  await page.getByRole('button', { name: 'Editar dias' }).waitFor()
+  assert.ok(page.gravacoes.filter(g => g.tabela === 'treinos').pop().corpo.plano.agenda.some(s => s.diaSemana === 'Domingo'))
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('treino perdido: dividir no restante da semana, desfazer, encaixar hoje e marcar como concluído', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, treino: 'semana' })
+  await page.clock.setFixedTime(new Date('2026-11-10T09:00:00')) // terça; o treino A era segunda
+  await page.goto(BASE + '/dashboard')
+  const card = page.getByRole('region', { name: 'Semana de treino' })
+  await card.getByText('Ficou faltando o treino A').waitFor()
+  await card.getByText(/Era segunda, 09\/11 · Peito/).waitFor()
+  await card.screenshot({ path: `${SHOTS}/semana-perdido.png`, animations: 'disabled' })
+  const ultimoPlano = () => page.gravacoes.filter(g => g.tabela === 'treinos').pop().corpo.plano
+  await card.getByRole('button', { name: /Dividir esse treino/ }).click()
+  await card.getByText('Exercícios do treino A divididos em: quarta (B), sexta (C).').waitFor()
+  const dividido = ultimoPlano()
+  assert.deepEqual(dividido.dias[1].exercicios.map(e => [e.nome, e.series, e.temporarioAte ?? '']), [['Agachamento', 4, ''], ['Supino reto com barra', 4, '2026-11-15']])
+  assert.deepEqual(dividido.dias[2].exercicios.map(e => e.nome), ['Remada curvada', 'Crucifixo'])
+  await card.getByText('Semana ajustada').waitFor()
+  await card.screenshot({ path: `${SHOTS}/semana-ajustada.png`, animations: 'disabled' })
+  await card.getByRole('button', { name: 'Desfazer ajuste do treino A' }).click()
+  await card.getByText('Ajuste do treino A desfeito.').waitFor()
+  assert.ok(ultimoPlano().dias.every(d => d.exercicios.every(e => !e.temporarioAte)))
+  await card.getByRole('button', { name: /Encaixar num dia livre/ }).click()
+  await card.getByRole('group', { name: 'Dias livres' }).getByRole('button', { name: 'Hoje' }).click()
+  await card.getByRole('link', { name: /Hoje: treino A encaixado/ }).waitFor()
+  assert.deepEqual(ultimoPlano().encaixes, [{ data: '2026-11-10', letra: 'A', origem: '2026-11-09', ate: '2026-11-15' }])
+  await card.getByRole('button', { name: 'Desfazer ajuste do treino A' }).click()
+  await card.getByText('Ajuste do treino A desfeito.').waitFor()
+  await card.getByRole('button', { name: 'Marcar como concluído' }).click()
+  await card.getByText('Treino A marcado como concluído.').waitFor()
+  const sessao = page.gravacoes.filter(g => g.tabela === 'sessoes_treino').pop().corpo
+  assert.equal(sessao.dia_index, 0); assert.equal(sessao.concluido, true)
+  assert.deepEqual(sessao.series_realizadas, { e1: 4, e2: 3 })
+  assert.equal(new Date(sessao.data_inicio).getDate(), 9, 'fica no dia do treino perdido')
+  assert.equal(await card.getByText('Ficou faltando').count(), 0)
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
 })
 
 await t('ergogênicos: cadastra com dose e intervalo, marca feito, modo discreto e Início sem o nome', async () => {

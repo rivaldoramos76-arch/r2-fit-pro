@@ -4,6 +4,7 @@ import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
 import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar, chaveSerie, textoDoClipe, TreinoPlayer } from '../src/lib/workoutAudio'
 import { passoReps, passoCarga, lerTempo, mss } from '../src/components/treino/AjustesExercicio'
 import { marcarVez, desfazerVez, situacao, normalizarItem, normalizarRotina, textoAviso, somarDias, pendentesHoje, pendentesDoTreino, historicoPorDia, diaCompleto } from '../src/lib/rotinaBase'
+import { treinosPerdidos, dividirNaSemana, desfazerAjuste, encaixar, diasLivres, podeDividir, ajustesDaSemana, avisosDaSemana, inicioSemana, semanaDoPlano, aplicarSemana, temDiasDaSemana } from '../src/lib/semanaBase'
 import { passoTempo, normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
 let ok = 0
@@ -278,5 +279,74 @@ await t('anúncio da série: única, primeira, número e última', () => {
   assert.equal(chaveSerie(1, 1), 'serie_unica'); assert.equal(chaveSerie(1, 4), 'serie_primeira')
   assert.equal(chaveSerie(3, 4), 'serie_3'); assert.equal(chaveSerie(4, 4), 'serie_ultima')
   assert.equal(textoDoClipe('serie_3'), 'Série três!'); assert.equal(textoDoClipe('serie_ultima'), 'Última série!')
+})
+
+// Semana de 9/11 (segunda) a 15/11/2026 (domingo); treinos A (peito) seg, B (perna) qua, C (costas) sex
+const planoSemana = () => normalizarPlano({ versao: 2, dias: [
+  { letra: 'A', foco: 'Peito', grupos: ['peito', 'triceps'], exercicios: [{ nome: 'Supino', series: 4 }, { nome: 'Crucifixo', series: 3 }, { nome: 'Tríceps corda', series: 3 }] },
+  { letra: 'B', foco: 'Perna', grupos: ['quadriceps'], exercicios: [{ nome: 'Agachamento', series: 4 }] },
+  { letra: 'C', foco: 'Costas', grupos: ['costas'], exercicios: [{ nome: 'Remada', series: 4 }] },
+], agenda: [{ letra: 'A', diaSemana: 'Segunda' }, { letra: 'B', diaSemana: 'Quarta' }, { letra: 'C', diaSemana: 'Sexta' }] })
+
+await t('treino perdido: detecta no dia seguinte e quem fez em outro dia não perdeu', () => {
+  const p = planoSemana()
+  assert.equal(inicioSemana('2026-11-15'), '2026-11-09'); assert.equal(inicioSemana('2026-11-09'), '2026-11-09')
+  assert.deepEqual(treinosPerdidos(p, '2026-11-09', []), [], 'no próprio dia ainda não é perdido')
+  assert.deepEqual(treinosPerdidos(p, '2026-11-10', []).map(a => a.letra + a.data), ['A2026-11-09'])
+  assert.deepEqual(treinosPerdidos(p, '2026-11-10', [0]), [], 'fez o A (em qualquer dia da semana)')
+  // perdeu A e B: perna (grupo maior) vem primeiro
+  assert.deepEqual(treinosPerdidos(p, '2026-11-12', []).map(a => a.letra), ['B', 'A'])
+  assert.deepEqual(treinosPerdidos(p, '2026-11-16', []), [], 'semana nova zera')
+})
+
+await t('treino perdido: dividir no restante da semana sem mudar o volume e desfazer', () => {
+  const p = planoSemana()
+  const [perdido] = treinosPerdidos(p, '2026-11-10', [])
+  assert.equal(podeDividir(p, perdido, '2026-11-10', false), true)
+  const d = dividirNaSemana(p, perdido, '2026-11-10', false)
+  const extras = d.dias.flatMap(x => x.exercicios.filter(e => e.temporarioAte))
+  assert.deepEqual(extras.map(e => [e.nome, e.series]).sort(), [['Crucifixo', 3], ['Supino', 4], ['Tríceps corda', 3]])
+  assert.equal(extras.reduce((s, e) => s + e.series, 0), 10, 'mesmas séries')
+  assert.deepEqual(d.dias[1].exercicios.map(e => e.nome), ['Agachamento', 'Supino', 'Tríceps corda'], 'B (quarta) recebe o 1º e o 3º')
+  assert.deepEqual(d.dias[2].exercicios.map(e => e.nome), ['Remada', 'Crucifixo'], 'C (sexta) recebe o 2º')
+  assert.equal(d.dias[0].exercicios.length, 3, 'o treino A fica igual')
+  assert.ok(extras.every(e => e.temporarioAte === '2026-11-15' && e.origemTemp === '2026-11-09'))
+  assert.deepEqual(treinosPerdidos(d, '2026-11-10', []), [], 'ajustado: o card some')
+  assert.deepEqual(ajustesDaSemana(d, '2026-11-10').map(a => [a.letra, a.tipo]), [['A', 'dividido']])
+  const volta = desfazerAjuste(d, '2026-11-09')
+  assert.deepEqual(volta.dias.map(x => x.exercicios.length), [3, 1, 1])
+  // depois de sexta não tem para onde dividir
+  assert.equal(podeDividir(p, perdido, '2026-11-14', false), false)
+  // passou domingo: os temporários somem ao carregar o plano
+  const velho = { ...d, dias: d.dias.map(x => ({ ...x, exercicios: x.exercicios.map(e => (e.temporarioAte ? { ...e, temporarioAte: '2020-01-05' } : e)) })) }
+  assert.deepEqual(normalizarPlano(JSON.parse(JSON.stringify(velho))).dias.map(x => x.exercicios.length), [3, 1, 1])
+})
+
+await t('treino perdido: encaixar num dia livre e aviso de manhã no app', () => {
+  const p = planoSemana()
+  const [perdido] = treinosPerdidos(p, '2026-11-10', [])
+  assert.deepEqual(diasLivres(p, '2026-11-10'), ['2026-11-10', '2026-11-12', '2026-11-14', '2026-11-15'])
+  const e = encaixar(p, perdido, '2026-11-12', '2026-11-10')
+  assert.deepEqual(e.encaixes, [{ data: '2026-11-12', letra: 'A', origem: '2026-11-09', ate: '2026-11-15' }])
+  assert.ok(!diasLivres(e, '2026-11-10').includes('2026-11-12'))
+  assert.deepEqual(treinosPerdidos(e, '2026-11-10', []), [])
+  assert.equal(proximoTreino(e, 0), 1, 'a sequência dos treinos não muda')
+  assert.equal(desfazerAjuste(e, '2026-11-09').encaixes?.length, 0)
+  const n = normalizarPlano(JSON.parse(JSON.stringify({ ...e, encaixes: [{ ...e.encaixes![0], ate: '2020-01-05' }] })))
+  assert.equal(n.encaixes, undefined, 'encaixe de semana passada some')
+  // aviso: um por dia de treino de hoje até sábado ainda sem treino; o de domingo não (a semana vira)
+  assert.deepEqual(avisosDaSemana(p, '2026-11-09', []).map(a => a.data), ['2026-11-09', '2026-11-11', '2026-11-13'])
+  assert.deepEqual(avisosDaSemana(p, '2026-11-09', [0]).map(a => a.data), ['2026-11-11', '2026-11-13'], 'treinou hoje: sem aviso amanhã')
+})
+
+await t('dias da semana: sugestão na primeira vez e gravação no plano', () => {
+  const sem = normalizarPlano({ versao: 2, dias: [{ letra: 'A' }, { letra: 'B' }, { letra: 'C' }], agenda: [{ letra: 'A' }, { letra: 'B' }, { letra: 'C' }] })
+  assert.equal(temDiasDaSemana(sem), false)
+  assert.deepEqual(semanaDoPlano(sem), ['A', null, 'B', null, 'C', null, null])
+  const com = aplicarSemana(sem, ['A', 'B', null, 'C', 'A', null, null])
+  assert.deepEqual(com.agenda, [{ letra: 'A', diaSemana: 'Segunda' }, { letra: 'B', diaSemana: 'Terça' }, { letra: 'C', diaSemana: 'Quinta' }, { letra: 'A', diaSemana: 'Sexta' }])
+  assert.equal(com.frequencia_semanal, 4); assert.equal(temDiasDaSemana(com), true)
+  assert.deepEqual(semanaDoPlano(com), ['A', 'B', null, 'C', 'A', null, null])
+  assert.deepEqual(normalizarPlano(JSON.parse(JSON.stringify(com))).agenda, com.agenda)
 })
 console.log(`\n${ok} testes passaram`)

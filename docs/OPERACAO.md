@@ -190,6 +190,17 @@ observação; marca "feito" e a próxima vira hoje + intervalo (`src/lib/rotinaB
   No navegador não há aviso por notificação (só o cartão no Início).
 - O app não indica doses: aviso fixo de que dose e intervalo seguem a orientação médica.
 
+## Treino perdido (desde 11/11/2026)
+
+- Lógica pura em `src/lib/semanaBase.ts` (testes em `tests/logica.test.ts`); banco e app em `src/lib/semana.ts`; card do Início em `src/components/CartaoSemanaTreino.tsx`.
+- Usa os dias da semana do plano (`plano.agenda[].diaSemana`). Sem dias, o Início pergunta uma vez ("Agora não" guarda no aparelho); dá para editar em "Editar dias" na tela do treino.
+- Um treino é perdido quando o dia dele já passou nesta semana (segunda a domingo) e não há treino feito daquela letra na semana (feito em outro dia conta).
+  Mais de um: grupos maiores primeiro (perna, costas, peito...).
+- Opções do card: marcar como concluído (cria a sessão no dia, com todas as séries), dividir no restante da semana (os exercícios vão um a um para os próximos treinos,
+  com as mesmas séries/carga/tempos, marcados com `temporarioAte`/`origemTemp`) ou encaixar num dia livre (`plano.encaixes`).
+  Tudo some sozinho depois de domingo (`normalizarPlano` descarta os vencidos); "desfazer" no Início e na tela do treino.
+- App Android (1.8+): aviso às 8h do dia seguinte a cada dia de treino sem treino (grupo "semana" do `agendarRotina`, uma vez só); refeito ao abrir o app e quando um treino começa.
+
 ## Ideias anotadas para fazer depois
 
 - (nenhuma no momento)

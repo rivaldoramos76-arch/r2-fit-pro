@@ -126,6 +126,8 @@ function SincronizarApp() {
     if (user && ehAppNativo()) import('./lib/lembretes').then(m => m.sincronizarLembretesApp(user.id)).catch(() => {})
     // Rotina de ergogênicos (pode ter mudado em outro aparelho)
     if (user && ehAppNativo()) import('./lib/rotina').then(m => m.carregarRotina(user.id).then(m.agendarRotinaApp)).catch(() => {})
+    // Aviso de manhã do treino perdido
+    if (user && ehAppNativo()) import('./lib/semana').then(m => m.sincronizarAvisosSemana(user.id)).catch(() => {})
   }, [user])
   return null
 }

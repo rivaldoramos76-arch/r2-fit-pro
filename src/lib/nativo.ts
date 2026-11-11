@@ -48,8 +48,9 @@ export interface LembretesNativo {
   desativar(): Promise<EstadoLembretesApp>
   agendar(o: { itens: { id: string; tipo: string; hora: number; minuto: number; dias: number[] }[] }): Promise<EstadoLembretesApp>
   testar(): Promise<void>
-  /** App 1.8+: alarmes da rotina de ergogênicos (data da próxima vez + horário; repete no dia seguinte até marcar) */
-  agendarRotina(o: { itens: { id: string; data: string; hora: number; minuto: number; titulo: string; corpo: string }[] }): Promise<void>
+  /** App 1.8+: avisos com data e texto prontos. Grupo "rotina" (ergogênicos, padrão: repete no dia seguinte até marcar)
+   *  ou "semana" (treino perdido: uma vez só). Cada chamada troca a lista inteira do grupo. */
+  agendarRotina(o: { grupo?: 'rotina' | 'semana'; itens: { id: string; data: string; hora: number; minuto: number; titulo: string; corpo: string; url?: string }[] }): Promise<void>
   /** App 1.8+: notificação na hora (antes/depois do treino) */
   avisarAgora(o: { titulo: string; corpo: string; url: string }): Promise<void>
 }

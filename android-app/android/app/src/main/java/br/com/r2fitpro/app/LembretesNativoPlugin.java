@@ -71,7 +71,8 @@ public class LembretesNativoPlugin extends Plugin {
         call.resolve(estadoAtual());
     }
 
-    /** Rotina de ergogênicos: itens [{ id, data (AAAA-MM-DD), hora, minuto, titulo, corpo }] */
+    /** Avisos com data e texto prontos: grupo "rotina" (ergogênicos, padrão) ou "semana" (treino perdido);
+     *  itens [{ id, data (AAAA-MM-DD), hora, minuto, titulo, corpo, url? }] */
     @PluginMethod
     public void agendarRotina(PluginCall call) {
         if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notificacoes") != PermissionState.GRANTED
@@ -86,7 +87,7 @@ public class LembretesNativoPlugin extends Plugin {
     private void aposPermissaoRotina(PluginCall call) { concluirRotina(call); }
 
     private void concluirRotina(PluginCall call) {
-        Lembretes.definirRotina(getContext(), call.getArray("itens", new JSArray()));
+        Lembretes.definirAvisos(getContext(), call.getString("grupo", Lembretes.ROTINA), call.getArray("itens", new JSArray()));
         call.resolve(estadoAtual());
     }
 

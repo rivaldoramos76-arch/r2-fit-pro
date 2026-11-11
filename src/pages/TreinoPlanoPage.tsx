@@ -6,12 +6,17 @@ import { descreverGrupos, proximoTreino } from '../lib/treinoModel'
 import { exercicioConcluido, seriesFeitas, type Sessao } from '../lib/sessoes'
 import { Spinner } from '../components/UI'
 import EnviarParaAluno from '../components/acompanhamento/EnviarParaAluno'
+import EditorDiasSemana from '../components/treino/EditorDiasSemana'
+import { ajustesDaSemana, aplicarSemana, dataComDia, desfazerAjuste, hojeIso } from '../lib/semanaBase'
 
 export default function TreinoPlanoPage() {
   const { id } = useParams<{ id: string }>()
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const { treino, loading, erro } = useTreino(id)
+  const { treino, loading, erro, salvar } = useTreino(id)
+  const [editandoDias, setEditandoDias] = useState(false)
+  const [salvandoDias, setSalvandoDias] = useState(false)
+  const [erroDias, setErroDias] = useState('')
   const [sessoes, setSessoes] = useState<Record<number, Sessao>>({})
   const [ultimoConcluido, setUltimoConcluido] = useState<number | null>(null)
   const [carregouSessoes, setCarregouSessoes] = useState(false)
@@ -83,16 +88,43 @@ export default function TreinoPlanoPage() {
       </div>
 
       {plano.agenda.length > 0 && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Semana</p>
-          <div className="flex flex-wrap gap-2">
-            {plano.agenda.map((s, i) => (
-              <span key={i} className="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 text-zinc-300">
-                {s.diaSemana ?? `Sessão ${i + 1}`}: <b className="text-green-400">{s.letra}</b>
-              </span>
-            ))}
+        <section aria-label="Semana" className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Semana</p>
+            {!treino.enviado_por && !editandoDias && (
+              <button type="button" onClick={() => { setEditandoDias(true); setErroDias('') }} className="text-xs font-semibold text-green-400">Editar dias</button>
+            )}
           </div>
-        </div>
+          {editandoDias ? (
+            <EditorDiasSemana plano={plano} salvando={salvandoDias} onCancelar={() => setEditandoDias(false)}
+              onSalvar={async dias => {
+                setSalvandoDias(true); setErroDias('')
+                try { await salvar(aplicarSemana(plano, dias)); setEditandoDias(false) } catch { setErroDias('Não foi possível salvar. Confira a internet e tente de novo.') }
+                setSalvandoDias(false)
+              }} />
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {plano.agenda.map((s, i) => (
+                <span key={i} className="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 text-zinc-300">
+                  {s.diaSemana ?? `Sessão ${i + 1}`}: <b className="text-green-400">{s.letra}</b>
+                </span>
+              ))}
+              {(plano.encaixes ?? []).map(e => (
+                <span key={e.origem} className="text-xs px-2.5 py-1.5 rounded-lg bg-amber-500/10 text-amber-300">
+                  {dataComDia(e.data).split(',')[0].replace(/^./, c => c.toUpperCase())}: <b>{e.letra}</b> (encaixado)
+                </span>
+              ))}
+            </div>
+          )}
+          {erroDias && <p role="alert" className="text-xs text-red-400 mt-2">{erroDias}</p>}
+          {!editandoDias && ajustesDaSemana(plano, hojeIso()).map(a => (
+            <p key={`${a.tipo}-${a.origem}`} className="flex items-center gap-2 text-xs text-zinc-400 mt-2">
+              <span className="flex-1">Semana ajustada · treino {a.letra} de {dataComDia(a.origem).split(',')[0]} {a.tipo === 'dividido' ? 'dividido nos próximos treinos' : 'encaixado num dia livre'}</span>
+              <button type="button" onClick={() => salvar(desfazerAjuste(plano, a.origem)).catch(() => setErroDias('Não foi possível salvar. Confira a internet e tente de novo.'))}
+                className="font-semibold text-amber-400">desfazer</button>
+            </p>
+          ))}
+        </section>
       )}
 
       <section className="flex flex-col gap-3">

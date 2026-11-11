@@ -19,18 +19,20 @@ public class LembreteAlarme extends BroadcastReceiver {
     public void onReceive(Context c, Intent intent) {
         String acao = intent.getAction();
         if ("br.com.r2fitpro.app.ROTINA".equals(acao)) {
-            // Rotina de ergogênicos: mostra o aviso (texto já vem pronto, discreto ou não) e agenda o próximo
-            JSONObject item = Lembretes.itemRotina(c, String.valueOf(intent.getStringExtra("id")));
+            // Aviso com texto pronto: rotina de ergogênicos (discreto ou não; agenda o próximo) ou treino perdido (uma vez só)
+            String grupo = intent.getStringExtra("grupo");
+            boolean semana = Lembretes.SEMANA.equals(grupo);
+            JSONObject item = Lembretes.itemAviso(c, semana ? Lembretes.SEMANA : Lembretes.ROTINA, String.valueOf(intent.getStringExtra("id")));
             if (item == null) return;
-            Lembretes.mostrar(c, ("r" + item.optString("id")).hashCode(), item.optString("titulo", "Lembrete da sua rotina ⏰"),
-                item.optString("corpo", "Você tem um item para hoje. Toque para ver."), "/ergogenicos");
-            Lembretes.agendarRotina(c, item);
+            Lembretes.mostrar(c, ((semana ? "s" : "r") + item.optString("id")).hashCode(), item.optString("titulo", "Lembrete da sua rotina ⏰"),
+                item.optString("corpo", "Você tem um item para hoje. Toque para ver."), item.optString("url", semana ? "/" : "/ergogenicos"));
+            if (!semana) Lembretes.agendarAviso(c, Lembretes.ROTINA, item);
             return;
         }
         if (acao != null && !acao.equals("br.com.r2fitpro.app.LEMBRETE")) {
             // Celular ligou de novo, app atualizado ou mudou o horário: reagenda tudo
             if (Lembretes.ativo(c)) Lembretes.agendarTodos(c);
-            Lembretes.agendarRotinaTodos(c);
+            Lembretes.agendarAvisosTodos(c);
             return;
         }
         String id = intent.getStringExtra("id");

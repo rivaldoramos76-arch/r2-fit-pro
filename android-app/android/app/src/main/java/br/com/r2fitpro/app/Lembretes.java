@@ -152,23 +152,29 @@ public final class Lembretes {
             .build());
     }
 
-    // --- Rotina de ergogênicos: alarme na data da próxima vez e no horário; sem marcar como feito, repete no dia seguinte ---
+    // --- Avisos com data e texto prontos, em grupos que o site troca inteiros ---
+    // "rotina" (ergogênicos): na data da próxima vez e no horário; sem marcar como feito, repete no dia seguinte.
+    // "semana" (treino perdido): uma vez só, na manhã seguinte ao dia de treino que ficou sem treino.
 
-    static void definirRotina(Context c, JSONArray itens) {
-        cancelarRotina(c);
-        prefs(c).edit().putString("rotina", itens.toString()).apply();
+    static final String ROTINA = "rotina", SEMANA = "semana";
+    private static String grupoValido(String g) { return SEMANA.equals(g) ? SEMANA : ROTINA; }
+
+    static void definirAvisos(Context c, String grupo, JSONArray itens) {
+        grupo = grupoValido(grupo);
+        cancelarAvisos(c, grupo);
+        prefs(c).edit().putString(grupo, itens.toString()).apply();
         for (int i = 0; i < itens.length(); i++) {
             JSONObject o = itens.optJSONObject(i);
-            if (o != null) agendarRotina(c, o);
+            if (o != null) agendarAviso(c, grupo, o);
         }
     }
 
-    static JSONArray rotina(Context c) {
-        try { return new JSONArray(prefs(c).getString("rotina", "[]")); } catch (Exception e) { return new JSONArray(); }
+    static JSONArray avisos(Context c, String grupo) {
+        try { return new JSONArray(prefs(c).getString(grupoValido(grupo), "[]")); } catch (Exception e) { return new JSONArray(); }
     }
 
-    static JSONObject itemRotina(Context c, String id) {
-        JSONArray l = rotina(c);
+    static JSONObject itemAviso(Context c, String grupo, String id) {
+        JSONArray l = avisos(c, grupo);
         for (int i = 0; i < l.length(); i++) {
             JSONObject o = l.optJSONObject(i);
             if (o != null && id.equals(o.optString("id"))) return o;
@@ -176,35 +182,40 @@ public final class Lembretes {
         return null;
     }
 
-    static void agendarRotinaTodos(Context c) {
-        JSONArray l = rotina(c);
-        for (int i = 0; i < l.length(); i++) {
-            JSONObject o = l.optJSONObject(i);
-            if (o != null) agendarRotina(c, o);
+    static void agendarAvisosTodos(Context c) {
+        for (String grupo : new String[] { ROTINA, SEMANA }) {
+            JSONArray l = avisos(c, grupo);
+            for (int i = 0; i < l.length(); i++) {
+                JSONObject o = l.optJSONObject(i);
+                if (o != null) agendarAviso(c, grupo, o);
+            }
         }
     }
 
-    private static void cancelarRotina(Context c) {
+    private static void cancelarAvisos(Context c, String grupo) {
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
-        JSONArray l = rotina(c);
+        JSONArray l = avisos(c, grupo);
         for (int i = 0; i < l.length(); i++) {
             JSONObject o = l.optJSONObject(i);
-            if (o != null) am.cancel(intencaoRotina(c, o));
+            if (o != null) am.cancel(intencaoAviso(c, grupo, o));
         }
     }
 
-    private static PendingIntent intencaoRotina(Context c, JSONObject o) {
-        Intent i = new Intent(c, LembreteAlarme.class).setAction("br.com.r2fitpro.app.ROTINA").putExtra("id", o.optString("id"));
-        return PendingIntent.getBroadcast(c, ("r" + o.optString("id")).hashCode(), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    private static PendingIntent intencaoAviso(Context c, String grupo, JSONObject o) {
+        Intent i = new Intent(c, LembreteAlarme.class).setAction("br.com.r2fitpro.app.ROTINA")
+            .putExtra("id", o.optString("id")).putExtra("grupo", grupo);
+        String prefixo = SEMANA.equals(grupo) ? "s" : "r";
+        return PendingIntent.getBroadcast(c, (prefixo + o.optString("id")).hashCode(), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
-    /** Data da próxima vez (AAAA-MM-DD) no horário; se já passou (atrasado), hoje ou amanhã no mesmo horário. */
-    static long proximoRotina(JSONObject o, long agora) {
+    /** Data (AAAA-MM-DD) no horário; se já passou: aviso único → -1 (não avisa); rotina → hoje ou amanhã no horário. */
+    static long proximoAviso(JSONObject o, long agora, boolean unico) {
         Calendar cal = Calendar.getInstance();
         try {
             String[] d = o.optString("data").split("-");
             cal.set(Integer.parseInt(d[0]), Integer.parseInt(d[1]) - 1, Integer.parseInt(d[2]), o.optInt("hora"), o.optInt("minuto"), 0);
         } catch (Exception e) {
+            if (unico) return -1;
             cal.setTimeInMillis(agora);
             cal.set(Calendar.HOUR_OF_DAY, o.optInt("hora"));
             cal.set(Calendar.MINUTE, o.optInt("minuto"));
@@ -212,6 +223,7 @@ public final class Lembretes {
         }
         cal.set(Calendar.MILLISECOND, 0);
         if (cal.getTimeInMillis() > agora + 30_000) return cal.getTimeInMillis();
+        if (unico) return -1;
         Calendar hoje = Calendar.getInstance();
         hoje.setTimeInMillis(agora);
         hoje.set(Calendar.HOUR_OF_DAY, o.optInt("hora"));
@@ -222,9 +234,11 @@ public final class Lembretes {
         return hoje.getTimeInMillis();
     }
 
-    static void agendarRotina(Context c, JSONObject o) {
+    static void agendarAviso(Context c, String grupo, JSONObject o) {
+        long quando = proximoAviso(o, System.currentTimeMillis(), SEMANA.equals(grupo));
+        if (quando < 0) return;
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
-        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, proximoRotina(o, System.currentTimeMillis()), intencaoRotina(c, o));
+        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, quando, intencaoAviso(c, grupo, o));
     }
 
     /** Texto usado se o servidor não responder (sem internet): melhor lembrar do que ficar quieto. */

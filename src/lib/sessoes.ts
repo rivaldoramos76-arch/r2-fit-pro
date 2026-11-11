@@ -117,6 +117,8 @@ export async function concluirExercicio(params: {
     data_inicio: atual?.data_inicio ?? agora, ...campos,
   }
   salvarLocal(final)
+  // Treino começou hoje: no app Android, refaz o aviso de manhã do treino perdido (este dia não falta mais)
+  if (!atual && salva) import('./nativo').then(n => (n.ehAppNativo() ? import('./semana').then(m => m.sincronizarAvisosSemana(userId)) : null)).catch(() => {})
   return final
 }
 

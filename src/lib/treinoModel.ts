@@ -67,6 +67,10 @@ export interface ExercicioPlano {
   /** Cardio / HIIT (boxe, corrida, bike…): só séries, execução e descanso; `met` estima o gasto no diário */
   tipo?: 'cardio'
   met?: number
+  /** Exercício que veio de um treino perdido (divisão da semana): fica só até esta data (AAAA-MM-DD) */
+  temporarioAte?: string
+  /** Data do treino perdido de onde veio (para desfazer a divisão) */
+  origemTemp?: string
 }
 
 export interface DiaTreino {
@@ -80,6 +84,8 @@ export interface DiaTreino {
 }
 
 export interface SlotAgenda { letra: string; diaSemana?: string }
+/** Treino perdido encaixado num dia livre (só nesta semana; some sozinho depois de `ate`) */
+export interface Encaixe { data: string; letra: string; origem: string; ate: string }
 
 export interface PlanoTreino {
   versao: 2
@@ -90,6 +96,8 @@ export interface PlanoTreino {
   origem: 'ia' | 'manual'
   divisao: string
   agenda: SlotAgenda[]
+  /** Ajustes temporários da semana (treino perdido encaixado num dia livre) */
+  encaixes?: Encaixe[]
   config: ConfigTreino
   dias: DiaTreino[]
   observacoes: string[]
@@ -97,6 +105,11 @@ export interface PlanoTreino {
 
 export const LETRAS = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
 export const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+
+function dataLocalHoje(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export function uid(prefixo = ''): string {
   return prefixo + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
@@ -207,6 +220,8 @@ export function normalizarExercicio(raw: Record<string, unknown>, idPadrao: stri
     instrucoes: raw.instrucoes ? str(raw.instrucoes) : undefined,
     dica: raw.dica ? str(raw.dica) : undefined,
     ...(raw.tipo === 'cardio' ? { tipo: 'cardio' as const, met: num(raw.met, 8) } : {}),
+    ...(typeof raw.temporarioAte === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.temporarioAte)
+      ? { temporarioAte: raw.temporarioAte, origemTemp: raw.origemTemp ? str(raw.origemTemp) : undefined } : {}),
   }
 }
 
@@ -245,6 +260,14 @@ export function normalizarPlano(raw: unknown, fallback?: { objetivo?: string; ni
     grupos: Array.isArray(cfgRaw.grupos) ? cfgRaw.grupos : [],
   }
 
+  // Ajustes de treino perdido valem só até domingo: os vencidos somem ao carregar
+  const hoje = dataLocalHoje()
+  const diasVigentes = dias.map(d => ({ ...d, exercicios: d.exercicios.filter(e => !e.temporarioAte || e.temporarioAte >= hoje) }))
+  const ehData = (x: unknown) => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x)
+  const encaixes = (Array.isArray(p.encaixes) ? (p.encaixes as Encaixe[]) : [])
+    .filter(e => e && ehData(e.data) && ehData(e.origem) && ehData(e.ate) && e.ate >= hoje && diasVigentes.some(d => d.letra === e.letra))
+    .map(e => ({ data: e.data, letra: e.letra, origem: e.origem, ate: e.ate }))
+
   const agendaRaw = Array.isArray(p.agenda) ? (p.agenda as SlotAgenda[]) : []
   const letrasValidas = new Set(dias.map(d => d.letra))
   const agenda = agendaRaw.filter(s => s && letrasValidas.has(s.letra))
@@ -258,8 +281,9 @@ export function normalizarPlano(raw: unknown, fallback?: { objetivo?: string; ni
     origem: p.origem === 'manual' ? 'manual' : 'ia',
     divisao: str(p.divisao) || dias.map(d => d.letra).join(''),
     agenda: agenda.length ? agenda : agendaPadrao(frequencia, Math.max(dias.length, 1)).filter(s => letrasValidas.has(s.letra)),
+    ...(encaixes.length ? { encaixes } : {}),
     config,
-    dias,
+    dias: diasVigentes,
     observacoes: Array.isArray(p.observacoes) ? (p.observacoes as unknown[]).map(o => str(o)) : [],
   }
 }

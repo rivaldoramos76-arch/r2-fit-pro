@@ -176,7 +176,10 @@ export default function TreinoDiaPage() {
                     className={`min-w-6 h-6 px-1 rounded-md text-[11px] font-bold flex items-center justify-center shrink-0 ${ok ? 'bg-green-500 text-zinc-950' : parcial > 0 ? 'bg-amber-500/15 text-amber-400' : 'bg-zinc-800 text-zinc-400'}`}>
                     {ok ? '✓' : parcial > 0 ? `${parcial}/${ex.series}` : i + 1}
                   </span>
-                  <p className="flex-1 min-w-0 text-[13px] font-semibold text-zinc-100 leading-[1.15] line-clamp-2">{ex.nome}</p>
+                  <p className="flex-1 min-w-0 text-[13px] font-semibold text-zinc-100 leading-[1.15] line-clamp-2">
+                    {ex.nome}
+                    {ex.temporarioAte && <span className="ml-1.5 align-middle text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400" title="Veio de um treino perdido; sai do treino no domingo">só esta semana</span>}
+                  </p>
                   {!contador.rodando && (animacaoDe(ex.nome)
                     ? execucao !== ex.id && <MiniExecucao nome={ex.nome} onAbrir={() => setExecucao(ex.id)} />
                     : (ex.instrucoes || ex.dica) && (
