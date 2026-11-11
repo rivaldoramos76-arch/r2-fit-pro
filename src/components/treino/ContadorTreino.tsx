@@ -50,16 +50,6 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
   const [ligado, setLigado] = useState(true)
   // App instalado: notificação a cada fase (TRABALHO / DESCANSO), que vibra e aparece no relógio pareado
   const [avisosRelogio, setAvisosRelogio] = useState(() => { try { return localStorage.getItem('r2-avisos-relogio') !== '0' } catch { return true } })
-  const [msgRelogio, setMsgRelogio] = useState('')
-  const testarRelogio = () => {
-    const n = contadorNativo()
-    if (!n) return
-    setMsgRelogio('Enviando aviso de teste…')
-    // App antigo (sem o teste) recusa a chamada na hora: avisa para atualizar em vez de não fazer nada
-    Promise.resolve().then(() => n.testarRelogio({ atraso: 10 }))
-      .then(() => setMsgRelogio('🔒 Bloqueie a tela do celular agora: em 10 segundos chegam 3 avisos de teste (A, B e C), um a cada 6 segundos. Muitos relógios (como os Galaxy) só mostram com o celular bloqueado. Se não chegar nenhum, abra o app do relógio (Galaxy Wearable, Zepp, Mi Fitness, Garmin Connect…) → Notificações e ligue o R2 Fit Pro.'))
-      .catch(() => setMsgRelogio('Atualize o app para a versão mais nova (r2fitpro.com.br/baixar/r2-fit-pro.apk) para usar o teste.'))
-  }
   const alternarAvisos = () => setAvisosRelogio(v => { try { localStorage.setItem('r2-avisos-relogio', v ? '0' : '1') } catch { /* sem armazenamento */ } return !v })
   const prefsAudio = useRef<PrefsAudio | null>(null)
 
@@ -323,12 +313,6 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
               <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${avisosRelogio ? 'translate-x-4' : ''}`} />
             </span>
           </button>
-          {avisosRelogio && (
-            <div className="mt-1.5">
-              <button type="button" onClick={testarRelogio} className="text-[11px] font-semibold text-green-400">⌚ Testar no relógio</button>
-              {msgRelogio && <p className="text-[11px] text-zinc-500 mt-1 leading-snug">{msgRelogio}</p>}
-            </div>
-          )}
         </>
       ) : vozes === 'fallback' ? (
         <p className="text-[11px] text-zinc-500">Vozes gravadas indisponíveis: usando a voz do navegador. Neste modo, mantenha a tela ligada.</p>
