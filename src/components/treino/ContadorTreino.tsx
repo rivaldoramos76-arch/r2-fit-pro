@@ -437,7 +437,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
         // O sistema tira a tela cheia quando se troca de app ou bloqueia a tela; o navegador só deixa voltar com um toque
         onPointerDown={() => { if (!document.fullscreenElement) entrarTelaCheia() }}
         style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <p className="text-center text-[13px] text-zinc-500 tabular-nums pt-4" aria-label={`Hora atual ${hora}`}>{hora}</p>
+        <p className="text-center text-2xl font-light text-zinc-400 tabular-nums pt-4" aria-label={`Hora atual ${hora}`}>{hora}</p>
         {itens.length > 1 && ex && (
           <p className="text-center text-[11px] text-zinc-500 pt-1 px-6 truncate">Exercício {idxAtual + 1} de {itens.length} · {ex.nome}</p>
         )}
