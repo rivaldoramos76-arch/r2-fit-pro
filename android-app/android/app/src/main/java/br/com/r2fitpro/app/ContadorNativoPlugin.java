@@ -99,13 +99,23 @@ public class ContadorNativoPlugin extends Plugin {
         call.resolve();
     }
 
-    /** Tela sempre ligada enquanto o contador está aberto. */
+    /** Tela sempre ligada e em tela cheia enquanto o contador está aberto. */
     @PluginMethod
     public void telaLigada(PluginCall call) {
         boolean ligada = Boolean.TRUE.equals(call.getBoolean("ligada", true));
         getActivity().runOnUiThread(() -> {
-            if (ligada) getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            else getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            android.view.Window w = getActivity().getWindow();
+            // Tela cheia do contador: esconde a barra de cima (hora, bateria) e os botões do Android;
+            // puxar da borda mostra por um instante. A tela cheia do navegador não funciona dentro do app.
+            androidx.core.view.WindowInsetsControllerCompat barras = androidx.core.view.WindowCompat.getInsetsController(w, w.getDecorView());
+            if (ligada) {
+                w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                barras.setSystemBarsBehavior(androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                barras.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+            } else {
+                w.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                barras.show(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+            }
         });
         call.resolve();
     }
