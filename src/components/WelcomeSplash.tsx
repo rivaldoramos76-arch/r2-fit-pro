@@ -3,8 +3,9 @@ import { Dumbbell, Flame, Salad } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 const STORAGE_KEY = 'r2fit:welcome-visto'
-const AUTO_FECHAR_MS = 3800
-const SAIDA_MS = 450
+// Aparece rapidinho e abre o app sozinho (sem botão "Começar"); tocar na tela também fecha
+const AUTO_FECHAR_MS = 1600
+const SAIDA_MS = 350
 
 function jaVisto() {
   try {
@@ -80,13 +81,13 @@ export default function WelcomeSplash() {
           </div>
         </div>
 
-        <p className="welcome-fade text-sm text-zinc-500" style={{ animationDelay: '0.35s' }}>
+        <p className="welcome-fade text-sm text-zinc-500" style={{ animationDelay: '0.1s' }}>
           {saudacao()}{!loading && nome ? <>, <span className="capitalize text-zinc-300">{nome}</span></> : ''}
         </p>
-        <h1 className="welcome-fade mt-1 text-3xl font-bold tracking-tight text-zinc-100" style={{ animationDelay: '0.5s' }}>
+        <h1 className="welcome-fade mt-1 text-3xl font-bold tracking-tight text-zinc-100" style={{ animationDelay: '0.2s' }}>
           Bem-vindo ao <span className="text-green-500">R2 Fit Pro</span>
         </h1>
-        <p className="welcome-fade mt-2 max-w-xs text-sm text-zinc-400" style={{ animationDelay: '0.65s' }}>
+        <p className="welcome-fade mt-2 max-w-xs text-sm text-zinc-400" style={{ animationDelay: '0.3s' }}>
           Dieta e treino personalizados com IA
         </p>
 
@@ -95,7 +96,7 @@ export default function WelcomeSplash() {
             <div
               key={label}
               className="welcome-fade flex flex-col items-center gap-1.5 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-3"
-              style={{ animationDelay: `${0.85 + i * 0.12}s` }}
+              style={{ animationDelay: `${0.4 + i * 0.08}s` }}
             >
               <Icon className="h-5 w-5 text-green-400" strokeWidth={1.8} />
               <span className="text-xs font-medium text-zinc-300">{label}</span>
@@ -103,20 +104,8 @@ export default function WelcomeSplash() {
           ))}
         </div>
 
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); fechar() }}
-          className="welcome-fade mt-10 rounded-xl bg-green-500 px-8 py-3 text-sm font-semibold text-zinc-950 shadow-lg shadow-green-500/20 transition-transform active:scale-95"
-          style={{ animationDelay: '1.3s' }}
-        >
-          Começar
-        </button>
       </div>
 
-      {/* Barra de progresso do auto-fechamento */}
-      <div className="absolute bottom-10 h-0.5 w-24 overflow-hidden rounded-full bg-zinc-800">
-        <div className="welcome-progress h-full bg-green-500/70" style={{ animationDuration: `${AUTO_FECHAR_MS}ms` }} />
-      </div>
     </div>
   )
 }

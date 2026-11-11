@@ -1446,6 +1446,20 @@ await t('personal: ativa o modo personal, vê alunos com alertas e acompanha um 
   await ctx.close()
 })
 
+await t('boas-vindas: aparece rapidinho ao abrir e entra no app sozinha, sem botão', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa' })
+  await page.addInitScript(() => sessionStorage.removeItem('r2fit:welcome-visto'))
+  await page.goto(BASE + '/dashboard')
+  const boasVindas = page.getByRole('dialog', { name: 'Boas-vindas ao R2 Fit Pro' })
+  await boasVindas.waitFor()
+  assert.equal(await boasVindas.getByRole('button', { name: 'Começar' }).count(), 0, 'sem botão Começar')
+  const inicio = Date.now()
+  await boasVindas.waitFor({ state: 'detached', timeout: 4000 })
+  assert.ok(Date.now() - inicio < 3000, 'abre o app em menos de 3 s')
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
 await t('amigos: ativa, curte treino no feed, vê ranking e aceita pedido', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', amigos: true })
   await page.goto(BASE + '/amigos')
