@@ -38,7 +38,11 @@ export interface Cue { t: number; clip: ClipKey }
 export interface Fase { tipo: FaseTipo; serie: number; exercicio: number; proximo?: number; inicio: number; fim: number; cues: Cue[] }
 /** `marcos[i]`: instante em que termina a última série do exercício i. */
 export interface Cronograma { fases: Fase[]; cues: Cue[]; total: number; fimUltimaSerie: number; marcos: number[]; exercicios: number }
-export interface ConfigCrono { series: number; execSeg: number; descansoSeg: number; nome?: string }
+export interface ConfigCrono {
+  series: number; execSeg: number; descansoSeg: number; nome?: string
+  /** Tempo de cada série / do descanso depois de cada série, quando mudam no meio do treino (ajuste no contador) */
+  execPorSerie?: number[]; descPorSerie?: number[]
+}
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000
 
@@ -69,9 +73,10 @@ export function montarCronograma(cfg: ConfigCrono | ConfigCrono[], dur: Partial<
 
   lista.forEach((c, e) => {
     const series = Math.max(1, Math.round(c.series))
-    const exec = Math.max(1, c.execSeg)
-    const desc = Math.max(0, c.descansoSeg)
+    const execDe = (s: number) => Math.max(1, c.execPorSerie?.[s - 1] ?? c.execSeg)
+    const descDe = (s: number) => Math.max(0, c.descPorSerie?.[s - 1] ?? c.descansoSeg)
     for (let s = 1; s <= series; s++) {
+      const exec = execDe(s), desc = descDe(s)
       // Depois do 5-4-3-2-1 a voz diz a série ("Primeira série!", "Série dois!", "Última série!"); sem o clipe, "Trabalho!"
       const anuncio = chaveSerie(s, series)
       contagem('countdown', s, e, tem(anuncio) ? anuncio : 'trabalho')
@@ -94,7 +99,7 @@ export function montarCronograma(cfg: ConfigCrono | ConfigCrono[], dur: Partial<
         fc.push({ t: ta, clip: k })
         ta = r3(ta + (dur[k] ?? 2.4) + 0.25)
       }
-      const fim = r3(Math.max(inicio + desc, ta + 1))
+      const fim = r3(Math.max(inicio + descDe(series), ta + 1))
       fases.push({ tipo: 'rest', serie: series, exercicio: e, proximo: e + 1, inicio, fim, cues: fc })
       cues.push(...fc)
       t = fim
@@ -392,7 +397,10 @@ export class TreinoPlayer {
   /** 'nativo': app Android instalado, as falas tocam fora do navegador (tela bloqueada, por cima da música) */
   readonly modo: 'mix' | 'audio' | 'voz' | 'nativo'
   private nativo: ContadorNativo | null = null
-  readonly crono: Cronograma
+  crono: Cronograma
+  private cfgs: ConfigCrono[]
+  private durClipes: Record<string, number>
+  private temClipe: (k: string) => boolean
   private ouv: Ouvintes
   private concluidoAvisado = false
   private marcosAvisados = 0
@@ -451,9 +459,12 @@ export class TreinoPlayer {
       this.nativo = opcoes.nativo!; this.clips = clips; this.titulo = opcoes.titulo ?? 'Contador'
     }
     // Sem as vozes gravadas, o navegador fala qualquer texto; com elas, só entram os clipes que existem
-    this.crono = montarCronograma(cfg, clips ? duracoes(clips) : {}, clips ? k => !!clips[k]?.length : () => true)
+    this.cfgs = (Array.isArray(cfg) ? cfg : [cfg]).map(c => ({ ...c }))
+    this.durClipes = clips ? duracoes(clips) : {}
+    this.temClipe = clips ? k => !!clips[k]?.length : () => true
+    this.crono = montarCronograma(this.cfgs, this.durClipes, this.temClipe)
     if (this.modo === 'nativo' && opcoes.avisosRelogio !== false) this.avisos = avisosDasFases(this.crono, Array.isArray(cfg) ? cfg : [cfg])
-    if (this.modo === 'mix') this.clips = clips
+    if (this.modo === 'mix' || this.modo === 'audio') this.clips = clips
     if (this.modo === 'audio' && clips) {
       const blob = renderizarFaixa(this.crono, clips, TAXA)
       this.url = URL.createObjectURL(blob)
@@ -469,6 +480,78 @@ export class TreinoPlayer {
       })
       a.addEventListener('playing', () => { this.interrompido = false })
       this.audio = a
+    }
+  }
+
+  /**
+   * Ajuste no meio do treino: novo tempo de trabalho e/ou de descanso do exercício `exIdx`, valendo para as
+   * fases dele que ainda não começaram (a que está rodando continua como estava). Refaz a linha do tempo e
+   * reagenda as falas a partir de agora; o passado não muda, então o ponto atual continua o mesmo.
+   */
+  atualizarTempos(exIdx: number, novo: { exec?: number; desc?: number }) {
+    const c = this.cfgs[exIdx]
+    if (!c || this.parado) return
+    const t = this.tempo()
+    const n = Math.max(1, Math.round(c.series))
+    const exec = Array.from({ length: n }, (_, k) => c.execPorSerie?.[k] ?? c.execSeg)
+    const desc = Array.from({ length: n }, (_, k) => c.descPorSerie?.[k] ?? c.descansoSeg)
+    const futura = (tipo: FaseTipo, serie: number) => {
+      const f = this.crono.fases.find(x => x.tipo === tipo && x.exercicio === exIdx && x.serie === serie)
+      return !!f && f.inicio > t + 0.05
+    }
+    for (let k = 1; k <= n; k++) {
+      if (novo.exec != null && futura('work', k)) exec[k - 1] = Math.max(1, Math.round(novo.exec))
+      if (novo.desc != null && futura('rest', k)) desc[k - 1] = Math.max(0, Math.round(novo.desc))
+    }
+    this.cfgs[exIdx] = { ...c, execPorSerie: exec, descPorSerie: desc }
+    this.crono = montarCronograma(this.cfgs, this.durClipes, this.temClipe)
+    this.fimSeries = []
+    if (this.modo === 'nativo' && this.avisos.length) this.avisos = avisosDasFases(this.crono, this.cfgs)
+    this.reagendar(t)
+  }
+
+  /** Depois de refazer a linha do tempo, toca as falas futuras no horário novo (sem cortar a que está tocando). */
+  private reagendar(t: number) {
+    const cues = this.crono.cues
+    const prox = (() => { const i = cues.findIndex(c => c.t > t + 0.02); return i < 0 ? cues.length : i })()
+    if (this.modo === 'voz') { this.proximoCue = prox; return }
+    if (this.modo === 'nativo') {
+      if (this.pausadoEm === null) this.tocarNativo(t, c => c.t > t + 0.05).catch(() => {})
+      return
+    }
+    if (this.modo === 'mix' && this.ctx) {
+      const ctx = this.ctx
+      const agora = ctx.currentTime
+      const ficam = this.fontes.filter(f => (this.inicioFonte.get(f) ?? Infinity) <= agora + 0.02)
+      for (const f of this.fontes) if (!ficam.includes(f)) { try { f.stop() } catch { /* já parou */ } }
+      this.fontes = ficam
+      this.proximoDuck = prox
+      if (this.abaixarMusica && !this.emSegundoPlano) return // Android: as falas tocam em <audio> pelo relógio
+      for (let i = prox; i < cues.length; i++) {
+        const b = this.buffers[cues[i].clip]
+        if (!b) continue
+        const src = ctx.createBufferSource()
+        src.buffer = b
+        src.connect(this.entrada ?? this.ganho!)
+        const quando = this.t0Ctx + cues[i].t
+        src.start(Math.max(agora, quando))
+        this.inicioFonte.set(src, quando)
+        this.fontes.push(src)
+      }
+      return
+    }
+    if (this.modo === 'audio' && this.audio && this.clips) {
+      // Faixa contínua: renderiza de novo e continua do mesmo ponto
+      const a = this.audio
+      const tocando = !a.paused
+      const velha = this.url
+      this.url = URL.createObjectURL(renderizarFaixa(this.crono, this.clips, TAXA))
+      this.pausaPedida = tocando
+      a.src = this.url
+      const seguir = () => { try { a.currentTime = t } catch { /* ainda carregando */ } if (tocando) a.play().catch(() => { this.interrompido = true }) }
+      a.addEventListener('loadedmetadata', seguir, { once: true })
+      a.load()
+      if (velha) URL.revokeObjectURL(velha)
     }
   }
 
@@ -500,10 +583,11 @@ export class TreinoPlayer {
     await this.tocarNativo(0)
   }
 
-  private tocarNativo(desde: number) {
+  private tocarNativo(desde: number, filtro: (c: Cue) => boolean = () => true) {
     return this.nativo!.tocar({
-      cues: this.crono.cues.filter(c => this.clips?.[c.clip]?.length).map(c => ({ t: c.t, clip: c.clip })),
-      desde, volume: this.volume, mudo: this.mudo, titulo: this.titulo, avisos: this.avisos,
+      cues: this.crono.cues.filter(c => this.clips?.[c.clip]?.length && filtro(c)).map(c => ({ t: c.t, clip: c.clip })),
+      desde, volume: this.volume, mudo: this.mudo, titulo: this.titulo,
+      avisos: this.avisos.filter(a => filtro({ t: a.t, clip: '' })),
     })
   }
 

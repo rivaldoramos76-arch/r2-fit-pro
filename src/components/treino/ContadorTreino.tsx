@@ -12,7 +12,8 @@ import { carregarPreferencias, salvarPreferencias, type PrefsAudio } from '../..
 import { detectarSistema } from '../../lib/instalacao'
 import { contadorNativo } from '../../lib/nativo'
 import type { ExercicioPlano } from '../../lib/treinoModel'
-import { normalizarCarga, passoCarga } from './AjustesExercicio'
+import { lerTempo, mss, normalizarCarga, passoCarga } from './AjustesExercicio'
+import { passoTempo } from '../../lib/treinoModel'
 import { ExecucaoAmpliada, MiniExecucao, animacaoDe } from './ExecucaoAnimada'
 
 type Tela = 'parado' | 'rodando' | 'concluido' | 'interrompido'
@@ -35,14 +36,14 @@ function AvisoIphone() {
   )
 }
 
-export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso, aoFechar, onCarga }: {
+export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso, aoFechar, onAjuste }: {
   user: Pick<User, 'id'> | null; treino: TreinoInfo | null; diaIdx: number; dia: DiaInfo | null; onSessao: (s: Sessao) => void
   /** Exercício fora do plano (Diário): ao terminar ou encerrar, grava as séries feitas e devolve o texto de confirmação. */
   avulso?: (ex: ExercicioPlano, seriesFeitas: number) => Promise<string>
   /** Chamado ao fechar a tela de fim (botão Voltar). */
   aoFechar?: () => void
   /** Carga mudada na própria tela da contagem (salva no plano do treino). */
-  onCarga?: (exercicioId: string, carga: string | undefined) => void
+  onAjuste?: (exercicioId: string, parcial: Partial<Pick<ExercicioPlano, 'carga' | 'tempo_execucao_segundos' | 'tempo_descanso_segundos'>>) => void
 }) {
   const sistema = detectarSistema()
   const [vozes, setVozes] = useState<'carregando' | 'ok' | 'fallback'>('carregando')
@@ -71,14 +72,29 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
   const wakeRef = useRef<WakeLockSentinel | null>(null)
   const recuperando = useRef(false)
   // Carga editada na tela da contagem (sem sair do treino)
-  const [cargaAberta, setCargaAberta] = useState(false)
+  // Ajustes na própria tela da contagem (sem sair do treino): carga, tempo de trabalho e de descanso
+  const [editando, setEditando] = useState<null | 'carga' | 'exec' | 'desc'>(null)
   // Execução do exercício atual ampliada por cima da contagem
   const [execucaoAberta, setExecucaoAberta] = useState(false)
-  const timerCarga = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [rascunhoTempo, setRascunhoTempo] = useState<string | null>(null)
+  const timerAjuste = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const mudarCarga = (exId: string, nova: string) => {
     setItens(l => l.map(e => (e.id === exId ? { ...e, carga: nova } : e)))
-    clearTimeout(timerCarga.current)
-    timerCarga.current = setTimeout(() => onCarga?.(exId, normalizarCarga(nova)), 800)
+    clearTimeout(timerAjuste.current)
+    timerAjuste.current = setTimeout(() => onAjuste?.(exId, { carga: normalizarCarga(nova) }), 800)
+  }
+  /** Novo tempo de trabalho/descanso: vale para as próximas fases do exercício atual e fica salvo no treino. */
+  const mudarTempo = (exIdx: number, campo: 'exec' | 'desc', seg: number) => {
+    const ex = itens[exIdx]
+    if (!ex) return
+    const chave = campo === 'exec' ? 'tempo_execucao_segundos' : 'tempo_descanso_segundos'
+    const v = campo === 'exec' ? Math.min(3600, Math.max(5, seg)) : Math.min(600, Math.max(0, seg))
+    setItens(l => l.map((e, i) => (i === exIdx ? { ...e, [chave]: v } : e)))
+    clearTimeout(timerAjuste.current)
+    timerAjuste.current = setTimeout(() => {
+      playerRef.current?.atualizarTempos(exIdx, campo === 'exec' ? { exec: v } : { desc: v })
+      onAjuste?.(ex.id, { [chave]: v })
+    }, 700)
   }
   const feitasRef = useRef(0)
   const avulsoSalvo = useRef(false)
@@ -466,38 +482,84 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
           {pausado && <span className="text-[11px] font-semibold uppercase tracking-widest text-yellow-600/60">Pausado</span>}
         </div>
 
-        {fase?.tipo !== 'final' && ex && (animacaoDe(ex.nome) || (onCarga && ex.tipo !== 'cardio')) && (
-          <div className="flex items-end justify-center gap-4 pb-5 px-6" onPointerDown={e => e.stopPropagation()}>
-            {animacaoDe(ex.nome) && !cargaAberta && (
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[10px] text-zinc-500">visualizar exercício</span>
-                <div className="opacity-60"><MiniExecucao nome={ex.nome} tamanho="w-12 h-12" onAbrir={() => setExecucaoAberta(true)} /></div>
-              </div>
-            )}
-            {onCarga && ex.tipo !== 'cardio' && (
+        {fase?.tipo !== 'final' && ex && (
+          <div className="flex flex-col items-center gap-3 pb-5 px-6" onPointerDown={e => e.stopPropagation()}>
+            {editando === 'carga' ? (
               <div className="flex flex-col items-center gap-1">
                 <span className="text-[10px] text-zinc-500">editar carga</span>
-                {cargaAberta ? (
                 <div className="flex items-center gap-2" role="group" aria-label="Ajustar carga">
                   <button type="button" aria-label="Diminuir carga" disabled={passoCarga(ex.carga, -1) === null}
                     onClick={() => { const n = passoCarga(ex.carga, -1); if (n !== null) mudarCarga(ex.id, n) }}
                     className="w-11 h-11 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▼</button>
                   <input aria-label="Carga" value={ex.carga ?? ''} placeholder="kg" inputMode="decimal" autoComplete="off"
                     onChange={e => mudarCarga(ex.id, e.target.value.slice(0, 40))}
-                    onKeyDown={e => { if (e.key === 'Enter') setCargaAberta(false) }}
+                    onKeyDown={e => { if (e.key === 'Enter') setEditando(null) }}
                     className="w-32 h-11 rounded-lg bg-black border border-zinc-800 text-center text-lg text-zinc-400 focus:outline-none focus:border-zinc-600" />
                   <button type="button" aria-label="Aumentar carga" disabled={passoCarga(ex.carga, 1) === null}
                     onClick={() => { const n = passoCarga(ex.carga, 1); if (n !== null) mudarCarga(ex.id, n) }}
                     className="w-11 h-11 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▲</button>
-                  <button type="button" onClick={() => setCargaAberta(false)} className="text-xs text-zinc-500 px-2 h-11">ok</button>
+                  <button type="button" onClick={() => setEditando(null)} className="text-xs text-zinc-500 px-2 h-11">ok</button>
                 </div>
-              ) : (
-                <button type="button" onClick={() => setCargaAberta(true)} aria-label={`Carga: ${ex.carga || 'sem carga'}. Tocar para mudar`}
-                  className="h-12 text-[13px] text-zinc-500 tracking-wide px-4 rounded-full border border-zinc-800">
-                  carga · <span className="tabular-nums">{ex.carga || '—'}</span> ✎
-                </button>
-              )}
               </div>
+            ) : editando === 'exec' || editando === 'desc' ? (() => {
+              const campo = editando
+              const rotulo = campo === 'exec' ? 'trabalho' : 'descanso'
+              const atual = campo === 'exec' ? ex.tempo_execucao_segundos : ex.tempo_descanso_segundos
+              const min = campo === 'exec' ? 5 : 0, max = campo === 'exec' ? 3600 : 600
+              const confirmar = () => { if (rascunhoTempo !== null) { const v = lerTempo(rascunhoTempo); if (v !== null) mudarTempo(idxAtual, campo, v); setRascunhoTempo(null) } }
+              return (
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-[10px] text-zinc-500">editar {rotulo} · vale a partir da próxima {campo === 'exec' ? 'série' : 'pausa'}</span>
+                  <div className="flex items-center gap-2" role="group" aria-label={`Ajustar ${rotulo}`}>
+                    <button type="button" aria-label={`Diminuir ${rotulo}`} disabled={atual <= min}
+                      onClick={() => mudarTempo(idxAtual, campo, passoTempo(atual, -1, min, max))}
+                      className="w-11 h-11 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▼</button>
+                    <input aria-label={rotulo === 'trabalho' ? 'Tempo de trabalho' : 'Tempo de descanso'} value={rascunhoTempo ?? mss(atual)} inputMode="numeric" autoComplete="off"
+                      onFocus={e => { setRascunhoTempo(mss(atual)); e.target.select() }}
+                      onChange={e => setRascunhoTempo(e.target.value.slice(0, 6))}
+                      onBlur={confirmar}
+                      onKeyDown={e => { if (e.key === 'Enter') { confirmar(); setEditando(null) } }}
+                      className="w-32 h-11 rounded-lg bg-black border border-zinc-800 text-center text-lg tabular-nums text-zinc-400 focus:outline-none focus:border-zinc-600" />
+                    <button type="button" aria-label={`Aumentar ${rotulo}`} disabled={atual >= max}
+                      onClick={() => mudarTempo(idxAtual, campo, passoTempo(atual, 1, min, max))}
+                      className="w-11 h-11 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▲</button>
+                    <button type="button" onClick={() => { confirmar(); setEditando(null) }} className="text-xs text-zinc-500 px-2 h-11">ok</button>
+                  </div>
+                </div>
+              )
+            })() : (
+              <>
+                {(animacaoDe(ex.nome) || (onAjuste && ex.tipo !== 'cardio')) && (
+                  <div className="flex items-end justify-center gap-4">
+                    {animacaoDe(ex.nome) && (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-[10px] text-zinc-500">visualizar exercício</span>
+                        <div className="opacity-60"><MiniExecucao nome={ex.nome} tamanho="w-12 h-12" onAbrir={() => setExecucaoAberta(true)} /></div>
+                      </div>
+                    )}
+                    {onAjuste && ex.tipo !== 'cardio' && (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-[10px] text-zinc-500">editar carga</span>
+                        <button type="button" onClick={() => setEditando('carga')} aria-label={`Carga: ${ex.carga || 'sem carga'}. Tocar para mudar`}
+                          className="h-12 text-[13px] text-zinc-500 tracking-wide px-4 rounded-full border border-zinc-800">
+                          carga · <span className="tabular-nums">{ex.carga || '—'}</span> ✎
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="flex items-end justify-center gap-4">
+                  {([['exec', 'trabalho', ex.tempo_execucao_segundos], ['desc', 'descanso', ex.tempo_descanso_segundos]] as const).map(([campo, rotulo, seg]) => (
+                    <div key={campo} className="flex flex-col items-center gap-1">
+                      <span className="text-[10px] text-zinc-500">editar {rotulo}</span>
+                      <button type="button" onClick={() => { setRascunhoTempo(null); setEditando(campo) }} aria-label={`${rotulo === 'trabalho' ? 'Trabalho' : 'Descanso'}: ${mss(seg)}. Tocar para mudar`}
+                        className="h-10 text-[12px] text-zinc-500 tracking-wide px-4 rounded-full border border-zinc-800">
+                        {rotulo} · <span className="tabular-nums">{mss(seg)}</span> ✎
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}

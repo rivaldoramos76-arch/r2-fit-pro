@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { CATALOGO, GRUPOS } from '../src/data/exercicios'
 import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
-import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar, chaveSerie, textoDoClipe } from '../src/lib/workoutAudio'
+import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar, chaveSerie, textoDoClipe, TreinoPlayer } from '../src/lib/workoutAudio'
 import { passoReps, passoCarga, lerTempo, mss } from '../src/components/treino/AjustesExercicio'
 import { passoTempo, normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
@@ -201,6 +201,32 @@ await t('setas da carga: kg, par de halteres, vazio e texto livre', () => {
   assert.equal(passoCarga('', 1), '1 kg'); assert.equal(passoCarga(undefined, -1), null); assert.equal(passoCarga('1 kg', -1), '')
   assert.equal(passoCarga('elástico médio', 1), null)
 })
+await t('ajuste no contador: novo trabalho/descanso vale só para as fases que ainda não começaram', () => {
+  const dur = (c: ReturnType<typeof montarCronograma>, tipo: string, serie: number) => {
+    const f = c.fases.find(x => x.tipo === tipo && x.serie === serie && x.exercicio === 0)!
+    return Math.round((f.fim - f.inicio) * 10) / 10
+  }
+  // Tempos diferentes por série
+  const c = montarCronograma({ series: 3, execSeg: 40, descansoSeg: 60, execPorSerie: [40, 50, 55], descPorSerie: [60, 90] }, {}, () => true)
+  assert.equal(dur(c, 'work', 2), 50); assert.equal(dur(c, 'work', 3), 55); assert.equal(dur(c, 'rest', 1), 60); assert.equal(dur(c, 'rest', 2), 90)
+  // Player parado no início: tudo é futuro
+  const ouv = { onFim: () => {}, onSeriesConcluidas: () => {} }
+  const p = new TreinoPlayer({ series: 3, execSeg: 40, descansoSeg: 60 }, null, ouv)
+  p.atualizarTempos(0, { exec: 45 })
+  assert.deepEqual([1, 2, 3].map(s => dur(p.crono, 'work', s)), [45, 45, 45])
+  // No meio da série 2: muda o descanso -> a pausa depois da série 2 já usa o novo; a série 2 continua igual
+  const w2 = p.crono.fases.find(f => f.tipo === 'work' && f.serie === 2)!
+  const meio = w2.inicio + 10
+  ;(p as unknown as { t0: number }).t0 = Date.now() - meio * 1000
+  p.atualizarTempos(0, { desc: 90, exec: 30 })
+  assert.equal(dur(p.crono, 'rest', 1), 60, 'pausa 1 já passou')
+  assert.equal(dur(p.crono, 'work', 2), 45, 'série em andamento não muda')
+  assert.equal(dur(p.crono, 'rest', 2), 90, 'próxima pausa já usa o novo descanso')
+  assert.equal(dur(p.crono, 'work', 3), 30, 'próxima série já usa o novo trabalho')
+  // O passado não muda: o ponto atual continua na série 2
+  assert.equal(estadoEm(p.crono, meio).fase.serie, 2)
+})
+
 await t('setas de execução e descanso: sempre de 5 em 5 segundos', () => {
   assert.equal(passoTempo(60, 1, 0), 65); assert.equal(passoTempo(60, -1, 0), 55); assert.equal(passoTempo(90, 1, 0), 95)
   assert.equal(passoTempo(3, 1, 5), 5); assert.equal(passoTempo(3, -1, 0), 0); assert.equal(passoTempo(47, 1, 0), 50); assert.equal(passoTempo(47, -1, 0), 45)

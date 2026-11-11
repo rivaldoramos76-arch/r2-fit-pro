@@ -1172,6 +1172,22 @@ await t('contador: carga e execução na própria tela da contagem; a carga já 
   await page.getByRole('button', { name: 'Fechar execução' }).click()
   await page.getByRole('button', { name: 'Fechar execução' }).waitFor({ state: 'detached' })
   await page.getByRole('button', { name: 'Pausar' }).waitFor()
+  // Descanso mudado durante a contagem: a pausa que ainda vai começar já usa o tempo novo, e fica salvo no treino
+  await page.getByRole('button', { name: 'Descanso: 0:02. Tocar para mudar' }).click()
+  await page.getByText(/editar descanso · vale a partir da próxima pausa/).waitFor()
+  await page.getByRole('button', { name: 'Aumentar descanso' }).click()
+  assert.equal(await page.getByLabel('Tempo de descanso').inputValue(), '0:05')
+  await page.getByRole('button', { name: 'ok' }).click()
+  await page.getByRole('button', { name: 'Descanso: 0:05. Tocar para mudar' }).waitFor()
+  let salvo
+  for (let i = 0; i < 40 && salvo?.tempo_descanso_segundos !== 5; i++) {
+    await page.waitForTimeout(100)
+    salvo = page.gravacoes.filter(g => g.tabela === 'treinos').pop()?.corpo.plano.dias[0].exercicios[0]
+  }
+  assert.equal(salvo?.tempo_descanso_segundos, 5, 'descanso novo salvo no treino')
+  await page.getByText('00:05', { exact: true }).waitFor({ timeout: 30000 }) // pausa depois da série 1 com 5 s
+  await page.getByText('descanso', { exact: true }).waitFor()
+  await page.screenshot({ path: `${SHOTS}/contador-tempos.png` })
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
