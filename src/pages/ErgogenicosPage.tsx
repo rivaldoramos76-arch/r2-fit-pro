@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Check, EyeOff, Eye, ShieldAlert } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, EyeOff, Eye, ShieldAlert, X, ChevronDown } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { carregarRotina, salvarRotina } from '../lib/rotina'
 import {
-  FORMAS, UNIDADES, MAX_ITENS, diaLocal, desfazerFeito, feitoHoje, marcarFeito, normalizarItem, situacao,
-  textoDose, textoIntervalo, type ItemRotina, type Rotina,
+  FORMAS, UNIDADES, MOMENTOS, MAX_ITENS, MAX_VEZES, dataCurta, desfazerVez, diaLocal, ehDeHoje, historicoPorDia, marcarVez,
+  normalizarItem, situacao, textoDose, textoIntervalo, textoVez, textoVezes, vezFeita, type ItemRotina, type Momento, type Rotina,
 } from '../lib/rotinaBase'
 import { ehAppNativo } from '../lib/nativo'
 import { Button, Spinner } from '../components/UI'
@@ -17,6 +17,7 @@ function Formulario({ inicial, onSalvar, onCancelar }: { inicial: ItemRotina; on
   const [f, setF] = useState({ ...inicial, dose: String(inicial.dose || '').replace('.', ','), intervalo: String(inicial.intervaloDias) })
   const [erro, setErro] = useState('')
   const set = (p: Partial<typeof f>) => setF(x => ({ ...x, ...p }))
+  const mudarVez = (k: number, p: Partial<ItemRotina['vezes'][number]>) => set({ vezes: f.vezes.map((v, i) => (i === k ? { ...v, ...p } : v)) })
   const salvar = () => {
     const item = normalizarItem({ ...f, dose: Number(f.dose.replace(',', '.')), intervaloDias: Number(f.intervalo) })
     if (!item) { setErro('Confira o nome, a dose (maior que zero) e o intervalo (de 1 a 365 dias).'); return }
@@ -36,7 +37,7 @@ function Formulario({ inicial, onSalvar, onCancelar }: { inicial: ItemRotina; on
       </label>
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-zinc-400">Dose</span>
+          <span className="text-xs text-zinc-400">Dose (cada vez)</span>
           <input value={f.dose} onChange={e => set({ dose: e.target.value.replace(/[^\d.,]/g, '').slice(0, 9) })} inputMode="decimal" placeholder="Ex.: 250" className={CAMPO} aria-label="Dose" />
         </label>
         <label className="flex flex-col gap-1.5">
@@ -47,7 +48,7 @@ function Formulario({ inicial, onSalvar, onCancelar }: { inicial: ItemRotina; on
         </label>
       </div>
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs text-zinc-400">Intervalo entre as vezes</span>
+        <span className="text-xs text-zinc-400">Intervalo entre os dias de uso</span>
         <div className="flex flex-wrap gap-1.5">
           {INTERVALOS.map(d => (
             <button key={d} type="button" aria-pressed={f.intervalo === String(d)} onClick={() => set({ intervalo: String(d) })}
@@ -63,16 +64,33 @@ function Formulario({ inicial, onSalvar, onCancelar }: { inicial: ItemRotina; on
           dias
         </label>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-zinc-400">Próxima vez</span>
-          <input type="date" value={f.proxima} onChange={e => e.target.value && set({ proxima: e.target.value })} className={CAMPO} aria-label="Próxima vez" />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-zinc-400">Horário do lembrete</span>
-          <input type="time" value={f.horario} onChange={e => e.target.value && set({ horario: e.target.value })} className={CAMPO} aria-label="Horário do lembrete" />
-        </label>
+      <div className="flex flex-col gap-1.5" role="group" aria-label="Vezes no dia">
+        <span className="text-xs text-zinc-400">Vezes no dia</span>
+        {f.vezes.map((v, k) => (
+          <div key={k} className="flex items-center gap-2">
+            <select value={v.tipo} onChange={e => mudarVez(k, { tipo: e.target.value as Momento })} aria-label={`Quando (${k + 1}ª vez)`}
+              className="flex-1 min-w-0 bg-zinc-800 border border-zinc-700 rounded-xl px-2.5 py-2.5 text-zinc-100 text-sm">
+              {Object.entries(MOMENTOS).map(([m, r]) => <option key={m} value={m}>{r}</option>)}
+            </select>
+            {v.tipo === 'horario' && (
+              <input type="time" value={v.horario} onChange={e => e.target.value && mudarVez(k, { horario: e.target.value })} aria-label={`Horário (${k + 1}ª vez)`}
+                className="w-28 bg-zinc-800 border border-zinc-700 rounded-xl px-2 py-2.5 text-zinc-100 text-sm [color-scheme:dark]" />
+            )}
+            {f.vezes.length > 1 && (
+              <button type="button" onClick={() => set({ vezes: f.vezes.filter((_, i) => i !== k) })} aria-label={`Tirar a ${k + 1}ª vez`} className="p-2 text-zinc-500 hover:text-red-400"><X className="w-4 h-4" /></button>
+            )}
+          </div>
+        ))}
+        {f.vezes.length < MAX_VEZES && (
+          <button type="button" onClick={() => set({ vezes: [...f.vezes, { tipo: 'horario', horario: '20:00' }] })}
+            className="self-start flex items-center gap-1 text-xs font-semibold text-green-400 py-1"><Plus className="w-3.5 h-3.5" />Mais uma vez no dia</button>
+        )}
+        <span className="text-[11px] text-zinc-500">"Antes/depois do treino": o lembrete aparece quando você abre e quando termina o treino no contador.</span>
       </div>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs text-zinc-400">Próximo dia de uso</span>
+        <input type="date" value={f.proxima} onChange={e => e.target.value && set({ proxima: e.target.value })} className={CAMPO} aria-label="Próximo dia de uso" />
+      </label>
       <label className="flex items-center justify-between gap-3 py-1">
         <span className="text-sm text-zinc-300">Lembrete no celular</span>
         <input type="checkbox" checked={f.lembrete} onChange={e => set({ lembrete: e.target.checked })} className="w-5 h-5 accent-green-500" aria-label="Lembrete no celular" />
@@ -94,6 +112,7 @@ export default function ErgogenicosPage() {
   const { user } = useAuth()
   const [rotina, setRotina] = useState<Rotina | null>(null)
   const [editando, setEditando] = useState<ItemRotina | null>(null)
+  const [aberto, setAberto] = useState<string | null>(null)
   const [erro, setErro] = useState('')
   const hoje = diaLocal()
 
@@ -114,14 +133,14 @@ export default function ErgogenicosPage() {
   const remover = (i: ItemRotina) => {
     if (confirm(`Remover "${i.nome}"?`)) gravar({ ...rotina!, itens: rotina!.itens.filter(x => x.id !== i.id) })
   }
-  const trocarFeito = (i: ItemRotina) =>
-    gravar({ ...rotina!, itens: rotina!.itens.map(x => (x.id === i.id ? (feitoHoje(x, hoje) ? desfazerFeito(x, hoje) : marcarFeito(x, hoje)) : x)) })
+  const trocarVez = (i: ItemRotina, k: number) =>
+    gravar({ ...rotina!, itens: rotina!.itens.map(x => (x.id === i.id ? (vezFeita(x, k, hoje) ? desfazerVez(x, k, hoje) : marcarVez(x, k, hoje)) : x)) })
 
   if (!rotina) return erro ? <p className="text-sm text-red-400">{erro}</p> : <div className="flex justify-center py-16"><Spinner size="lg" /></div>
 
-  const ordenados = [...rotina.itens].sort((a, b) => a.proxima.localeCompare(b.proxima) || a.horario.localeCompare(b.horario))
-  const doDia = ordenados.filter(i => situacao(i, hoje).tipo !== 'futuro' || feitoHoje(i, hoje))
-  const novo = (): ItemRotina => ({ id: novoId(), nome: '', forma: 'injetavel', dose: 0, unidade: 'mg', intervaloDias: 7, horario: '08:00', proxima: hoje, lembrete: true, historico: [] })
+  const ordenados = [...rotina.itens].sort((a, b) => a.proxima.localeCompare(b.proxima) || a.nome.localeCompare(b.nome))
+  const doDia = ordenados.filter(i => ehDeHoje(i, hoje))
+  const novo = (): ItemRotina => ({ id: novoId(), nome: '', forma: 'injetavel', dose: 0, unidade: 'mg', intervaloDias: 7, vezes: [{ tipo: 'horario', horario: '08:00' }], proxima: hoje, lembrete: true, historico: [] })
 
   return (
     <div className="flex flex-col gap-4">
@@ -136,21 +155,22 @@ export default function ErgogenicosPage() {
         <section aria-label="Para hoje" className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
           <h2 className="px-4 pt-3.5 pb-2 font-semibold text-zinc-100">Para hoje</h2>
           <ul className="divide-y divide-zinc-800/70 border-t border-zinc-800/70">
-            {doDia.map(i => {
-              const feito = feitoHoje(i, hoje), s = situacao(i, hoje)
+            {doDia.flatMap(i => i.vezes.map((v, k) => {
+              const feito = vezFeita(i, k, hoje), s = situacao(i, hoje)
               return (
-                <li key={i.id} className="flex items-center gap-3 px-4 py-3">
+                <li key={`${i.id}-${k}`} className="flex items-center gap-3 px-4 py-3">
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-semibold truncate ${feito ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>{i.nome}</p>
-                    <p className="text-xs text-zinc-500">{textoDose(i)} · {feito ? 'feito hoje' : s.tipo === 'atrasado' ? <span className="text-amber-400">{s.texto}</span> : `às ${i.horario}`}</p>
+                    <p className="text-xs text-zinc-500">{textoDose(i)} · {feito ? 'feito' : s.tipo === 'atrasado' ? <span className="text-amber-400">{s.texto}</span> : textoVez(v)}</p>
                   </div>
-                  <button type="button" onClick={() => trocarFeito(i)} aria-pressed={feito} aria-label={feito ? `Desfazer ${i.nome}` : `Marcar ${i.nome} como feito`}
+                  <button type="button" onClick={() => trocarVez(i, k)} aria-pressed={feito}
+                    aria-label={feito ? `Desfazer ${i.nome} (${textoVez(v)})` : `Marcar ${i.nome} como feito (${textoVez(v)})`}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 ${feito ? 'bg-zinc-800 text-zinc-400' : 'bg-green-500 text-zinc-950'}`}>
                     <Check className="w-4 h-4" />{feito ? 'Feito' : 'Marcar feito'}
                   </button>
                 </li>
               )
-            })}
+            }))}
           </ul>
         </section>
       )}
@@ -163,17 +183,38 @@ export default function ErgogenicosPage() {
           <p className="px-4 pb-4 text-sm text-zinc-500">Nada cadastrado ainda. Toque em "Adicionar" para colocar o primeiro, com dose, intervalo e lembrete.</p>
         ) : (
           <ul className="divide-y divide-zinc-800/70 border-t border-zinc-800/70">
-            {ordenados.map(i => (
-              <li key={i.id} className="flex items-center gap-2 pl-4 pr-2 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-zinc-100 truncate">{i.nome}</p>
-                  <p className="text-xs text-zinc-500">{textoDose(i)} · {textoIntervalo(i.intervaloDias)} · próxima: {situacao(i, hoje).texto}{i.lembrete ? ` às ${i.horario}` : ' · sem lembrete'}</p>
-                  {i.obs && <p className="text-[11px] text-zinc-600 truncate">{i.obs}</p>}
-                </div>
-                <button onClick={() => setEditando(i)} aria-label={`Editar ${i.nome}`} className="p-2 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"><Pencil className="w-4 h-4" /></button>
-                <button onClick={() => remover(i)} aria-label={`Remover ${i.nome}`} className="p-2 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-zinc-800"><Trash2 className="w-4 h-4" /></button>
-              </li>
-            ))}
+            {ordenados.map(i => {
+              const hist = historicoPorDia(i)
+              return (
+                <li key={i.id} className="pl-4 pr-2 py-3">
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setAberto(a => (a === i.id ? null : i.id))} aria-expanded={aberto === i.id} aria-label={`Histórico de ${i.nome}`}
+                      className="flex-1 min-w-0 text-left">
+                      <p className="text-sm font-semibold text-zinc-100 truncate flex items-center gap-1">{i.nome}<ChevronDown className={`w-3.5 h-3.5 text-zinc-600 transition ${aberto === i.id ? 'rotate-180' : ''}`} /></p>
+                      <p className="text-xs text-zinc-500">{textoDose(i)} · {textoIntervalo(i.intervaloDias)} · {textoVezes(i.vezes)}</p>
+                      <p className="text-xs text-zinc-500">próxima: {situacao(i, hoje).texto}{i.lembrete ? '' : ' · sem lembrete'}</p>
+                      {i.obs && <p className="text-[11px] text-zinc-600 truncate">{i.obs}</p>}
+                    </button>
+                    <button onClick={() => setEditando(i)} aria-label={`Editar ${i.nome}`} className="p-2 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={() => remover(i)} aria-label={`Remover ${i.nome}`} className="p-2 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-zinc-800"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                  {aberto === i.id && (
+                    <div className="mt-2 mr-2 rounded-xl bg-zinc-950/60 border border-zinc-800 px-3 py-2" aria-label={`Histórico de uso de ${i.nome}`}>
+                      <p className="text-[11px] font-semibold text-zinc-400 mb-1">Histórico</p>
+                      {hist.length === 0 ? <p className="text-xs text-zinc-600">Nenhum uso marcado ainda.</p> : (
+                        <ul className="flex flex-col gap-0.5">
+                          {hist.slice(0, 15).map(h => (
+                            <li key={h.dia} className="text-xs text-zinc-400 tabular-nums">
+                              {dataCurta(h.dia)} · {i.vezes.length > 1 ? `${h.vezes.length} de ${i.vezes.length} (${h.vezes.map(k => (i.vezes[k] ? textoVez(i.vezes[k]) : '')).join(', ')})` : 'feito'}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
         {!editando && rotina.itens.length < MAX_ITENS && (
@@ -190,14 +231,14 @@ export default function ErgogenicosPage() {
           <span className="flex-1">
             <span className="block text-sm font-semibold text-zinc-100">Modo discreto</span>
             <span className="block text-xs text-zinc-500">{rotina.discreto
-              ? 'Ligado: no Início e nos avisos do celular aparece só "item da sua rotina", sem o nome.'
-              : 'Desligado: o nome aparece no Início e nos avisos do celular.'}</span>
+              ? 'Ligado: no Início, no treino e nos avisos do celular aparece só "item da sua rotina", sem o nome.'
+              : 'Desligado: o nome aparece no Início, no treino e nos avisos do celular.'}</span>
           </span>
           <span className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${rotina.discreto ? 'bg-green-500' : 'bg-zinc-700'}`}>
             <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${rotina.discreto ? 'translate-x-4' : ''}`} />
           </span>
         </button>
-        {!ehAppNativo() && <p className="text-xs text-zinc-500 mt-3">Os avisos no celular chegam pelo app instalado (Android). No navegador, o que é para hoje aparece no Início.</p>}
+        {!ehAppNativo() && <p className="text-xs text-zinc-500 mt-3">Os avisos no celular chegam pelo app instalado (Android). No navegador, o que é para hoje aparece no Início e no treino.</p>}
       </section>
 
       <p className="flex gap-2 text-[11px] text-zinc-500 leading-relaxed px-1">

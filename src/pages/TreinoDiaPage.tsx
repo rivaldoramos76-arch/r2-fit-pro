@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import CartaoRotinaTreino from '../components/CartaoRotinaTreino'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTreino } from '../lib/treinoApi'
@@ -120,6 +121,8 @@ export default function TreinoDiaPage() {
           <p className="text-sm text-zinc-500 truncate">{treinoDia.foco || descreverGrupos(treinoDia.grupos)}</p>
         </div>
       </div>
+
+      {user && <CartaoRotinaTreino userId={user.id} momento="antes" />}
 
       {exercicios.length > 0 && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-3.5 py-3">

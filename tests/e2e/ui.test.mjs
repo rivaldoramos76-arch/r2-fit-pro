@@ -877,7 +877,7 @@ await t('ergogênicos: cadastra com dose e intervalo, marca feito, modo discreto
   await form.getByLabel('Dose').fill('250')
   await form.getByLabel('Unidade').selectOption('mg')
   await form.getByRole('button', { name: '1 vez por semana' }).click()
-  await form.getByLabel('Horário do lembrete').fill('09:30')
+  await form.getByLabel('Horário (1ª vez)').fill('09:30')
   await form.getByRole('button', { name: 'Salvar' }).click()
   const hoje = page.getByRole('region', { name: 'Para hoje' })
   await hoje.getByText('Testosterona').waitFor()
@@ -900,17 +900,50 @@ await t('ergogênicos: cadastra com dose e intervalo, marca feito, modo discreto
   await cartao.getByText('1 item da sua rotina para hoje').waitFor()
   assert.equal(await cartao.getByText('Testosterona').count(), 0, 'discreto: sem o nome no Início')
   await cartao.click()
-  await page.getByRole('button', { name: 'Marcar Testosterona como feito' }).click()
-  await page.getByRole('button', { name: 'Desfazer Testosterona' }).waitFor()
+  await page.getByRole('button', { name: 'Marcar Testosterona como feito (às 09:30)' }).click()
+  await page.getByRole('button', { name: 'Desfazer Testosterona (às 09:30)' }).waitFor()
   const feito = (await ultimaRotina(r => r.itens[0]?.historico?.length > 0)).itens[0]
   const d = new Date(); d.setDate(d.getDate() + 7)
   assert.equal(feito.proxima, `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, 'próxima = hoje + 7 dias')
-  await page.getByRole('region', { name: 'Meus itens' }).getByText(/1 vez por semana · próxima: em 7 dias às 09:30/).waitFor()
+  const meus = page.getByRole('region', { name: 'Meus itens' })
+  await meus.getByText(/1 vez por semana · às 09:30/).waitFor(); await meus.getByText('próxima: em 7 dias').waitFor()
+  // Histórico do item
+  await meus.getByRole('button', { name: 'Histórico de Testosterona' }).click()
+  await page.getByLabel('Histórico de uso de Testosterona').getByText(/· feito/).waitFor()
   // Feito hoje: some do Início
   await page.goto(BASE + '/dashboard')
   await page.getByRole('region', { name: 'Calorias de hoje' }).waitFor()
   await page.waitForTimeout(500)
   assert.equal(await page.getByRole('link', { name: 'Rotina de hoje' }).count(), 0)
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
+await t('ergogênicos antes e depois do treino: cartão na tela do treino e na conclusão do contador', async () => {
+  const hoje = new Date(); const iso = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`
+  const rotinaInicial = { discreto: false, itens: [{ id: 'k', nome: 'Creatina', forma: 'oral', dose: 5, unidade: 'g', intervaloDias: 1, proxima: iso, lembrete: true, historico: [],
+    vezes: [{ tipo: 'antes', horario: '08:00' }, { tipo: 'depois', horario: '08:00' }] }] }
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true, rotinaInicial })
+  await page.goto(BASE + '/treino/t1/dia/0')
+  const antes = page.getByRole('region', { name: 'Rotina antes do treino' })
+  await antes.getByText('Creatina').waitFor()
+  await antes.getByRole('button', { name: 'Marcar Creatina como feito' }).click()
+  await antes.getByRole('button', { name: 'Desfazer Creatina' }).waitFor()
+  // Termina um exercício no contador: a conclusão mostra o "depois do treino"
+  await page.getByRole('button', { name: 'Iniciar', exact: true }).last().click()
+  await page.getByRole('heading', { name: 'Exercício concluído!' }).waitFor({ timeout: 60000 })
+  const depois = page.getByRole('region', { name: 'Rotina depois do treino' })
+  await depois.getByText('Creatina').waitFor()
+  await page.screenshot({ path: `${SHOTS}/ergogenicos-depois-treino.png` })
+  await depois.getByRole('button', { name: 'Marcar Creatina como feito' }).click()
+  let item
+  for (let i = 0; i < 50; i++) {
+    item = page.gravacoes.filter(g => g.tabela === 'user_settings' && g.corpo.preferencias).pop()?.corpo.preferencias.rotina.itens[0]
+    if (item?.historico?.length === 2) break
+    await page.waitForTimeout(100)
+  }
+  assert.deepEqual([...item.historico].sort(), [`${iso}#0`, `${iso}#1`], 'antes e depois marcados')
+  assert.notEqual(item.proxima, iso, 'dia completo: próxima vai para amanhã')
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })

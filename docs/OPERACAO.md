@@ -181,7 +181,12 @@ observação; marca "feito" e a próxima vira hoje + intervalo (`src/lib/rotinaB
 `user_settings.preferencias.rotina` (só a própria pessoa lê e grava, por RLS; sem tabela nova).
 - **Modo discreto** (ligado por padrão): Início e avisos sem o nome ("1 item da sua rotina para hoje").
 - **Início**: cartão com o que é para hoje (inclui atrasados) quando houver.
-- **Avisos**: no app Android 1.8+, alarme na data e hora da próxima vez; sem marcar, repete no dia seguinte.
+- **Vezes no dia** (até 6): cada uma num horário, **antes do treino** ou **depois do treino**. O dia só conta
+  como feito quando todas as vezes são marcadas; aí a próxima vira o dia + intervalo.
+- **Antes/depois do treino**: cartão na tela do treino ("antes") e na conclusão do contador ("depois"), com
+  "marcar"; no app Android, aviso no celular quando o contador começa e quando termina.
+- **Histórico**: tocar no nome do item mostra os dias e as vezes marcadas (até 60 registros).
+- **Avisos**: no app Android 1.8+, um alarme por horário na data da próxima vez; sem marcar, repete no dia seguinte.
   No navegador não há aviso por notificação (só o cartão no Início).
 - O app não indica doses: aviso fixo de que dose e intervalo seguem a orientação médica.
 

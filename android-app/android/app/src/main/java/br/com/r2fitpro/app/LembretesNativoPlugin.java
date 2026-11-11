@@ -90,6 +90,15 @@ public class LembretesNativoPlugin extends Plugin {
         call.resolve(estadoAtual());
     }
 
+    /** Notificação na hora (rotina antes/depois do treino) */
+    @PluginMethod
+    public void avisarAgora(PluginCall call) {
+        String url = call.getString("url", "/ergogenicos");
+        Lembretes.mostrar(getContext(), ("agora" + call.getString("titulo", "")).hashCode(), call.getString("titulo", "Lembrete da sua rotina ⏰"),
+            call.getString("corpo", ""), url != null && url.startsWith("/") ? url : "/ergogenicos");
+        call.resolve();
+    }
+
     @PluginMethod
     public void testar(PluginCall call) {
         Lembretes.mostrar(getContext(), 42, "Lembretes ativados ✅", "É assim que os avisos do R2 Fit Pro vão aparecer.", "/lembretes");

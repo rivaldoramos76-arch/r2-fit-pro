@@ -50,6 +50,8 @@ export interface LembretesNativo {
   testar(): Promise<void>
   /** App 1.8+: alarmes da rotina de ergogênicos (data da próxima vez + horário; repete no dia seguinte até marcar) */
   agendarRotina(o: { itens: { id: string; data: string; hora: number; minuto: number; titulo: string; corpo: string }[] }): Promise<void>
+  /** App 1.8+: notificação na hora (antes/depois do treino) */
+  avisarAgora(o: { titulo: string; corpo: string; url: string }): Promise<void>
 }
 export interface EstadoLembretesApp { permissao: 'granted' | 'denied' | 'prompt'; ativo: boolean; token: string }
 

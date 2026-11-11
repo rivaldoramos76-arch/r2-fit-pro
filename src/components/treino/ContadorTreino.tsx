@@ -15,6 +15,8 @@ import type { ExercicioPlano } from '../../lib/treinoModel'
 import { lerTempo, mss, normalizarCarga, passoCarga } from './AjustesExercicio'
 import { passoTempo } from '../../lib/treinoModel'
 import { ExecucaoAmpliada, MiniExecucao, animacaoDe } from './ExecucaoAnimada'
+import CartaoRotinaTreino from '../CartaoRotinaTreino'
+import { avisarRotinaDoTreino } from '../../lib/rotina'
 
 type Tela = 'parado' | 'rodando' | 'concluido' | 'interrompido'
 interface TreinoInfo { id: string; nome: string }
@@ -240,7 +242,11 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
       onExercicioConcluido: i => { setRegistrados(r => [...r, i]) },
       onSeriesConcluidas: () => {},
       // Fim da última fala: desliga o som do contador na hora, para a música voltar ao volume normal
-      onFim: () => { setTela('concluido'); liberarWakeLock(); sairTelaCheia(); p.parar(); limparMidia(); salvarAvulso(lista[0]) },
+      onFim: () => {
+        setTela('concluido'); liberarWakeLock(); sairTelaCheia(); p.parar(); limparMidia(); salvarAvulso(lista[0])
+        // Ergogênicos "depois do treino": avisa no celular (o cartão aparece na tela de conclusão)
+        if (user) avisarRotinaDoTreino(user.id, 'depois').catch(() => {})
+      },
     }, modoSom, {
       abaixarMusica: sistema === 'android' && prefsAudio.current?.abaixar_musica !== false,
       // App Android instalado: contador nativo (tela bloqueada e por cima da música)
@@ -265,6 +271,8 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
     pedirWakeLock()
     // play() precisa acontecer dentro do toque do usuário (exigência do iOS/Android)
     p.iniciar().then(() => {
+      // Ergogênicos "antes do treino": avisa no celular ao começar
+      if (user) avisarRotinaDoTreino(user.id, 'antes').catch(() => {})
       setTela('rodando')
       if ('mediaSession' in navigator && modoSom === 'bloqueio') {
         navigator.mediaSession.setActionHandler('play', () => { p.retomar().catch(() => setPrecisaToque(true)); setPausado(false) })
@@ -403,6 +411,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
         {multi && feitos.length > 0 && (
           <ul className="text-sm text-zinc-400 flex flex-col gap-1">{feitos.map(e => <li key={e.id}>✓ {e.nome}</li>)}</ul>
         )}
+        {ok && user && <div className="w-full max-w-xs"><CartaoRotinaTreino userId={user.id} momento="depois" escuro /></div>}
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <button onClick={fechar} className="w-full bg-green-500 hover:bg-green-400 text-zinc-950 font-bold py-3.5 rounded-xl active:scale-95 transition">
             Voltar ao {dia?.dia ?? 'treino'}
