@@ -407,9 +407,9 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
         // O sistema tira a tela cheia quando se troca de app ou bloqueia a tela; o navegador só deixa voltar com um toque
         onPointerDown={() => { if (!document.fullscreenElement) entrarTelaCheia() }}
         style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <p className="text-center text-[13px] text-zinc-700 tabular-nums pt-4" aria-label={`Hora atual ${hora}`}>{hora}</p>
+        <p className="text-center text-[13px] text-zinc-500 tabular-nums pt-4" aria-label={`Hora atual ${hora}`}>{hora}</p>
         {itens.length > 1 && ex && (
-          <p className="text-center text-[11px] text-zinc-700 pt-1 px-6 truncate">Exercício {idxAtual + 1} de {itens.length} · {ex.nome}</p>
+          <p className="text-center text-[11px] text-zinc-500 pt-1 px-6 truncate">Exercício {idxAtual + 1} de {itens.length} · {ex.nome}</p>
         )}
         <div className="flex justify-center flex-wrap gap-1.5 px-6 pt-3" aria-label={`Série ${serieAtual} de ${series}`}>
           {Array.from({ length: series }).map((_, i) => (
@@ -437,7 +437,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
                 {(fase?.tipo === 'work' || fase?.tipo === 'rest') && estado && (
                   <>
                     <p className={`text-[21vw] sm:text-[6.5rem] leading-none font-extralight tabular-nums ${trabalho ? 'text-green-500/50' : 'text-sky-400/45'}`}>{mmss(Math.ceil(estado.restante))}</p>
-                    <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-700 mt-3">{trabalho ? 'trabalho' : 'descanso'}</p>
+                    <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mt-3">{trabalho ? 'trabalho' : 'descanso'}</p>
                   </>
                 )}
               </div>
@@ -455,10 +455,10 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
         {fase?.tipo !== 'final' && (
           <div className="flex justify-center gap-14 pb-8">
             <button onClick={alternarPausa} aria-label={pausado ? 'Retomar' : 'Pausar'}
-              className={`w-12 h-12 rounded-full border flex items-center justify-center active:scale-95 transition ${pausado ? 'border-green-900 text-green-700' : 'border-zinc-900 text-zinc-700'}`}>
+              className={`w-12 h-12 rounded-full border flex items-center justify-center active:scale-95 transition ${pausado ? 'border-green-800 text-green-600' : 'border-zinc-800 text-zinc-500'}`}>
               {pausado ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
             </button>
-            <button onClick={encerrar} aria-label="Encerrar" className="w-12 h-12 rounded-full border border-zinc-900 text-zinc-700 flex items-center justify-center active:scale-95 transition">
+            <button onClick={encerrar} aria-label="Encerrar" className="w-12 h-12 rounded-full border border-zinc-800 text-zinc-500 flex items-center justify-center active:scale-95 transition">
               <X className="w-5 h-5" />
             </button>
           </div>

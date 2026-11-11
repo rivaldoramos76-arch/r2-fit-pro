@@ -172,3 +172,7 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 ## Tabela de alimentos (TACO)
 
 `src/data/taco.json` é gerado por `node scripts/gerar-taco.mjs` a partir da TACO 4ª edição (NEPA/UNICAMP; reprodução permitida citando a fonte), com complementos marcados (leite fluido e macarrão cozido, que a TACO não traz). Medidas caseiras ficam em `src/lib/alimentosBase.ts`.
+
+## Ideias anotadas para fazer depois
+
+- **Ergogênicos** (pedido em 11/11/2026): criar a parte de recursos ergogênicos (suplementos para treino). Escopo a combinar.
