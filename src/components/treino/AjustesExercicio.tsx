@@ -48,7 +48,7 @@ export function passoCarga(carga: string | undefined, delta: number): string | n
   return v < 1 ? '' : kg(v)
 }
 /** Número digitado sem unidade vira "N kg" ao salvar. */
-const normalizarCarga = (c: string | undefined) => {
+export const normalizarCarga = (c: string | undefined) => {
   const t = (c ?? '').trim()
   if (!t) return undefined
   return /^\d+(?:[.,]\d+)?$/.test(t) ? kg(+t.replace(',', '.')) : t

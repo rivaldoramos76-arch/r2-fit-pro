@@ -42,6 +42,8 @@ export default function TreinoDiaPage() {
   const contador = useContadorTreino({
     user, treino: treino ? { id: treino.id, nome: treino.nome } : null, diaIdx,
     dia: treino?.plano.dias[diaIdx] ?? null, onSessao: aoRegistrar,
+    // Carga mudada na tela da contagem vai direto para o plano
+    onCarga: (exId, carga) => { atualizarExercicios(l => l.map(x => (x.id === exId ? { ...x, carga } : x))) },
   })
 
   useEffect(() => {

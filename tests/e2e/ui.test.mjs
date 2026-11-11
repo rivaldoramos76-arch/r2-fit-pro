@@ -1141,6 +1141,31 @@ await t('app Android instalado: contador nativo recebe as falas e o cronograma; 
   await ctx.close()
 })
 
+await t('contador: muda a carga na própria tela da contagem e salva no treino', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
+  await page.goto(BASE + '/treino/t1/dia/0')
+  await page.getByRole('button', { name: 'Iniciar', exact: true }).click()
+  await page.getByRole('button', { name: 'Pausar' }).waitFor()
+  const chip = page.getByRole('button', { name: /^Carga: .*Tocar para mudar/ })
+  await chip.click()
+  const antes = await page.getByLabel('Carga', { exact: true }).inputValue()
+  await page.getByRole('button', { name: 'Aumentar carga' }).click()
+  await page.getByRole('button', { name: 'Aumentar carga' }).click()
+  const depois = await page.getByLabel('Carga', { exact: true }).inputValue()
+  assert.notEqual(depois, antes, 'carga mudou na tela')
+  let ex
+  for (let i = 0; i < 40 && !ex; i++) {
+    await page.waitForTimeout(100)
+    ex = page.gravacoes.filter(g => g.tabela === 'treinos').pop()?.corpo.plano.dias[0].exercicios[0]
+  }
+  assert.equal(ex?.carga, depois, 'salvou no plano do treino')
+  await page.screenshot({ path: `${SHOTS}/contador-carga.png` })
+  await page.getByRole('button', { name: 'ok' }).click()
+  await page.getByRole('button', { name: `Carga: ${depois}. Tocar para mudar` }).waitFor()
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
 await t('contador: modo tela bloqueada usa a faixa contínua', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
   await page.goto(BASE + '/treino/t1/dia/0')
