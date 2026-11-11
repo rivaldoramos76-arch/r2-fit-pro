@@ -437,9 +437,9 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
         // O sistema tira a tela cheia quando se troca de app ou bloqueia a tela; o navegador só deixa voltar com um toque
         onPointerDown={() => { if (!document.fullscreenElement) entrarTelaCheia() }}
         style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <p className="text-center text-2xl font-light text-zinc-400 tabular-nums pt-4" aria-label={`Hora atual ${hora}`}>{hora}</p>
+        <p className="text-center text-4xl font-light text-zinc-400 tabular-nums pt-10" aria-label={`Hora atual ${hora}`}>{hora}</p>
         {itens.length > 1 && ex && (
-          <p className="text-center text-[11px] text-zinc-500 pt-1 px-6 truncate">Exercício {idxAtual + 1} de {itens.length} · {ex.nome}</p>
+          <p className="text-center text-[11px] text-zinc-500 pt-2 px-6 truncate">Exercício {idxAtual + 1} de {itens.length} · {ex.nome}</p>
         )}
         <div className="flex justify-center flex-wrap gap-1.5 px-6 pt-3" aria-label={`Série ${serieAtual} de ${series}`}>
           {Array.from({ length: series }).map((_, i) => (
@@ -452,7 +452,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
 
         <div className="flex-1 flex flex-col items-center justify-center gap-5 px-4">
           {fase?.tipo !== 'final' && (
-            <div className="relative w-[80vw] max-w-[24rem] aspect-square flex items-center justify-center">
+            <div className="relative w-[min(80vw,40vh)] max-w-[24rem] aspect-square flex items-center justify-center">
               <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full -rotate-90" aria-hidden>
                 <circle cx="50" cy="50" r={RAIO} fill="none" strokeWidth="1.2" className="stroke-zinc-900" />
                 <circle cx="50" cy="50" r={RAIO} fill="none" strokeWidth="1.6" strokeLinecap="round" className={isContagem ? 'stroke-zinc-800' : corAnel}
@@ -461,12 +461,12 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
               <div className="flex flex-col items-center">
                 {isContagem && estado && (
                   estado.numero > 0
-                    ? <p key={estado.numero} className="text-[30vw] sm:text-[9rem] leading-none font-extralight text-purple-400/40 tabular-nums">{estado.numero}</p>
+                    ? <p key={estado.numero} className="text-[min(30vw,16.5vh)] sm:text-[9rem] leading-none font-extralight text-purple-400/40 tabular-nums">{estado.numero}</p>
                     : <p className="text-3xl font-light tracking-[0.2em] text-zinc-500">{fase?.tipo === 'countdown' ? 'TRABALHO' : 'DESCANSO'}</p>
                 )}
                 {(fase?.tipo === 'work' || fase?.tipo === 'rest') && estado && (
                   <>
-                    <p className={`text-[21vw] sm:text-[6.5rem] leading-none font-extralight tabular-nums ${trabalho ? 'text-green-500/50' : 'text-sky-400/45'}`}>{mmss(Math.ceil(estado.restante))}</p>
+                    <p className={`text-[min(21vw,11.5vh)] sm:text-[6.5rem] leading-none font-extralight tabular-nums ${trabalho ? 'text-green-500/50' : 'text-sky-400/45'}`}>{mmss(Math.ceil(estado.restante))}</p>
                     <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mt-3">{trabalho ? 'trabalho' : 'descanso'}</p>
                   </>
                 )}
@@ -483,7 +483,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
         </div>
 
         {fase?.tipo !== 'final' && ex && (
-          <div className="flex flex-col items-center gap-3 pb-5 px-6" onPointerDown={e => e.stopPropagation()}>
+          <div className="flex flex-col items-center gap-6 pb-8 px-6" onPointerDown={e => e.stopPropagation()}>
             {editando === 'carga' ? (
               <div className="flex flex-col items-center gap-1">
                 <span className="text-[10px] text-zinc-500">editar carga</span>
@@ -530,30 +530,30 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
             })() : (
               <>
                 {(animacaoDe(ex.nome) || (onAjuste && ex.tipo !== 'cardio')) && (
-                  <div className="flex items-end justify-center gap-4">
+                  <div className="flex items-end justify-center gap-5 min-[380px]:gap-8">
                     {animacaoDe(ex.nome) && (
-                      <div className="flex flex-col items-center gap-1">
+                      <div className="flex flex-col items-center gap-1.5">
                         <span className="text-[10px] text-zinc-500">visualizar exercício</span>
                         <div className="opacity-60"><MiniExecucao nome={ex.nome} tamanho="w-12 h-12" onAbrir={() => setExecucaoAberta(true)} /></div>
                       </div>
                     )}
                     {onAjuste && ex.tipo !== 'cardio' && (
-                      <div className="flex flex-col items-center gap-1">
+                      <div className="flex flex-col items-center gap-1.5">
                         <span className="text-[10px] text-zinc-500">editar carga</span>
                         <button type="button" onClick={() => setEditando('carga')} aria-label={`Carga: ${ex.carga || 'sem carga'}. Tocar para mudar`}
-                          className="h-12 text-[13px] text-zinc-500 tracking-wide px-4 rounded-full border border-zinc-800">
+                          className="h-12 whitespace-nowrap text-[13px] text-zinc-500 tracking-wide px-4 rounded-full border border-zinc-800">
                           carga · <span className="tabular-nums">{ex.carga || '—'}</span> ✎
                         </button>
                       </div>
                     )}
                   </div>
                 )}
-                <div className="flex items-end justify-center gap-4">
+                <div className="flex items-end justify-center gap-5 min-[380px]:gap-8">
                   {([['exec', 'trabalho', ex.tempo_execucao_segundos], ['desc', 'descanso', ex.tempo_descanso_segundos]] as const).map(([campo, rotulo, seg]) => (
-                    <div key={campo} className="flex flex-col items-center gap-1">
+                    <div key={campo} className="flex flex-col items-center gap-1.5">
                       <span className="text-[10px] text-zinc-500">editar {rotulo}</span>
                       <button type="button" onClick={() => { setRascunhoTempo(null); setEditando(campo) }} aria-label={`${rotulo === 'trabalho' ? 'Trabalho' : 'Descanso'}: ${mss(seg)}. Tocar para mudar`}
-                        className="h-10 text-[12px] text-zinc-500 tracking-wide px-4 rounded-full border border-zinc-800">
+                        className="h-10 whitespace-nowrap text-[12px] text-zinc-500 tracking-wide px-3.5 rounded-full border border-zinc-800">
                         {rotulo} · <span className="tabular-nums">{mss(seg)}</span> ✎
                       </button>
                     </div>
