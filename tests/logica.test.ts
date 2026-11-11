@@ -3,6 +3,7 @@ import { CATALOGO, GRUPOS } from '../src/data/exercicios'
 import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
 import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar, chaveSerie, textoDoClipe, TreinoPlayer } from '../src/lib/workoutAudio'
 import { passoReps, passoCarga, lerTempo, mss } from '../src/components/treino/AjustesExercicio'
+import { marcarFeito, desfazerFeito, situacao, normalizarItem, normalizarRotina, textoAviso, somarDias, pendentesHoje } from '../src/lib/rotinaBase'
 import { passoTempo, normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
 let ok = 0
@@ -225,6 +226,25 @@ await t('ajuste no contador: novo trabalho/descanso vale só para as fases que a
   assert.equal(dur(p.crono, 'work', 3), 30, 'próxima série já usa o novo trabalho')
   // O passado não muda: o ponto atual continua na série 2
   assert.equal(estadoEm(p.crono, meio).fase.serie, 2)
+})
+
+await t('ergogênicos: próxima vez, atraso, marcar feito e aviso discreto', () => {
+  const base = normalizarItem({ id: 'a', nome: ' Testosterona ', dose: 250, unidade: 'mg', intervaloDias: 7, horario: '09:30', proxima: '2026-11-11', forma: 'injetavel' })!
+  assert.equal(base.nome, 'Testosterona'); assert.equal(base.lembrete, true)
+  assert.equal(normalizarItem({ id: 'b', nome: 'X', dose: 0, intervaloDias: 7 }), null, 'dose zero é inválida')
+  assert.equal(normalizarItem({ id: 'c', nome: 'X', dose: 1, intervaloDias: 0 }), null, 'intervalo 0 é inválido')
+  assert.deepEqual(situacao(base, '2026-11-11'), { tipo: 'hoje', dias: 0, texto: 'hoje' })
+  assert.equal(situacao(base, '2026-11-13').texto, 'atrasado 2 dias')
+  assert.equal(situacao(base, '2026-11-10').texto, 'amanhã')
+  const feito = marcarFeito(base, '2026-11-13')
+  assert.equal(feito.proxima, '2026-11-20', 'conta a partir do dia em que fez'); assert.deepEqual(feito.historico, ['2026-11-13'])
+  assert.equal(desfazerFeito(feito, '2026-11-13').proxima, '2026-11-13')
+  assert.equal(somarDias('2026-12-30', 7), '2027-01-06')
+  const r = normalizarRotina({ itens: [base, { id: 'z' }], discreto: undefined })
+  assert.equal(r.itens.length, 1); assert.equal(r.discreto, true, 'discreto por padrão')
+  assert.equal(pendentesHoje(r, '2026-11-12').length, 1)
+  assert.doesNotMatch(textoAviso(base, true).titulo + textoAviso(base, true).corpo, /Testosterona/, 'aviso discreto sem o nome')
+  assert.match(textoAviso(base, false).titulo, /Testosterona/)
 })
 
 await t('setas de execução e descanso: sempre de 5 em 5 segundos', () => {

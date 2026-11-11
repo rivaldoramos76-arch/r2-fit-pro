@@ -27,6 +27,7 @@ import PesoPage from './pages/PesoPage'
 import { ListaReceitas, EditorReceita } from './pages/ReceitasPage'
 import RelatorioPage from './pages/RelatorioPage'
 import LembretesPage from './pages/LembretesPage'
+import ErgogenicosPage from './pages/ErgogenicosPage'
 import WorkoutPage from './pages/WorkoutPage'
 import PlanoWizardPage from './pages/PlanoWizardPage'
 import TreinoPlanoPage from './pages/TreinoPlanoPage'
@@ -97,6 +98,7 @@ function AppRoutes() {
       <Route path="/alunos" element={<RotaPremium recurso="O acompanhamento de alunos"><ListaAlunos /></RotaPremium>} />
       <Route path="/alunos/:alunoId" element={<RotaPremium recurso="O acompanhamento de alunos"><PainelAluno /></RotaPremium>} />
       <Route path="/lembretes" element={<RotaPremium recurso="Os lembretes"><LembretesPage /></RotaPremium>} />
+      <Route path="/ergogenicos" element={<RotaPremium recurso="Os ergogênicos"><ErgogenicosPage /></RotaPremium>} />
       <Route path="/peso" element={<RotaPremium recurso="O controle de peso"><PesoPage /></RotaPremium>} />
       <Route path="/calorias" element={<RotaPremium recurso="O diário alimentar"><CaloriasPage /></RotaPremium>} />
       <Route path="/treino" element={<RotaPremium recurso="Os treinos"><WorkoutPage /></RotaPremium>} />
@@ -122,6 +124,8 @@ function SincronizarApp() {
   const { user } = useAuth()
   useEffect(() => {
     if (user && ehAppNativo()) import('./lib/lembretes').then(m => m.sincronizarLembretesApp(user.id)).catch(() => {})
+    // Rotina de ergogênicos (pode ter mudado em outro aparelho)
+    if (user && ehAppNativo()) import('./lib/rotina').then(m => m.carregarRotina(user.id).then(m.agendarRotinaApp)).catch(() => {})
   }, [user])
   return null
 }

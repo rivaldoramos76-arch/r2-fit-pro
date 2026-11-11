@@ -1,0 +1,209 @@
+import { useEffect, useState } from 'react'
+import { Plus, Pencil, Trash2, Check, EyeOff, Eye, ShieldAlert } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { carregarRotina, salvarRotina } from '../lib/rotina'
+import {
+  FORMAS, UNIDADES, MAX_ITENS, diaLocal, desfazerFeito, feitoHoje, marcarFeito, normalizarItem, situacao,
+  textoDose, textoIntervalo, type ItemRotina, type Rotina,
+} from '../lib/rotinaBase'
+import { ehAppNativo } from '../lib/nativo'
+import { Button, Spinner } from '../components/UI'
+
+const CAMPO = 'w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 text-base focus:outline-none focus:ring-2 focus:ring-green-500 [color-scheme:dark]'
+const INTERVALOS = [1, 2, 3, 7, 14, 30]
+const novoId = () => Math.random().toString(36).slice(2, 10)
+
+function Formulario({ inicial, onSalvar, onCancelar }: { inicial: ItemRotina; onSalvar: (i: ItemRotina) => void; onCancelar: () => void }) {
+  const [f, setF] = useState({ ...inicial, dose: String(inicial.dose || '').replace('.', ','), intervalo: String(inicial.intervaloDias) })
+  const [erro, setErro] = useState('')
+  const set = (p: Partial<typeof f>) => setF(x => ({ ...x, ...p }))
+  const salvar = () => {
+    const item = normalizarItem({ ...f, dose: Number(f.dose.replace(',', '.')), intervaloDias: Number(f.intervalo) })
+    if (!item) { setErro('Confira o nome, a dose (maior que zero) e o intervalo (de 1 a 365 dias).'); return }
+    onSalvar(item)
+  }
+  return (
+    <section aria-label={inicial.nome ? 'Editar item' : 'Novo item'} className="bg-zinc-900 border border-green-500/30 rounded-2xl p-4 flex flex-col gap-3 animate-fade-up">
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs text-zinc-400">Nome</span>
+        <input value={f.nome} onChange={e => set({ nome: e.target.value })} placeholder="Ex.: Testosterona, Tirzepatida, Creatina" className={CAMPO} maxLength={60} />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs text-zinc-400">Forma</span>
+        <select value={f.forma} onChange={e => set({ forma: e.target.value as ItemRotina['forma'] })} className={CAMPO}>
+          {Object.entries(FORMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </label>
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-zinc-400">Dose</span>
+          <input value={f.dose} onChange={e => set({ dose: e.target.value.replace(/[^\d.,]/g, '').slice(0, 9) })} inputMode="decimal" placeholder="Ex.: 250" className={CAMPO} aria-label="Dose" />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-zinc-400">Unidade</span>
+          <select value={f.unidade} onChange={e => set({ unidade: e.target.value as ItemRotina['unidade'] })} className={CAMPO} aria-label="Unidade">
+            {UNIDADES.map(u => <option key={u} value={u}>{u === 'unid' ? 'unidade' : u}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs text-zinc-400">Intervalo entre as vezes</span>
+        <div className="flex flex-wrap gap-1.5">
+          {INTERVALOS.map(d => (
+            <button key={d} type="button" aria-pressed={f.intervalo === String(d)} onClick={() => set({ intervalo: String(d) })}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${f.intervalo === String(d) ? 'bg-green-500 text-zinc-950 border-green-500' : 'border-zinc-700 text-zinc-300'}`}>
+              {textoIntervalo(d)}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 text-sm text-zinc-400">
+          a cada
+          <input value={f.intervalo} onChange={e => set({ intervalo: e.target.value.replace(/\D/g, '').slice(0, 3) })} inputMode="numeric" aria-label="Intervalo em dias"
+            className="w-16 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-center text-zinc-100" />
+          dias
+        </label>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-zinc-400">Próxima vez</span>
+          <input type="date" value={f.proxima} onChange={e => e.target.value && set({ proxima: e.target.value })} className={CAMPO} aria-label="Próxima vez" />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-zinc-400">Horário do lembrete</span>
+          <input type="time" value={f.horario} onChange={e => e.target.value && set({ horario: e.target.value })} className={CAMPO} aria-label="Horário do lembrete" />
+        </label>
+      </div>
+      <label className="flex items-center justify-between gap-3 py-1">
+        <span className="text-sm text-zinc-300">Lembrete no celular</span>
+        <input type="checkbox" checked={f.lembrete} onChange={e => set({ lembrete: e.target.checked })} className="w-5 h-5 accent-green-500" aria-label="Lembrete no celular" />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs text-zinc-400">Observação <span className="text-zinc-600">(opcional)</span></span>
+        <input value={f.obs ?? ''} onChange={e => set({ obs: e.target.value })} placeholder="Ex.: alternar o local de aplicação" className={CAMPO} maxLength={200} />
+      </label>
+      {erro && <p className="text-sm text-red-400">{erro}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="secondary" onClick={onCancelar}>Cancelar</Button>
+        <Button onClick={salvar}>Salvar</Button>
+      </div>
+    </section>
+  )
+}
+
+export default function ErgogenicosPage() {
+  const { user } = useAuth()
+  const [rotina, setRotina] = useState<Rotina | null>(null)
+  const [editando, setEditando] = useState<ItemRotina | null>(null)
+  const [erro, setErro] = useState('')
+  const hoje = diaLocal()
+
+  useEffect(() => {
+    if (user) carregarRotina(user.id).then(setRotina).catch(() => setErro('Não foi possível carregar. Confira a internet.'))
+  }, [user])
+
+  const gravar = async (nova: Rotina) => {
+    const anterior = rotina
+    setRotina(nova); setErro('')
+    try { await salvarRotina(user!.id, nova) } catch (e) { setRotina(anterior); setErro(e instanceof Error ? e.message : 'Não foi possível salvar.') }
+  }
+  const salvarItem = (i: ItemRotina) => {
+    const existe = rotina!.itens.some(x => x.id === i.id)
+    gravar({ ...rotina!, itens: existe ? rotina!.itens.map(x => (x.id === i.id ? i : x)) : [...rotina!.itens, i] })
+    setEditando(null)
+  }
+  const remover = (i: ItemRotina) => {
+    if (confirm(`Remover "${i.nome}"?`)) gravar({ ...rotina!, itens: rotina!.itens.filter(x => x.id !== i.id) })
+  }
+  const trocarFeito = (i: ItemRotina) =>
+    gravar({ ...rotina!, itens: rotina!.itens.map(x => (x.id === i.id ? (feitoHoje(x, hoje) ? desfazerFeito(x, hoje) : marcarFeito(x, hoje)) : x)) })
+
+  if (!rotina) return erro ? <p className="text-sm text-red-400">{erro}</p> : <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+
+  const ordenados = [...rotina.itens].sort((a, b) => a.proxima.localeCompare(b.proxima) || a.horario.localeCompare(b.horario))
+  const doDia = ordenados.filter(i => situacao(i, hoje).tipo !== 'futuro' || feitoHoje(i, hoje))
+  const novo = (): ItemRotina => ({ id: novoId(), nome: '', forma: 'injetavel', dose: 0, unidade: 'mg', intervaloDias: 7, horario: '08:00', proxima: hoje, lembrete: true, historico: [] })
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-50">Ergogênicos</h1>
+        <p className="text-sm text-zinc-400 mt-1">Hormônios, medicamentos e suplementos: dose, intervalo e lembrete. Só você vê esta lista.</p>
+      </div>
+
+      {erro && <p role="alert" className="text-sm text-red-400">{erro}</p>}
+
+      {doDia.length > 0 && (
+        <section aria-label="Para hoje" className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+          <h2 className="px-4 pt-3.5 pb-2 font-semibold text-zinc-100">Para hoje</h2>
+          <ul className="divide-y divide-zinc-800/70 border-t border-zinc-800/70">
+            {doDia.map(i => {
+              const feito = feitoHoje(i, hoje), s = situacao(i, hoje)
+              return (
+                <li key={i.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold truncate ${feito ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>{i.nome}</p>
+                    <p className="text-xs text-zinc-500">{textoDose(i)} · {feito ? 'feito hoje' : s.tipo === 'atrasado' ? <span className="text-amber-400">{s.texto}</span> : `às ${i.horario}`}</p>
+                  </div>
+                  <button type="button" onClick={() => trocarFeito(i)} aria-pressed={feito} aria-label={feito ? `Desfazer ${i.nome}` : `Marcar ${i.nome} como feito`}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 ${feito ? 'bg-zinc-800 text-zinc-400' : 'bg-green-500 text-zinc-950'}`}>
+                    <Check className="w-4 h-4" />{feito ? 'Feito' : 'Marcar feito'}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
+
+      {editando && <Formulario inicial={editando} onSalvar={salvarItem} onCancelar={() => setEditando(null)} />}
+
+      <section aria-label="Meus itens" className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+        <h2 className="px-4 pt-3.5 pb-2 font-semibold text-zinc-100">Meus itens</h2>
+        {ordenados.length === 0 ? (
+          <p className="px-4 pb-4 text-sm text-zinc-500">Nada cadastrado ainda. Toque em "Adicionar" para colocar o primeiro, com dose, intervalo e lembrete.</p>
+        ) : (
+          <ul className="divide-y divide-zinc-800/70 border-t border-zinc-800/70">
+            {ordenados.map(i => (
+              <li key={i.id} className="flex items-center gap-2 pl-4 pr-2 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-zinc-100 truncate">{i.nome}</p>
+                  <p className="text-xs text-zinc-500">{textoDose(i)} · {textoIntervalo(i.intervaloDias)} · próxima: {situacao(i, hoje).texto}{i.lembrete ? ` às ${i.horario}` : ' · sem lembrete'}</p>
+                  {i.obs && <p className="text-[11px] text-zinc-600 truncate">{i.obs}</p>}
+                </div>
+                <button onClick={() => setEditando(i)} aria-label={`Editar ${i.nome}`} className="p-2 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"><Pencil className="w-4 h-4" /></button>
+                <button onClick={() => remover(i)} aria-label={`Remover ${i.nome}`} className="p-2 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-zinc-800"><Trash2 className="w-4 h-4" /></button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {!editando && rotina.itens.length < MAX_ITENS && (
+          <button onClick={() => setEditando(novo())} className="w-full flex items-center gap-2 px-4 py-3 text-sm font-semibold text-green-400 hover:bg-green-500/5 border-t border-zinc-800/70">
+            <Plus className="w-4 h-4" />Adicionar
+          </button>
+        )}
+      </section>
+
+      <section aria-label="Privacidade" className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+        <button type="button" role="switch" aria-checked={rotina.discreto} aria-label="Modo discreto" onClick={() => gravar({ ...rotina, discreto: !rotina.discreto })}
+          className="w-full flex items-center gap-3 text-left">
+          {rotina.discreto ? <EyeOff className="w-5 h-5 text-green-400 shrink-0" /> : <Eye className="w-5 h-5 text-zinc-500 shrink-0" />}
+          <span className="flex-1">
+            <span className="block text-sm font-semibold text-zinc-100">Modo discreto</span>
+            <span className="block text-xs text-zinc-500">{rotina.discreto
+              ? 'Ligado: no Início e nos avisos do celular aparece só "item da sua rotina", sem o nome.'
+              : 'Desligado: o nome aparece no Início e nos avisos do celular.'}</span>
+          </span>
+          <span className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${rotina.discreto ? 'bg-green-500' : 'bg-zinc-700'}`}>
+            <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${rotina.discreto ? 'translate-x-4' : ''}`} />
+          </span>
+        </button>
+        {!ehAppNativo() && <p className="text-xs text-zinc-500 mt-3">Os avisos no celular chegam pelo app instalado (Android). No navegador, o que é para hoje aparece no Início.</p>}
+      </section>
+
+      <p className="flex gap-2 text-[11px] text-zinc-500 leading-relaxed px-1">
+        <ShieldAlert className="w-4 h-4 shrink-0 text-zinc-600" />
+        O R2 Fit Pro só organiza e lembra o que você cadastra. Doses e intervalos devem seguir a orientação do seu médico.
+      </p>
+    </div>
+  )
+}

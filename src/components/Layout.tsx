@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { Home, Dumbbell, Salad, BookOpen, Menu as MenuIcon } from 'lucide-react'
+import { Home, Dumbbell, Salad, BookOpen, CalendarClock, Menu as MenuIcon } from 'lucide-react'
 import { useAcesso } from '../context/AcessoContext'
 import { diasRestantes } from '../lib/formatos'
 import { Logo } from './Logo'
@@ -11,6 +11,8 @@ const navItems = [
   { href: '/treino', label: 'Treinos', icon: Dumbbell },
   { href: '/dieta', label: 'Dieta', icon: Salad },
   { href: '/calorias', label: 'Diário', icon: BookOpen },
+  // Ergogênicos (rótulo curto e discreto)
+  { href: '/ergogenicos', label: 'Ergo', icon: CalendarClock },
   { href: '/menu', label: 'Menu', icon: MenuIcon },
 ]
 
@@ -73,7 +75,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 key={href}
                 to={href}
                 aria-current={active ? 'page' : undefined}
-                className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl transition active:scale-95 ${
+                className={`flex flex-col items-center gap-1 px-2 py-1.5 rounded-xl transition active:scale-95 ${
                   active ? 'text-green-400' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
               >

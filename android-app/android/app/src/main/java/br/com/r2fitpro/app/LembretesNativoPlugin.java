@@ -71,6 +71,25 @@ public class LembretesNativoPlugin extends Plugin {
         call.resolve(estadoAtual());
     }
 
+    /** Rotina de ergogênicos: itens [{ id, data (AAAA-MM-DD), hora, minuto, titulo, corpo }] */
+    @PluginMethod
+    public void agendarRotina(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notificacoes") != PermissionState.GRANTED
+            && call.getArray("itens", new JSArray()).length() > 0) {
+            requestPermissionForAlias("notificacoes", call, "aposPermissaoRotina");
+            return;
+        }
+        concluirRotina(call);
+    }
+
+    @PermissionCallback
+    private void aposPermissaoRotina(PluginCall call) { concluirRotina(call); }
+
+    private void concluirRotina(PluginCall call) {
+        Lembretes.definirRotina(getContext(), call.getArray("itens", new JSArray()));
+        call.resolve(estadoAtual());
+    }
+
     @PluginMethod
     public void testar(PluginCall call) {
         Lembretes.mostrar(getContext(), 42, "Lembretes ativados ✅", "É assim que os avisos do R2 Fit Pro vão aparecer.", "/lembretes");

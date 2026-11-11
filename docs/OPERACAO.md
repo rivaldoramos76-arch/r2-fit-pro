@@ -173,6 +173,18 @@ Em `supabase/migrations/` (aplicadas em produção em 22/10/2026 via MCP, sem pe
 
 `src/data/taco.json` é gerado por `node scripts/gerar-taco.mjs` a partir da TACO 4ª edição (NEPA/UNICAMP; reprodução permitida citando a fonte), com complementos marcados (leite fluido e macarrão cozido, que a TACO não traz). Medidas caseiras ficam em `src/lib/alimentosBase.ts`.
 
+## Ergogênicos (desde 11/11/2026, versão 1)
+
+Aba **Ergo** no menu de baixo (`/ergogenicos`, Premium). A pessoa cadastra hormônios, medicamentos e suplementos
+com nome, forma, dose (mg, ml, g, mcg, UI ou unidade), intervalo em dias, próxima vez, horário do lembrete e
+observação; marca "feito" e a próxima vira hoje + intervalo (`src/lib/rotinaBase.ts`). Os dados ficam em
+`user_settings.preferencias.rotina` (só a própria pessoa lê e grava, por RLS; sem tabela nova).
+- **Modo discreto** (ligado por padrão): Início e avisos sem o nome ("1 item da sua rotina para hoje").
+- **Início**: cartão com o que é para hoje (inclui atrasados) quando houver.
+- **Avisos**: no app Android 1.8+, alarme na data e hora da próxima vez; sem marcar, repete no dia seguinte.
+  No navegador não há aviso por notificação (só o cartão no Início).
+- O app não indica doses: aviso fixo de que dose e intervalo seguem a orientação médica.
+
 ## Ideias anotadas para fazer depois
 
-- **Ergogênicos** (pedido em 11/11/2026): criar a parte de recursos ergogênicos (suplementos para treino). Escopo a combinar.
+- (nenhuma no momento)

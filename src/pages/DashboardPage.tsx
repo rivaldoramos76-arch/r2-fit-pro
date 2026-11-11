@@ -14,6 +14,7 @@ import { AnelCalorias, BarraMacro, fmt } from '../components/nutricao/Graficos'
 import InstalarApp from '../components/InstalarApp'
 import AvisoRenovacao from '../components/AvisoRenovacao'
 import FaleComDesenvolvedor from '../components/FaleComDesenvolvedor'
+import CartaoRotina from '../components/CartaoRotina'
 import { useNaoLidas } from '../lib/acompanhamento'
 import CartaoAgua from '../components/progresso/CartaoAgua'
 import GraficoPeso from '../components/progresso/GraficoPeso'
@@ -159,6 +160,7 @@ export default function DashboardPage() {
         )}
       </section>
 
+      {user && <CartaoRotina userId={user.id} />}
       {user && <div className="animate-fade-up" style={{ animationDelay: '90ms' }}><CartaoAgua userId={user.id} data={hojeLocal()} meta={meta} onMetaMudou={recarregarMeta} /></div>}
 
       {/* Refeições de hoje */}

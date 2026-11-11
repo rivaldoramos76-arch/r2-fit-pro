@@ -83,10 +83,11 @@ let ok = 0
 const erros = []
 const t = async (nome, f) => { try { await f(); ok++; console.log('✓', nome) } catch (e) { erros.push(nome); console.log('✗', nome, '\n   ', e.message.split('\n')[0]) } }
 
-async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, asaas = false, nutricao = false, treino = false, personal = false, amigos = false, renovacao = false, userAgent, instalado = Boolean(userAgent), viewport = { width: 390, height: 844 } } = {}) {
+async function contexto(browser, { logado = false, estado = 'sem_assinatura', admin = false, acessoFalha = false, pagamentos = false, checkoutFalha = false, asaas = false, nutricao = false, treino = false, personal = false, amigos = false, renovacao = false, rotinaInicial = null, userAgent, instalado = Boolean(userAgent), viewport = { width: 390, height: 844 } } = {}) {
   const chamadasBilling = []
   const gravacoes = []
   let sessaoE2e = null
+  let preferenciasE2e = rotinaInicial ? { rotina: rotinaInicial } : {}
   const ctx = await browser.newContext({ viewport, ...(userAgent ? { userAgent } : {}) })
   await ctx.addInitScript(([s, logado, instalado]) => {
     sessionStorage.setItem('r2fit:welcome-visto', '1')
@@ -166,8 +167,17 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       if (corpo.categoria === 'sugestao') return json({ code: '23514', message: 'violates check constraint' }, 400)
       return json(null, 201)
     }
-    if (p === '/rest/v1/user_settings' && rota.request().method() === 'POST') { gravacoes.push({ tabela: 'user_settings', corpo: rota.request().postDataJSON() }); return json(null) }
-    if (p === '/rest/v1/user_settings') return json(rota.request().headers()['accept']?.includes('vnd.pgrst.object') ? { notificacoes: {}, audio: { volume: 0.8, mudo: false } } : [])
+    if (p === '/rest/v1/user_settings' && rota.request().method() === 'POST') {
+      const corpo = rota.request().postDataJSON()
+      gravacoes.push({ tabela: 'user_settings', corpo })
+      if (corpo?.preferencias) preferenciasE2e = corpo.preferencias
+      return json(null)
+    }
+    if (p === '/rest/v1/user_settings') {
+      if (rota.request().headers()['accept']?.includes('vnd.pgrst.object')) return json({ notificacoes: {}, audio: { volume: 0.8, mudo: false }, preferencias: preferenciasE2e })
+      // maybeSingle pede lista: só a rotina de ergogênicos é lida assim nos testes
+      return json(url.searchParams.get('select') === 'preferencias' ? [{ preferencias: preferenciasE2e }] : [])
+    }
     if (nutricao && p === '/rest/v1/lembretes') {
       const metodo = rota.request().method()
       if (metodo !== 'GET') { let corpo = null; try { corpo = rota.request().postDataJSON() } catch { /* DELETE sem corpo */ } gravacoes.push({ tabela: 'lembretes', metodo, corpo, url: rota.request().url() }); return json([]) }
@@ -853,6 +863,56 @@ await t('app Android desatualizado: aviso de versão nova com download pelo nave
     assert.deepEqual(page.consoleErros, [])
     await ctx.close()
   }
+})
+
+await t('ergogênicos: cadastra com dose e intervalo, marca feito, modo discreto e Início sem o nome', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
+  await page.goto(BASE + '/dashboard')
+  await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link', { name: 'Ergo' }).click()
+  await page.waitForURL(/\/ergogenicos$/)
+  await page.getByRole('heading', { name: 'Ergogênicos' }).waitFor()
+  await page.getByRole('button', { name: 'Adicionar' }).click()
+  const form = page.getByRole('region', { name: 'Novo item' })
+  await form.getByPlaceholder(/Testosterona/).fill('Testosterona')
+  await form.getByLabel('Dose').fill('250')
+  await form.getByLabel('Unidade').selectOption('mg')
+  await form.getByRole('button', { name: '1 vez por semana' }).click()
+  await form.getByLabel('Horário do lembrete').fill('09:30')
+  await form.getByRole('button', { name: 'Salvar' }).click()
+  const hoje = page.getByRole('region', { name: 'Para hoje' })
+  await hoje.getByText('Testosterona').waitFor()
+  await hoje.getByText(/250 mg · às 09:30/).waitFor()
+  const ultimaRotina = async (cond = () => true) => {
+    for (let i = 0; i < 50; i++) {
+      const r = page.gravacoes.filter(g => g.tabela === 'user_settings' && g.corpo.preferencias).pop()?.corpo.preferencias.rotina
+      if (r && cond(r)) return r
+      await page.waitForTimeout(100)
+    }
+    throw new Error('rotina não foi salva')
+  }
+  const salvo = await ultimaRotina()
+  assert.equal(salvo.itens[0].nome, 'Testosterona'); assert.equal(salvo.itens[0].dose, 250); assert.equal(salvo.itens[0].intervaloDias, 7)
+  assert.equal(salvo.discreto, true, 'modo discreto já vem ligado')
+  await page.screenshot({ path: `${SHOTS}/ergogenicos.png`, fullPage: true })
+  // Início: só "item da sua rotina", sem o nome
+  await page.goto(BASE + '/dashboard')
+  const cartao = page.getByRole('link', { name: 'Rotina de hoje' })
+  await cartao.getByText('1 item da sua rotina para hoje').waitFor()
+  assert.equal(await cartao.getByText('Testosterona').count(), 0, 'discreto: sem o nome no Início')
+  await cartao.click()
+  await page.getByRole('button', { name: 'Marcar Testosterona como feito' }).click()
+  await page.getByRole('button', { name: 'Desfazer Testosterona' }).waitFor()
+  const feito = (await ultimaRotina(r => r.itens[0]?.historico?.length > 0)).itens[0]
+  const d = new Date(); d.setDate(d.getDate() + 7)
+  assert.equal(feito.proxima, `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, 'próxima = hoje + 7 dias')
+  await page.getByRole('region', { name: 'Meus itens' }).getByText(/1 vez por semana · próxima: em 7 dias às 09:30/).waitFor()
+  // Feito hoje: some do Início
+  await page.goto(BASE + '/dashboard')
+  await page.getByRole('region', { name: 'Calorias de hoje' }).waitFor()
+  await page.waitForTimeout(500)
+  assert.equal(await page.getByRole('link', { name: 'Rotina de hoje' }).count(), 0)
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
 })
 
 await t('lembretes no app Android: alarmes do celular em vez do Web Push', async () => {
