@@ -43,10 +43,14 @@ public class ContadorServico extends Service {
         }
         trava.acquire(3 * 60 * 60 * 1000L);
         if (teste) {
-            // Teste do relógio com o serviço ativo, como no treino: o celular não congela o app com a tela bloqueada
+            // Teste do relógio com o serviço ativo (como no treino). Manda 3 formatos de aviso, 6 s entre eles,
+            // para descobrir qual o app do relógio repassa: A = aviso de fase atual; B = alerta com som
+            // (como mensagens); C = canal das fases sem categoria nem prazo para sumir.
             long atraso = Math.max(0, Math.min(60, intent.getIntExtra("atraso", 10))) * 1000L;
             android.content.Context c = getApplicationContext();
-            espera.postDelayed(() -> avisarFase(c, "⌚ Teste do relógio", "Se apareceu no relógio, os avisos de trabalho e descanso vão chegar.", 15000), atraso);
+            espera.postDelayed(() -> avisarFase(c, "⌚ Teste A", "Aviso de fase (formato atual)", 60000), atraso);
+            espera.postDelayed(() -> avisoAlerta(c, 21, "⌚ Teste B", "Aviso com som, como uma mensagem"), atraso + 6000);
+            espera.postDelayed(() -> avisoSimples(c, 22, "⌚ Teste C", "Aviso simples, sem prazo para sumir"), atraso + 12000);
             espera.postDelayed(() -> { if (!contadorTocando) stopSelf(); }, atraso + 20000);
         }
         return START_NOT_STICKY;
@@ -118,6 +122,42 @@ public class ContadorServico extends Service {
         nm.cancel(anterior);
         // A notificação fixa acompanha a fase atual (só com o contador rodando; o teste do relógio não cria uma)
         if (rodando) nm.notify(ID_FIXA, fixa(c, titulo, texto));
+    }
+
+    private static final String CANAL_ALERTA = "alertas_relogio";
+
+    /** Teste: aviso num canal de alerta com som e prioridade alta (como apps de mensagem). */
+    static void avisoAlerta(Context c, int id, String titulo, String texto) {
+        canais(c);
+        NotificationManager nm = (NotificationManager) c.getSystemService(NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CANAL_ALERTA) == null) {
+            NotificationChannel ch = new NotificationChannel(CANAL_ALERTA, "Avisos do treino com som", NotificationManager.IMPORTANCE_HIGH);
+            ch.setDescription("Avisos de fase que tocam som (usado quando o relógio só recebe avisos com som)");
+            ch.enableVibration(true);
+            nm.createNotificationChannel(ch);
+        }
+        nm.notify(id, new NotificationCompat.Builder(c, CANAL_ALERTA)
+            .setSmallIcon(R.drawable.ic_stat_contador)
+            .setContentTitle(titulo)
+            .setContentText(texto)
+            .setContentIntent(abrirApp(c))
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .build());
+    }
+
+    /** Teste: aviso no canal das fases, sem categoria nem prazo para sumir. */
+    static void avisoSimples(Context c, int id, String titulo, String texto) {
+        canais(c);
+        ((NotificationManager) c.getSystemService(NOTIFICATION_SERVICE)).notify(id, new NotificationCompat.Builder(c, CANAL_FASES)
+            .setSmallIcon(R.drawable.ic_stat_contador)
+            .setContentTitle(titulo)
+            .setContentText(texto)
+            .setContentIntent(abrirApp(c))
+            .setAutoCancel(true)
+            .setVibrate(new long[] { 0, 250, 120, 250 })
+            .build());
     }
 
     static void limparAvisos(Context c) {
