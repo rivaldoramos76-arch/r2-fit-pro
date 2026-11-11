@@ -13,6 +13,7 @@ import { detectarSistema } from '../../lib/instalacao'
 import { contadorNativo } from '../../lib/nativo'
 import type { ExercicioPlano } from '../../lib/treinoModel'
 import { normalizarCarga, passoCarga } from './AjustesExercicio'
+import { ExecucaoAmpliada, MiniExecucao, animacaoDe } from './ExecucaoAnimada'
 
 type Tela = 'parado' | 'rodando' | 'concluido' | 'interrompido'
 interface TreinoInfo { id: string; nome: string }
@@ -71,6 +72,8 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
   const recuperando = useRef(false)
   // Carga editada na tela da contagem (sem sair do treino)
   const [cargaAberta, setCargaAberta] = useState(false)
+  // Execução do exercício atual ampliada por cima da contagem
+  const [execucaoAberta, setExecucaoAberta] = useState(false)
   const timerCarga = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const mudarCarga = (exId: string, nova: string) => {
     setItens(l => l.map(e => (e.id === exId ? { ...e, carga: nova } : e)))
@@ -463,28 +466,37 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
           {pausado && <span className="text-[11px] font-semibold uppercase tracking-widest text-yellow-600/60">Pausado</span>}
         </div>
 
-        {fase?.tipo !== 'final' && onCarga && ex && ex.tipo !== 'cardio' && (
-          <div className="flex flex-col items-center pb-5 px-6" onPointerDown={e => e.stopPropagation()}>
-            {cargaAberta ? (
-              <div className="flex items-center gap-2" role="group" aria-label="Ajustar carga">
-                <button type="button" aria-label="Diminuir carga" disabled={passoCarga(ex.carga, -1) === null}
-                  onClick={() => { const n = passoCarga(ex.carga, -1); if (n !== null) mudarCarga(ex.id, n) }}
-                  className="w-10 h-9 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▼</button>
-                <input aria-label="Carga" value={ex.carga ?? ''} placeholder="kg" inputMode="decimal" autoComplete="off"
-                  onChange={e => mudarCarga(ex.id, e.target.value.slice(0, 40))}
-                  onKeyDown={e => { if (e.key === 'Enter') setCargaAberta(false) }}
-                  className="w-28 h-9 rounded-lg bg-black border border-zinc-800 text-center text-base text-zinc-400 focus:outline-none focus:border-zinc-600" />
-                <button type="button" aria-label="Aumentar carga" disabled={passoCarga(ex.carga, 1) === null}
-                  onClick={() => { const n = passoCarga(ex.carga, 1); if (n !== null) mudarCarga(ex.id, n) }}
-                  className="w-10 h-9 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▲</button>
-                <button type="button" onClick={() => setCargaAberta(false)} className="text-[11px] text-zinc-500 px-2 h-9">ok</button>
-              </div>
-            ) : (
-              <button type="button" onClick={() => setCargaAberta(true)} aria-label={`Carga: ${ex.carga || 'sem carga'}. Tocar para mudar`}
-                className="text-[11px] text-zinc-500 tracking-wide px-3 py-1.5 rounded-full border border-zinc-900">
-                carga · <span className="tabular-nums">{ex.carga || '—'}</span> ✎
-              </button>
+        {fase?.tipo !== 'final' && ex && (animacaoDe(ex.nome) || (onCarga && ex.tipo !== 'cardio')) && (
+          <div className="flex items-center justify-center gap-2.5 pb-5 px-6" onPointerDown={e => e.stopPropagation()}>
+            {animacaoDe(ex.nome) && !cargaAberta && (
+              <div className="opacity-60"><MiniExecucao nome={ex.nome} onAbrir={() => setExecucaoAberta(true)} /></div>
             )}
+            {onCarga && ex.tipo !== 'cardio' && (cargaAberta ? (
+                <div className="flex items-center gap-2" role="group" aria-label="Ajustar carga">
+                  <button type="button" aria-label="Diminuir carga" disabled={passoCarga(ex.carga, -1) === null}
+                    onClick={() => { const n = passoCarga(ex.carga, -1); if (n !== null) mudarCarga(ex.id, n) }}
+                    className="w-10 h-9 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▼</button>
+                  <input aria-label="Carga" value={ex.carga ?? ''} placeholder="kg" inputMode="decimal" autoComplete="off"
+                    onChange={e => mudarCarga(ex.id, e.target.value.slice(0, 40))}
+                    onKeyDown={e => { if (e.key === 'Enter') setCargaAberta(false) }}
+                    className="w-28 h-9 rounded-lg bg-black border border-zinc-800 text-center text-base text-zinc-400 focus:outline-none focus:border-zinc-600" />
+                  <button type="button" aria-label="Aumentar carga" disabled={passoCarga(ex.carga, 1) === null}
+                    onClick={() => { const n = passoCarga(ex.carga, 1); if (n !== null) mudarCarga(ex.id, n) }}
+                    className="w-10 h-9 rounded-lg border border-zinc-800 text-zinc-500 text-sm disabled:opacity-30">▲</button>
+                  <button type="button" onClick={() => setCargaAberta(false)} className="text-[11px] text-zinc-500 px-2 h-9">ok</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setCargaAberta(true)} aria-label={`Carga: ${ex.carga || 'sem carga'}. Tocar para mudar`}
+                  className="text-[11px] text-zinc-500 tracking-wide px-3 py-1.5 rounded-full border border-zinc-900">
+                  carga · <span className="tabular-nums">{ex.carga || '—'}</span> ✎
+                </button>
+              ))}
+          </div>
+        )}
+        {execucaoAberta && ex && (
+          <div className="fixed inset-0 z-[75] bg-black/90 flex items-center justify-center p-6" onPointerDown={e => e.stopPropagation()}
+            onClick={() => setExecucaoAberta(false)}>
+            <div className="w-full max-w-xs opacity-80"><ExecucaoAmpliada nome={ex.nome} onFechar={() => setExecucaoAberta(false)} /></div>
           </div>
         )}
 

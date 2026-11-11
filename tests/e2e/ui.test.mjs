@@ -1141,7 +1141,7 @@ await t('app Android instalado: contador nativo recebe as falas e o cronograma; 
   await ctx.close()
 })
 
-await t('contador: muda a carga na própria tela da contagem e salva no treino', async () => {
+await t('contador: carga e execução na própria tela da contagem; a carga já aparece no card do treino', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', treino: true })
   await page.goto(BASE + '/treino/t1/dia/0')
   await page.getByRole('button', { name: 'Iniciar', exact: true }).click()
@@ -1159,9 +1159,17 @@ await t('contador: muda a carga na própria tela da contagem e salva no treino',
     ex = page.gravacoes.filter(g => g.tabela === 'treinos').pop()?.corpo.plano.dias[0].exercicios[0]
   }
   assert.equal(ex?.carga, depois, 'salvou no plano do treino')
+  assert.equal(await page.getByRole('button', { name: `Carga: ${depois}`, exact: true }).count(), 1, 'card do treino (tela anterior) já com a carga nova')
   await page.screenshot({ path: `${SHOTS}/contador-carga.png` })
   await page.getByRole('button', { name: 'ok' }).click()
   await page.getByRole('button', { name: `Carga: ${depois}. Tocar para mudar` }).waitFor()
+  // Execução do exercício dentro da contagem: miniatura ao lado da carga, um toque amplia e outro fecha
+  await page.getByRole('button', { name: 'Ver execução de Supino reto com barra' }).click()
+  await page.getByRole('button', { name: 'Fechar execução' }).waitFor()
+  await page.screenshot({ path: `${SHOTS}/contador-execucao.png` })
+  await page.getByRole('button', { name: 'Fechar execução' }).click()
+  await page.getByRole('button', { name: 'Fechar execução' }).waitFor({ state: 'detached' })
+  await page.getByRole('button', { name: 'Pausar' }).waitFor()
   assert.deepEqual(page.consoleErros, [])
   await ctx.close()
 })
