@@ -5,7 +5,7 @@ import EditorDiasSemana from './treino/EditorDiasSemana'
 import { agendarAvisosSemana, carregarSemana, marcarConcluido, salvarAjuste, type Semana } from '../lib/semana'
 import {
   ajustesDaSemana, aplicarSemana, dataComDia, desfazerAjuste, diasDeTreinoRestantes, diasLivres, dividirNaSemana,
-  encaixar, encaixeDeHoje, podeDividir, temDiasDaSemana, treinosPerdidos,
+  encaixar, encaixeDeHoje, opcoesEncaixe, podeDividir, temDiasDaSemana, treinosPerdidos,
 } from '../lib/semanaBase'
 
 const CHAVE_DEPOIS = 'r2-dias-semana-depois'
@@ -98,10 +98,14 @@ export default function CartaoSemanaTreino({ userId }: { userId: string }) {
             </button>
             {escolhendoDia && (
               <div role="group" aria-label="Dias livres" className="flex flex-wrap gap-2 pl-1">
-                {livres.map(d => (
-                  <button key={d} type="button" disabled={ocupado} onClick={() => aplicar(() => comPlano(encaixar(plano, perdido, d, hoje)), `Treino ${perdido.letra} encaixado ${d === hoje ? 'hoje' : `em ${dataComDia(d)}`}.`)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-500 text-zinc-950 disabled:opacity-50">
+                {opcoesEncaixe(plano, perdido, hoje).map(({ data: d, colado, semDescanso }) => (
+                  <button key={d} type="button" disabled={ocupado}
+                    onClick={() => aplicar(() => comPlano(encaixar(plano, perdido, d, hoje)),
+                      `Treino ${perdido.letra} encaixado ${d === hoje ? 'hoje' : `em ${dataComDia(d)}`}.${semDescanso ? ' Atenção: ficou sem dia de descanso até domingo.' : ''}`)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold text-left disabled:opacity-50 ${colado.length || semDescanso ? 'bg-zinc-800 text-zinc-200 border border-amber-500/40' : 'bg-green-500 text-zinc-950'}`}>
                     {d === hoje ? 'Hoje' : dataComDia(d)}
+                    {colado.length > 0 && <span className="block text-[10px] font-normal text-amber-400">{colado.join(' e ')} em dias seguidos</span>}
+                    {semDescanso && <span className="block text-[10px] font-normal text-amber-400">fica sem descanso até domingo</span>}
                   </button>
                 ))}
               </div>

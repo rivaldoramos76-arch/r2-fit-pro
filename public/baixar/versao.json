@@ -1,6 +1,6 @@
 {
-  "versionCode": 9,
-  "versionName": "1.7.0",
-  "arquivo": "r2-fit-pro-1.7.0.apk",
-  "novidades": "Contador em tela cheia de novo (some a barra de cima e os botões do Android)."
+  "versionCode": 10,
+  "versionName": "1.8.0",
+  "arquivo": "r2-fit-pro-1.8.0.apk",
+  "novidades": "Aviso de manhã quando um treino ficou para trás, lembretes da aba Ergo no celular (no horário e antes/depois do treino) e editar carga e tempos dentro do contador."
 }

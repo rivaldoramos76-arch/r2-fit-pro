@@ -881,6 +881,7 @@ await t('treino perdido: pergunta os dias na primeira vez e edita na tela do tre
   await card.getByText('Em quais dias você treina?').waitFor()
   assert.equal(await card.getByLabel('Treino de Segunda').inputValue(), 'A', 'sugere os dias pela frequência')
   await card.getByLabel('Treino de Terça').selectOption('A')
+  await card.getByText('⚠ Peito e Costas em dias seguidos (Segunda e Terça).').waitFor()
   await card.screenshot({ path: `${SHOTS}/semana-dias.png`, animations: 'disabled' })
   await card.getByRole('button', { name: 'Salvar dias' }).click()
   await page.getByText('Dias salvos. Se faltar um treino, eu aviso aqui.').waitFor()

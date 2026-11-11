@@ -199,6 +199,9 @@ observação; marca "feito" e a próxima vira hoje + intervalo (`src/lib/rotinaB
 - Opções do card: marcar como concluído (cria a sessão no dia, com todas as séries), dividir no restante da semana (os exercícios vão um a um para os próximos treinos,
   com as mesmas séries/carga/tempos, marcados com `temporarioAte`/`origemTemp`) ou encaixar num dia livre (`plano.encaixes`).
   Tudo some sozinho depois de domingo (`normalizarPlano` descarta os vencidos); "desfazer" no Início e na tela do treino.
+- Grupamentos: ao dividir, cada exercício evita o dia colado (antes/depois) num treino do mesmo grupamento (perna = quadríceps, posteriores, glúteos e adutores;
+  abdômen, panturrilha e antebraço podem seguidos). No encaixe, os dias colados vão para o fim com aviso, e o último dia livre avisa "fica sem descanso até domingo".
+  O editor de dias avisa grupamento em dias seguidos (domingo encosta na segunda) e semana sem descanso.
 - App Android (1.8+): aviso às 8h do dia seguinte a cada dia de treino sem treino (grupo "semana" do `agendarRotina`, uma vez só); refeito ao abrir o app e quando um treino começa.
 
 ## Ideias anotadas para fazer depois

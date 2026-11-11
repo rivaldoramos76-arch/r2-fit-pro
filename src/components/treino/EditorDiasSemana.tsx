@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { DIAS_SEMANA, type PlanoTreino } from '../../lib/treinoModel'
-import { semanaDoPlano } from '../../lib/semanaBase'
+import { alertasSemana, semanaDoPlano } from '../../lib/semanaBase'
 
 /** Dias da semana de treino: cada dia com o treino (A, B...) ou descanso. Usado na primeira vez e para editar. */
 export default function EditorDiasSemana({ plano, salvando, textoSalvar = 'Salvar dias', onSalvar, onCancelar, textoCancelar = 'Cancelar' }: {
@@ -29,6 +29,7 @@ export default function EditorDiasSemana({ plano, salvando, textoSalvar = 'Salva
         ))}
       </ul>
       <p className="text-xs text-zinc-500">{total} {total === 1 ? 'dia' : 'dias'} de treino por semana. Dá para mudar depois na tela do treino.</p>
+      {alertasSemana(plano, semana).map(t => <p key={t} role="note" className="text-xs text-amber-400">⚠ {t}</p>)}
       <div className="flex gap-2">
         {onCancelar && (
           <button type="button" onClick={onCancelar} className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700">{textoCancelar}</button>
