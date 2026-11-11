@@ -94,6 +94,8 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
     if (logado) localStorage.setItem('sb-mock-auth-token', JSON.stringify(s))
     // Simula o app aberto pela tela inicial (no celular o app exige estar instalado)
     if (instalado) Object.defineProperty(navigator, 'standalone', { get: () => true })
+    // Android exige o app (APK); nos testes de celular "instalado", libera como se fosse o app
+    if (instalado) sessionStorage.setItem('r2-continuar-navegador', '1')
   }, [sessao, logado, instalado])
   const premium = ['ativa', 'tolerancia', 'cancelada_vigente', 'admin', 'teste'].includes(estado)
   const testeAte = estado === 'teste' ? new Date(Date.now() + 5 * 86400000 - 3600000).toISOString() : null
@@ -1634,7 +1636,7 @@ await t('amigos: ativa, curte treino no feed, vê ranking e aceita pedido', asyn
   await ctx.close()
 })
 
-await t('celular: o app exige instalar na tela inicial (com saída de emergência)', async () => {
+await t('celular: iPhone instala na tela inicial (com saída de emergência); Android exige baixar o app', async () => {
   const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, userAgent: iphone, instalado: false })
   await page.goto(BASE + '/dashboard')
@@ -1651,6 +1653,17 @@ await t('celular: o app exige instalar na tela inicial (com saída de emergênci
   await page.getByRole('button', { name: 'Usar no navegador só desta vez' }).click()
   await page.getByText('Calorias').first().waitFor()
   await ctx.close()
+  // Android no Chrome (mesmo com o atalho antigo da tela inicial): obrigatório baixar o app, sem "usar no navegador"
+  const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36'
+  const ca = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, userAgent: android, instalado: false })
+  await ca.page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }))
+  await ca.page.goto(BASE + '/dashboard')
+  await ca.page.getByRole('heading', { name: 'Instale o R2 Fit Pro' }).waitFor()
+  assert.equal(await ca.page.getByRole('link', { name: 'Baixar o app' }).getAttribute('href'), '/baixar/r2-fit-pro.apk')
+  await ca.page.screenshot({ path: `${SHOTS}/instalar-android.png` })
+  await ca.page.getByRole('button', { name: 'Não consigo instalar' }).click()
+  assert.equal(await ca.page.getByRole('button', { name: 'Usar no navegador só desta vez' }).count(), 0, 'Android: sem usar no navegador')
+  await ca.ctx.close()
   // Navegador do Instagram no Android: abrir no Chrome
   const insta = 'Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0 Mobile Safari/537.36 Instagram 350.0'
   const c2 = await contexto(browser, { logado: true, estado: 'ativa', userAgent: insta, instalado: false })

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Download, Share, PlusSquare, MoreVertical, Copy, MessageCircle, CheckCircle2, ExternalLink } from 'lucide-react'
 import { Logo } from './Logo'
 import { Button } from './UI'
-import { detectarSistema, navegadorEmbutido, useInstalacao, continuarNoNavegador } from '../lib/instalacao'
+import { detectarSistema, navegadorEmbutido, continuarNoNavegador, LINK_APP_ANDROID } from '../lib/instalacao'
 import { useConfig, linkWhatsapp } from '../lib/config'
 
 function Passo({ n, children }: { n: number; children: React.ReactNode }) {
@@ -18,16 +18,14 @@ function Passo({ n, children }: { n: number; children: React.ReactNode }) {
 export default function TelaInstalar({ aoContinuar }: { aoContinuar: () => void }) {
   const sistema = detectarSistema()
   const embutido = navegadorEmbutido()
-  const { podeInstalarDireto, instalar } = useInstalacao()
   const { config } = useConfig()
-  const [instalou, setInstalou] = useState(false)
+  const [instalou] = useState(false)
   const [ajuda, setAjuda] = useState(false)
   const [copiado, setCopiado] = useState(false)
   const site = window.location.origin
   const whatsapp = linkWhatsapp(config, 'Olá! Não estou conseguindo instalar o R2 Fit Pro no celular.')
 
   const copiar = async () => { try { await navigator.clipboard.writeText(`${site}/dashboard`); setCopiado(true) } catch { /* sem permissão */ } }
-  const instalarAgora = async () => { if (await instalar()) setInstalou(true) }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center px-5 py-8">
@@ -37,7 +35,9 @@ export default function TelaInstalar({ aoContinuar }: { aoContinuar: () => void 
           <h1 className="text-2xl font-bold">{instalou ? 'App instalado!' : 'Instale o R2 Fit Pro'}</h1>
           <p className="text-sm text-zinc-400">
             {instalou ? 'Agora feche o navegador e abra o R2 Fit Pro pelo ícone na tela inicial.'
-              : 'O app é usado pela tela inicial do celular: abre em tela cheia, mais rápido, com lembretes e notificações. Leva menos de 1 minuto.'}
+              : sistema === 'android'
+                ? 'No Android, o R2 Fit Pro é usado pelo app: contador com a tela bloqueada e por cima da música, lembretes e alarmes. Leva 1 minuto.'
+                : 'O app é usado pela tela inicial do celular: abre em tela cheia, mais rápido, com lembretes e notificações. Leva menos de 1 minuto.'}
           </p>
         </div>
 
@@ -62,8 +62,19 @@ export default function TelaInstalar({ aoContinuar }: { aoContinuar: () => void 
             )}
             <Button variant="secondary" onClick={copiar}><Copy className="w-4 h-4" />{copiado ? 'Link copiado' : 'Copiar o link'}</Button>
           </div>
-        ) : sistema === 'android' && podeInstalarDireto ? (
-          <Button size="lg" onClick={instalarAgora}><Download className="w-5 h-5" />Instalar agora</Button>
+        ) : sistema === 'android' ? (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-3">
+            <a href={LINK_APP_ANDROID} download="r2-fit-pro.apk"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-500 text-zinc-950 font-bold px-4 py-3.5"><Download className="w-5 h-5" />Baixar o app</a>
+            <ol className="flex flex-col gap-2.5">
+              <Passo n={1}>Toque em <b>Baixar o app</b> e espere terminar.</Passo>
+              <Passo n={2}>Abra o arquivo <b>r2-fit-pro.apk</b> (na notificação ou em <b>Downloads</b>).</Passo>
+              <Passo n={3}>Se o Android pedir, permita <b>instalar apps desta fonte</b> e volte.</Passo>
+              <Passo n={4}>Toque em <b>Instalar</b>. Se o Play Protect avisar, toque em <b>Instalar mesmo assim</b>.</Passo>
+              <Passo n={5}>Abra o <b>R2 Fit Pro</b> e entre com seu e-mail e senha.</Passo>
+            </ol>
+            <p className="text-[11px] text-zinc-500">Se você usava o atalho antigo do Chrome, pode apagá-lo depois de instalar o app.</p>
+          </div>
         ) : (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <ol className="flex flex-col gap-2.5">
@@ -95,7 +106,9 @@ export default function TelaInstalar({ aoContinuar }: { aoContinuar: () => void 
               {whatsapp && (
                 <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm text-green-400"><MessageCircle className="w-4 h-4" />Pedir ajuda no WhatsApp</a>
               )}
-              <button onClick={() => { continuarNoNavegador(); aoContinuar() }} className="text-xs text-zinc-500 underline underline-offset-2">Usar no navegador só desta vez</button>
+              {sistema !== 'android' && (
+                <button onClick={() => { continuarNoNavegador(); aoContinuar() }} className="text-xs text-zinc-500 underline underline-offset-2">Usar no navegador só desta vez</button>
+              )}
             </div>
           )}
         </div>

@@ -60,12 +60,19 @@ export function navegadorEmbutido(ua = navigator.userAgent): boolean {
 }
 
 const CHAVE_NAVEGADOR = 'r2-continuar-navegador'
+/** Download do app Android (sempre a versão mais nova). */
+export const LINK_APP_ANDROID = '/baixar/r2-fit-pro.apk'
 /** Rotas que funcionam no navegador mesmo sem o app instalado: voltar do pagamento e aceitar convites. */
 const LIVRES = [/^\/assinatura\/retorno/, /^\/convite\//, /^\/amigo\//]
 
-/** No celular, o app só é usado instalado na tela inicial (com uma saída de emergência por sessão). */
+/**
+ * No celular, o app só é usado instalado: no Android, obrigatoriamente o app (APK) — o atalho antigo do
+ * Chrome não vale mais; no iPhone, adicionado à Tela de Início pelo Safari (com saída de emergência por sessão).
+ */
 export function precisaInstalar(caminho: string, ua = navigator.userAgent): boolean {
-  if (estaInstalado() || detectarSistema(ua) === 'outro') return false
+  const sistema = detectarSistema(ua)
+  if (sistema === 'outro') return false
+  if (sistema === 'android' ? ehAppNativo() : estaInstalado()) return false
   if (LIVRES.some(r => r.test(caminho))) return false
   try { if (sessionStorage.getItem(CHAVE_NAVEGADOR) === '1') return false } catch { /* sem armazenamento */ }
   return true
