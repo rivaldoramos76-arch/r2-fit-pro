@@ -946,6 +946,50 @@ await t('treino perdido: planejamento da divisão, confirmar, desfazer, encaixar
   await ctx.close()
 })
 
+await t('funções novas: calculadoras, jejum, lista de compras, conquistas e trocar exercício', async () => {
+  const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, treino: 'dois' })
+  // calculadoras
+  await page.goto(BASE + '/calculadoras')
+  await page.getByLabel('Carga em kg').fill('100'); await page.getByLabel('Repetições').fill('10')
+  await page.getByText('133,5 kg', { exact: true }).waitFor()
+  await page.getByLabel('Peso total em kg').fill('100')
+  await page.getByText('25 + 15 kg').waitFor()
+  // jejum: começa, grava nas preferências e aparece no Início
+  await page.goto(BASE + '/jejum')
+  await page.getByRole('button', { name: '18:6' }).click()
+  await page.getByRole('button', { name: 'Começar agora' }).click()
+  await page.getByRole('region', { name: 'Jejum em andamento' }).waitFor()
+  for (let i = 0; i < 30 && !page.gravacoes.some(g => g.tabela === 'user_settings' && g.corpo.preferencias?.jejum?.ativo); i++) await page.waitForTimeout(100)
+  assert.equal(page.gravacoes.filter(g => g.tabela === 'user_settings').pop().corpo.preferencias.jejum.ativo.horas, 18)
+  await page.screenshot({ path: `${SHOTS}/jejum.png` })
+  await page.getByRole('button', { name: 'Encerrar jejum' }).click()
+  await page.getByRole('region', { name: 'Histórico de jejum' }).waitFor()
+  // lista de compras da dieta
+  await page.goto(BASE + '/dieta/d1/compras')
+  await page.getByRole('button', { name: '1 dia' }).click()
+  await page.getByRole('checkbox', { name: 'Ovos mexidos' }).waitFor()
+  await page.getByRole('checkbox', { name: 'Ovos mexidos' }).check()
+  assert.ok((await page.getByRole('link', { name: 'WhatsApp' }).getAttribute('href')).includes('Frango'), 'o que foi riscado sai do texto; o resto vai')
+  await page.screenshot({ path: `${SHOTS}/compras.png` })
+  // conquistas
+  await page.goto(BASE + '/conquistas')
+  await page.getByRole('list', { name: 'Lista de conquistas' }).waitFor()
+  // trocar exercício
+  await page.goto(BASE + '/treino/t1/dia/0')
+  await page.getByRole('button', { name: 'Mais opções' }).first().click()
+  await page.getByRole('button', { name: 'Trocar exercício' }).click()
+  const janela = page.getByRole('dialog', { name: /Trocar Supino reto com barra/ })
+  await janela.waitFor()
+  await page.screenshot({ path: `${SHOTS}/trocar.png` })
+  const opcao = (await janela.getByRole('button').nth(1).innerText()).split('\n')[0]
+  await janela.getByRole('button').nth(1).click()
+  for (let i = 0; i < 30 && !page.gravacoes.some(g => g.tabela === 'treinos'); i++) await page.waitForTimeout(100)
+  const salvo = page.gravacoes.filter(g => g.tabela === 'treinos').pop().corpo.plano.dias[0].exercicios[0]
+  assert.equal(salvo.nome, opcao); assert.equal(salvo.series, 2, 'séries continuam')
+  assert.deepEqual(page.consoleErros, [])
+  await ctx.close()
+})
+
 await t('ergogênicos: cadastra com dose e intervalo, marca feito, modo discreto e Início sem o nome', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true })
   await page.goto(BASE + '/dashboard')

@@ -8,6 +8,8 @@
 // O Supabase é a fonte de verdade; o localStorage espelha os dados para uso offline.
 import { supabase } from './supabase'
 
+export interface DetalheExercicio { nome: string; catalogo_id?: string; carga?: string; reps?: string; series: number }
+
 export interface Sessao {
   id: string
   treino_id: string
@@ -16,6 +18,8 @@ export interface Sessao {
   /** pelo menos 1 exercício feito (calculado no banco) */
   feito?: boolean
   series_realizadas: Record<string, number>
+  /** o que foi feito em cada exercício (carga, repetições): histórico de carga e recordes */
+  detalhes?: Record<string, DetalheExercicio>
   data_inicio: string
   data_fim: string | null
 }
@@ -53,7 +57,7 @@ function salvarLocal(s: Sessao) {
 /** Última sessão do treino (pode já estar concluída). */
 export async function sessaoAtual(treinoId: string, dia: number): Promise<Sessao | null> {
   const { data, error } = await supabase.from('sessoes_treino')
-    .select('id, treino_id, dia_index, concluido, series_realizadas, data_inicio, data_fim')
+    .select('id, treino_id, dia_index, concluido, series_realizadas, detalhes, data_inicio, data_fim')
     .eq('treino_id', treinoId).eq('dia_index', dia)
     .order('data_inicio', { ascending: false }).limit(1)
   if (error) return lerLocal(treinoId, dia)
@@ -87,8 +91,10 @@ export async function concluirExercicio(params: {
   /** séries feitas até agora neste exercício (pode ser menos que as previstas) */
   series: number
   exerciciosDoTreino: { id: string; series: number }[]
+  /** carga e repetições usadas (vão para o histórico de carga do exercício) */
+  exercicio?: { nome: string; catalogo_id?: string; carga?: string; repeticoes?: string }
 }): Promise<Sessao> {
-  const { userId, treinoId, treinoNome, dia, exercicioId, series, exerciciosDoTreino } = params
+  const { userId, treinoId, treinoNome, dia, exercicioId, series, exerciciosDoTreino, exercicio } = params
   let atual = await sessaoAtual(treinoId, dia)
   // sessão anterior já finalizada (ou incompleta e parada há horas) → nova sessão
   if (atual && !emAndamento(atual) && Object.keys(atual.series_realizadas ?? {}).length > 0) atual = null
@@ -99,7 +105,12 @@ export async function concluirExercicio(params: {
   const todos = exerciciosDoTreino.length > 0 && exerciciosDoTreino.every(e => exercicioConcluido({ series_realizadas: feitos }, e))
   const agora = new Date().toISOString()
   // data_fim = hora do último exercício feito (mesmo com o treino incompleto)
-  const campos = { series_realizadas: feitos, concluido: todos, data_fim: agora }
+  const detalhes = { ...(atual?.detalhes ?? {}) }
+  if (exercicio) detalhes[exercicioId] = {
+    nome: exercicio.nome, ...(exercicio.catalogo_id ? { catalogo_id: exercicio.catalogo_id } : {}),
+    ...(exercicio.carga ? { carga: exercicio.carga } : {}), ...(exercicio.repeticoes ? { reps: exercicio.repeticoes } : {}), series: feitos[exercicioId],
+  }
+  const campos = { series_realizadas: feitos, concluido: todos, data_fim: agora, ...(exercicio ? { detalhes } : {}) }
 
   let salva: Sessao | null = null
   if (atual && !atual.id.startsWith('local-')) {
@@ -126,9 +137,11 @@ export async function concluirExercicio(params: {
 export async function desmarcarExercicio(sessao: Sessao, exercicioId: string): Promise<Sessao> {
   const feitos = { ...sessao.series_realizadas }
   delete feitos[exercicioId]
-  const nova: Sessao = { ...sessao, series_realizadas: feitos, concluido: false, data_fim: null }
+  const detalhes = { ...(sessao.detalhes ?? {}) }
+  delete detalhes[exercicioId]
+  const nova: Sessao = { ...sessao, series_realizadas: feitos, detalhes, concluido: false, data_fim: null }
   if (!sessao.id.startsWith('local-')) {
-    await supabase.from('sessoes_treino').update({ series_realizadas: feitos, concluido: false, data_fim: null }).eq('id', sessao.id)
+    await supabase.from('sessoes_treino').update({ series_realizadas: feitos, detalhes, concluido: false, data_fim: null }).eq('id', sessao.id)
   }
   salvarLocal(nova)
   return nova

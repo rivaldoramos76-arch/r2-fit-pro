@@ -11,6 +11,7 @@ import { Spinner } from '../components/UI'
 import { BarraMacro, fmt } from '../components/nutricao/Graficos'
 import CompartilharCartao from '../components/CompartilharCartao'
 import { cartaoSemana } from '../lib/cartoesBase'
+import { entregarArquivo } from '../lib/nativo'
 
 const DIA_CURTO = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
 const dataBR = (iso: string) => { const [, m, d] = iso.split('-'); return `${d}/${m}` }
@@ -100,6 +101,14 @@ export default function RelatorioPage() {
         </div>
       </div>
 
+      {resumo && resumo.diasRegistrados > 0 && (
+        <button type="button" className="self-end text-xs font-semibold text-green-400 px-3 py-1.5 rounded-lg border border-green-500/30"
+          onClick={() => import('../lib/pdfConteudo').then(m => entregarArquivo(m.pdfRelatorio({
+            periodo: `${dataBR(inicio)} a ${dataBR(fim)}`, mediaCalorias: resumo.mediaCalorias, metaCalorias: meta?.calorias ?? null,
+            diasRegistrados: resumo.diasRegistrados, diasNaMeta: resumo.diasNaMeta, macros: resumo.macrosMedios, aguaMedia: resumo.aguaMedia,
+            treinos: resumo.treinosConcluidos, peso: resumo.peso, dias: resumo.dias,
+          }), 'relatorio-semana-r2-fit-pro.pdf', 'Relatório em PDF')).catch(() => {})}>📄 Baixar PDF</button>
+      )}
       {!resumo ? <div className="flex justify-center py-16"><Spinner size="lg" /></div> : (
         <>
           <section className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 animate-fade-up" aria-label="Calorias da semana">

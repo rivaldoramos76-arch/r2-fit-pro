@@ -116,7 +116,7 @@ export interface LembretesNativo {
   testar(): Promise<void>
   /** App 1.8+: avisos com data e texto prontos. Grupo "rotina" (ergogênicos, padrão: repete no dia seguinte até marcar)
    *  ou "semana" (treino perdido: uma vez só). Cada chamada troca a lista inteira do grupo. */
-  agendarRotina(o: { grupo?: 'rotina' | 'semana'; itens: { id: string; data: string; hora: number; minuto: number; titulo: string; corpo: string; url?: string }[] }): Promise<void>
+  agendarRotina(o: { grupo?: 'rotina' | 'semana' | 'jejum'; itens: { id: string; data: string; hora: number; minuto: number; titulo: string; corpo: string; url?: string }[] }): Promise<void>
   /** App 1.8+: notificação na hora (antes/depois do treino) */
   avisarAgora(o: { titulo: string; corpo: string; url: string }): Promise<void>
 }

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Home, Dumbbell, Salad, Flame, User, Settings, CreditCard, Receipt, LifeBuoy, FileText, Shield, Info, LogOut, LayoutDashboard, ChevronRight, Sparkles, Target, Scale, ChefHat, BarChart3, Bell, UserCheck, Users, HeartHandshake,
+  Home, Dumbbell, Salad, Flame, User, Settings, CreditCard, Receipt, LifeBuoy, FileText, Shield, Info, LogOut, LayoutDashboard, ChevronRight, Sparkles, Target, Scale, ChefHat, BarChart3, Bell, UserCheck, Users, HeartHandshake, Ruler, Trophy, Timer, Calculator,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -20,6 +20,10 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
     { href: '/calorias', label: 'Diário alimentar', icon: Flame },
     { href: '/meta', label: 'Meta diária', icon: Target },
     { href: '/peso', label: 'Peso', icon: Scale },
+    { href: '/evolucao', label: 'Medidas e fotos', icon: Ruler },
+    { href: '/conquistas', label: 'Conquistas', icon: Trophy },
+    { href: '/jejum', label: 'Jejum intermitente', icon: Timer },
+    { href: '/calculadoras', label: 'Calculadoras', icon: Calculator },
     { href: '/receitas', label: 'Receitas', icon: ChefHat },
     { href: '/relatorio', label: 'Relatório da semana', icon: BarChart3 },
     { href: '/lembretes', label: 'Lembretes', icon: Bell },

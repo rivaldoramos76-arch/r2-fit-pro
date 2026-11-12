@@ -35,6 +35,11 @@ import TreinoDiaPage from './pages/TreinoDiaPage'
 import AdminPage from './pages/admin/AdminPage'
 import PersonalPage from './pages/PersonalPage'
 import AmigosPage from './pages/AmigosPage'
+import EvolucaoPage from './pages/EvolucaoPage'
+import ConquistasPage from './pages/ConquistasPage'
+import CalculadorasPage from './pages/CalculadorasPage'
+import JejumPage from './pages/JejumPage'
+import ComprasPage from './pages/ComprasPage'
 import { ListaAlunos, PainelAluno } from './pages/AlunosPage'
 import { Spinner } from './components/UI'
 import WelcomeSplash from './components/WelcomeSplash'
@@ -100,6 +105,11 @@ function AppRoutes() {
       <Route path="/lembretes" element={<RotaPremium recurso="Os lembretes"><LembretesPage /></RotaPremium>} />
       <Route path="/ergogenicos" element={<RotaPremium recurso="Os ergogênicos"><ErgogenicosPage /></RotaPremium>} />
       <Route path="/peso" element={<RotaPremium recurso="O controle de peso"><PesoPage /></RotaPremium>} />
+      <Route path="/evolucao" element={<RotaPremium recurso="A evolução (medidas e fotos)"><EvolucaoPage /></RotaPremium>} />
+      <Route path="/conquistas" element={<RotaPremium recurso="As conquistas"><ConquistasPage /></RotaPremium>} />
+      <Route path="/calculadoras" element={<RotaPremium recurso="As calculadoras"><CalculadorasPage /></RotaPremium>} />
+      <Route path="/jejum" element={<RotaPremium recurso="O jejum intermitente"><JejumPage /></RotaPremium>} />
+      <Route path="/dieta/:id/compras" element={<RotaPremium recurso="A lista de compras"><ComprasPage /></RotaPremium>} />
       <Route path="/calorias" element={<RotaPremium recurso="O diário alimentar"><CaloriasPage /></RotaPremium>} />
       <Route path="/treino" element={<RotaPremium recurso="Os treinos"><WorkoutPage /></RotaPremium>} />
       <Route path="/treino/novo" element={<RotaPremium recurso="Os treinos"><PlanoWizardPage /></RotaPremium>} />

@@ -215,6 +215,31 @@ observação; marca "feito" e a próxima vira hoje + intervalo (`src/lib/rotinaB
   O editor de dias avisa grupamento em dias seguidos (domingo encosta na segunda) e semana sem descanso.
 - App Android (1.8+): aviso às 8h do dia seguinte a cada dia de treino sem treino (grupo "semana" do `agendarRotina`, uma vez só); refeito ao abrir o app e quando um treino começa.
 
+## Evolução, conquistas e ferramentas (desde 12/11/2026)
+
+- Banco: migração `20261112120000_evolucao_cargas_medidas.sql` (aplicada): `sessoes_treino.detalhes` (carga, repetições e séries de cada exercício
+  na sessão), `medidas_corporais`, `fotos_evolucao` e o bucket privado `evolucao` (pasta = id da pessoa; criar exige Premium).
+- Carga por exercício (`cargasBase.ts`, `cargas.ts`, `EvolucaoCarga.tsx`): no card do treino, "Última", recorde 🏆 e "Tentar X kg" quando completou
+  todas as séries 2 vezes seguidas com a mesma carga (+1 kg até 10 kg, +2 kg até 40 kg, +2,5 kg acima). Tocar abre o gráfico.
+  O histórico segue o exercício do catálogo (ou o nome), mesmo trocando de plano.
+- Trocar exercício (`trocaBase.ts`, menu ⋯ do card): alternativas do mesmo músculo, com o equipamento do plano primeiro; mantém séries/reps/tempos.
+- Medidas e fotos: `/evolucao` (também pelo Peso). Fotos reduzidas a 1280 px e mostradas por link temporário (1 h).
+- Revisão semanal da meta (`progressoBase.revisaoSemanal`, card no Início): gasto real = média do diário − tendência do peso × 7.700;
+  precisa de 2 pesagens com 10+ dias e 7 dias de diário; muda no máximo 250 kcal; não baixa quem comeu >10% acima da meta.
+  Uma vez por semana (`preferencias.revisao_meta`).
+- Sequência e conquistas (`progressoBase.sequenciaETreinos`, `/conquistas`, card no Início): semanas seguidas batendo a frequência do plano.
+- Lista de compras: `/dieta/:id/compras` (1, 3, 7 ou 14 dias; riscados ficam no aparelho; copiar ou WhatsApp).
+- Calculadoras: `/calculadoras` (1RM pela média de Epley e Brzycki; anilhas por lado).
+- Jejum: `/jejum` (`preferencias.jejum`); no app Android 1.9 alarme no fim (grupo "jejum"); card no Início quando ativo.
+- PDF sem biblioteca (`pdfSimples.ts`, Helvetica/WinAnsi): treino, dieta e relatório. No app Android sai pelo Compartilhar (plugin ArquivosNativo, 1.9+).
+
+## App Android 1.9.0 (código 11)
+
+- Lembretes perguntam a `r2-app/lembrete` (antes iam para um endereço que não existia e tocavam sempre); o `r2-api` repassa `/app/lembrete` para quem tem app antigo.
+- Contador: botão Parar na notificação, para ao fechar o app pela lista de recentes; o site recém-aberto para contador órfão.
+- Notificação tocada navega dentro do site (`window.__r2Navegar`) sem recarregar; botão voltar com confirmação no contador.
+- Plugin `ArquivosNativo.compartilhar` (PDF, imagem, exportação); avisos com grupos rotina, semana e jejum.
+
 ## Ideias anotadas para fazer depois
 
 - (nenhuma no momento)

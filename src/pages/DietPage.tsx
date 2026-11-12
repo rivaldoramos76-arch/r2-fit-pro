@@ -8,6 +8,7 @@ import EditorDieta from '../components/dieta/EditorDieta'
 import { Pencil, Sparkles } from 'lucide-react'
 import type { Dieta } from '../types'
 import { Button, Input, Select, Textarea, Card, Badge, Spinner } from '../components/UI'
+import { entregarArquivo } from '../lib/nativo'
 
 function DietMenu({ onSelect }: { onSelect: (v: 'nova' | 'contador') => void }) {
   const { user } = useAuth()
@@ -271,6 +272,12 @@ function DietDetail({ id }: { id: string }) {
         <button onClick={del} aria-label="Excluir plano" className="text-red-500/60 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10">🗑</button>
       </div>
       {aviso && <p role="status" className="text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">{aviso}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        <Link to={`/dieta/${dieta.id}/compras`} className="text-center text-sm font-semibold py-2.5 rounded-xl bg-zinc-800 text-zinc-200 border border-zinc-700">🛒 Lista de compras</Link>
+        <button type="button" onClick={() => import('../lib/pdfConteudo').then(m => entregarArquivo(m.pdfDieta(dieta.nome, plano as PlanoAlimentar), 'dieta-r2-fit-pro.pdf', 'Dieta em PDF'))
+          .then(r => r === 'sem_suporte' && setAviso('Atualize o app para salvar o PDF.')).catch(() => setAviso('Não foi possível gerar o PDF.'))}
+          className="text-sm font-semibold py-2.5 rounded-xl bg-zinc-800 text-zinc-200 border border-zinc-700">📄 PDF</button>
+      </div>
       <Card className="bg-gradient-to-br from-green-500/10 to-transparent border-green-500/20">
         <div className="grid grid-cols-2 gap-4">
           <div><p className="text-xs text-zinc-500">Calorias/dia</p><p className="text-3xl font-bold text-green-400">{plano.calorias_dia}</p><p className="text-xs text-zinc-500">kcal</p></div>

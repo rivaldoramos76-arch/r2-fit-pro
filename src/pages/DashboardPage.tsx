@@ -16,6 +16,9 @@ import AvisoRenovacao from '../components/AvisoRenovacao'
 import FaleComDesenvolvedor from '../components/FaleComDesenvolvedor'
 import CartaoRotina from '../components/CartaoRotina'
 import CartaoSemanaTreino from '../components/CartaoSemanaTreino'
+import CartaoSequencia from '../components/progresso/CartaoSequencia'
+import CartaoRevisaoMeta from '../components/progresso/CartaoRevisaoMeta'
+import CartaoJejum from '../components/progresso/CartaoJejum'
 import { useNaoLidas } from '../lib/acompanhamento'
 import CartaoAgua from '../components/progresso/CartaoAgua'
 import GraficoPeso from '../components/progresso/GraficoPeso'
@@ -162,6 +165,9 @@ export default function DashboardPage() {
       </section>
 
       {user && <CartaoSemanaTreino userId={user.id} />}
+      {user && premium && <CartaoRevisaoMeta userId={user.id} meta={meta} onMudou={recarregarMeta} />}
+      {user && premium && <CartaoSequencia userId={user.id} />}
+      {user && premium && <CartaoJejum userId={user.id} />}
       {user && <CartaoRotina userId={user.id} />}
       {user && <div className="animate-fade-up" style={{ animationDelay: '90ms' }}><CartaoAgua userId={user.id} data={hojeLocal()} meta={meta} onMetaMudou={recarregarMeta} /></div>}
 

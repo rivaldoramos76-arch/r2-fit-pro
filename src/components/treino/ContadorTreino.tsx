@@ -187,6 +187,8 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
         const s = await concluirExercicio({
           userId: user.id, treinoId: treino.id, treinoNome: treino.nome, dia: diaIdx,
           exercicioId: ex.id, series, exerciciosDoTreino: dia.exercicios.map(e => ({ id: e.id, series: e.series })),
+          // carga atual (pode ter sido mudada na tela da contagem)
+          exercicio: { ...ex, carga: dia.exercicios.find(e => e.id === ex.id)?.carga ?? ex.carga },
         })
         setTreinoCompleto(s.concluido)
         onSessao(s)

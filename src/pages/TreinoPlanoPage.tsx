@@ -8,6 +8,7 @@ import { Spinner } from '../components/UI'
 import EnviarParaAluno from '../components/acompanhamento/EnviarParaAluno'
 import EditorDiasSemana from '../components/treino/EditorDiasSemana'
 import { ajustesDaSemana, aplicarSemana, dataComDia, desfazerAjuste, hojeIso } from '../lib/semanaBase'
+import { entregarArquivo } from '../lib/nativo'
 
 export default function TreinoPlanoPage() {
   const { id } = useParams<{ id: string }>()
@@ -72,7 +73,10 @@ export default function TreinoPlanoPage() {
 
       <EnviarParaAluno treinoId={treino.id} />
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
+        <button type="button" onClick={() => import('../lib/pdfConteudo').then(m => entregarArquivo(m.pdfTreino(plano), 'treino-r2-fit-pro.pdf', 'Treino em PDF'))
+          .then(r => r === 'sem_suporte' && setErroDias('Atualize o app para salvar o PDF.')).catch(() => setErroDias('Não foi possível gerar o PDF.'))}
+          className="text-sm font-semibold py-2.5 rounded-xl bg-zinc-800 text-zinc-200 border border-zinc-700 hover:bg-zinc-700">PDF</button>
         <Link to={`/treino/${treino.id}/editar`} className="text-center text-sm font-semibold py-2.5 rounded-xl bg-zinc-800 text-zinc-200 border border-zinc-700 hover:bg-zinc-700">
           Editar plano
         </Link>

@@ -84,6 +84,9 @@ export default function PesoPage() {
         <h1 className="text-2xl font-bold text-zinc-50 flex items-center gap-2"><Scale className="w-6 h-6 text-green-400" />Peso</h1>
         <p className="text-sm text-zinc-500">Pese-se no mesmo horário, de preferência em jejum, para comparar melhor.</p>
       </div>
+      <Link to="/evolucao" className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 text-sm font-semibold text-zinc-100">
+        Medidas e fotos de antes e depois <span className="text-green-400">→</span>
+      </Link>
 
       <section className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 animate-fade-up" style={{ animationDelay: '60ms' }} aria-label="Registrar peso">
         <div className="grid grid-cols-[1fr_auto] gap-2 items-end">

@@ -7,6 +7,14 @@ import { marcarVez, desfazerVez, situacao, normalizarItem, normalizarRotina, tex
 import { opcoesEncaixe, alertasSemana, familiaDoExercicio, treinosPerdidos, planejarDivisao, divisaoPorAtribuicao, parteDoExercicio, desfazerAjuste, encaixar, diasLivres, podeDividir, ajustesDaSemana, avisosDaSemana, inicioSemana, semanaDoPlano, aplicarSemana, temDiasDaSemana } from '../src/lib/semanaBase'
 import { aplicarExtras, passoTempo, normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
+import { historicoCargas, kgDe, resumoCarga, recordesBatidos, chaveExercicio } from '../src/lib/cargasBase'
+import { alternativas, trocarPor } from '../src/lib/trocaBase'
+import { revisaoSemanal, sequenciaETreinos } from '../src/lib/progressoBase'
+import { umRM, anilhasPorLado } from '../src/lib/calculadoras'
+import { normalizarJejum, situacaoJejum, encerrar, duracao } from '../src/lib/jejumBase'
+import { listaDeCompras } from '../src/lib/comprasBase'
+import { DocPdf, winAnsi } from '../src/lib/pdfSimples'
+
 let ok = 0
 const t = (n: string, f: () => void | Promise<void>) => Promise.resolve(f()).then(() => { ok++; console.log('✓', n) })
 
@@ -420,5 +428,99 @@ await t('treino perdido: evita o mesmo grupamento em dias seguidos e avisa quand
   assert.deepEqual(opcoesEncaixe(cheio, perdido, '2026-11-10').map(o => [o.data, o.semDescanso]), [['2026-11-15', true]])
   assert.deepEqual(alertasSemana(p, ['A', 'D', null, null, null, null, null]), ['Peito em dias seguidos (Segunda e Terça).'])
   assert.deepEqual(alertasSemana(p, ['A', 'B', 'C', 'D', 'B', 'C', 'A']).sort(), ['Peito e Bíceps em dias seguidos (Domingo e Segunda).', 'Sem nenhum dia de descanso na semana.'])
+})
+
+await t('carga: histórico, última vez, recorde e sugestão de subir só depois de 2 vezes completas', () => {
+  assert.equal(kgDe('40 kg'), 40); assert.equal(kgDe('42,5'), 42.5); assert.equal(kgDe('2×20 kg'), 20); assert.equal(kgDe('100 lb'), 45.4); assert.equal(kgDe('elástico'), null)
+  const sess = (d: string, carga: string, series: number) => ({ data_inicio: `${d}T12:00:00`, detalhes: { e1: { nome: 'Supino reto com barra', catalogo_id: 'sup', carga, reps: '8-10', series } } })
+  const mapa = historicoCargas([sess('2026-11-02', '40 kg', 4), sess('2026-11-05', '40 kg', 4), sess('2026-10-29', '37,5 kg', 3), sess('2026-11-12', '42,5 kg', 2)])
+  const pts = mapa.get(chaveExercicio({ catalogo_id: 'sup', nome: 'x' }))!
+  assert.deepEqual(pts.map(p => [p.data, p.kg]), [['2026-10-29', 37.5], ['2026-11-02', 40], ['2026-11-05', 40], ['2026-11-12', 42.5]])
+  const r = resumoCarga(pts, 4, '2026-11-12')
+  assert.equal(r.ultima?.data, '2026-11-05', 'a de hoje não conta como "última vez"')
+  assert.deepEqual(r.recorde, { kg: 40, data: '2026-11-02' })
+  assert.equal(r.sugestao?.carga, '42,5 kg', 'completou 4 séries com 40 kg duas vezes: sobe 2,5 kg')
+  assert.equal(resumoCarga(pts, 5, '2026-11-12').sugestao, undefined, 'sem completar as séries previstas não sobe')
+  assert.deepEqual(recordesBatidos(pts), ['2026-11-02', '2026-11-12'])
+})
+
+await t('trocar exercício: alternativas do mesmo músculo, com o equipamento do plano primeiro', () => {
+  const ex = { id: 'a', nome: 'Supino reto com barra', grupos_musculares: ['Peito'], series: 4, repeticoes: '8-10', tempo_execucao_segundos: 40, tempo_descanso_segundos: 90, carga: '60 kg' }
+  const alts = alternativas(ex, ['halteres', 'maquina'])
+  assert.ok(alts.length >= 5 && alts.every(c => c.grupo === 'peito' && c.nome !== ex.nome))
+  assert.ok(['halteres', 'maquina'].includes(alts[0].equipamento), 'o primeiro usa o equipamento disponível')
+  const novo = trocarPor(ex, alts[0], 'b')
+  assert.equal(novo.series, 4); assert.equal(novo.repeticoes, '8-10'); assert.equal(novo.carga, undefined); assert.equal(novo.catalogo_id, alts[0].id)
+  assert.deepEqual(alternativas({ ...ex, tipo: 'cardio' }, []), [])
+})
+
+await t('revisão da meta: estima o gasto pelo peso e pelo diário, muda no máximo 250 kcal e não baixa quem comeu acima', () => {
+  const pesos = [{ data: '2026-10-25', peso_kg: 80 }, { data: '2026-11-01', peso_kg: 80 }, { data: '2026-11-08', peso_kg: 80 }]
+  const consumo = Array.from({ length: 10 }, (_, i) => ({ data: `2026-11-${String(i + 1).padStart(2, '0')}`, kcal: 2400 }))
+  const base = { calorias: 2400, objetivo: 'perder' as const, ritmo_kg_semana: 0.5, sexo: 'masculino' as const, pesos, consumo, hoje: '2026-11-11' }
+  const r = revisaoSemanal(base)!
+  assert.equal(r.gastoEstimado, 2400, 'peso parado comendo 2.400 = gasto de 2.400')
+  assert.equal(r.tipo, 'ajustar'); assert.equal(r.sugeridas, 2150, 'queria perder 0,5 kg/sem: baixa, mas só 250')
+  assert.equal(revisaoSemanal({ ...base, objetivo: 'manter' })!.tipo, 'manter')
+  assert.equal(revisaoSemanal({ ...base, calorias: 2000 })!.tipo, 'manter', 'comeu 20% acima da meta: pede para seguir a meta antes')
+  assert.equal(revisaoSemanal({ ...base, pesos: pesos.slice(2) }), null, 'precisa de 2 pesagens')
+  assert.equal(revisaoSemanal({ ...base, consumo: consumo.slice(0, 5) }), null, 'precisa de 7 dias de diário')
+})
+
+await t('sequência: semanas seguidas com a meta de treinos e conquistas', () => {
+  // meta 3/semana; semanas de 19/10, 26/10 e 2/11 completas; esta (9/11) com 1 treino
+  const t = (d: string, h = 10) => `${d}T${String(h).padStart(2, '0')}:00:00`
+  const inicios = ['2026-10-20', '2026-10-22', '2026-10-24', '2026-10-27', '2026-10-29', '2026-10-31', '2026-11-03', '2026-11-04', '2026-11-06'].map(d => t(d)).concat(t('2026-11-10', 6))
+  const s = sequenciaETreinos(inicios, 3, 1, '2026-11-12')
+  assert.equal(s.semanasSeguidas, 3, 'esta semana ainda não fechou: conta até a passada'); assert.equal(s.estaSemana, 1); assert.equal(s.total, 10)
+  const ganhou = (id: string) => s.conquistas.find(c => c.id === id)!.obtida
+  assert.ok(ganhou('primeiro') && ganhou('treinos-10') && ganhou('seq-2') && ganhou('perfeita') && ganhou('recorde-1') && ganhou('madrugador'))
+  assert.ok(!ganhou('seq-4') && !ganhou('coruja'))
+  assert.equal(s.conquistas.find(c => c.id === 'treinos-25')!.progresso, '10/25')
+  assert.equal(sequenciaETreinos(inicios.slice(0, 6), 3, 0, '2026-11-12').semanasSeguidas, 0, 'pulou a semana passada: zera')
+})
+
+await t('calculadoras: carga máxima e anilhas por lado', () => {
+  assert.equal(umRM(100, 1), 100); assert.equal(umRM(100, 10), 133.5); assert.equal(umRM(0, 5), null); assert.equal(umRM(50, 25), null)
+  assert.deepEqual(anilhasPorLado(100, 20), { anilhas: [25, 15], sobra: 0, real: 100 })
+  assert.deepEqual(anilhasPorLado(61, 20)!.anilhas, [20]); assert.equal(anilhasPorLado(61, 20)!.sobra, 1)
+  assert.equal(anilhasPorLado(10, 20), null)
+})
+
+await t('jejum: andamento, fim previsto, encerrar e dados estragados', () => {
+  const ativo = { inicio: '2026-11-11T20:00:00.000Z', horas: 16 }
+  const s = situacaoJejum(ativo, Date.parse('2026-11-12T08:30:00.000Z'))
+  assert.equal(duracao(s.horas * 3_600_000), '12h30'); assert.equal(s.concluido, false); assert.equal(duracao(s.restanteMs), '3h30')
+  assert.equal(situacaoJejum(ativo, Date.parse('2026-11-12T12:00:00.000Z')).concluido, true)
+  const d = encerrar({ ativo, historico: [], protocolo: 16 }, new Date('2026-11-12T12:10:00.000Z'))
+  assert.equal(d.ativo, null); assert.equal(d.historico[0].meta, 16)
+  assert.deepEqual(normalizarJejum({ ativo: { inicio: 'xx', horas: 16 }, historico: 'x', protocolo: 99 }), { ativo: null, historico: [], protocolo: 16 })
+})
+
+await t('lista de compras: soma gramas, unidades e multiplica pelos dias', () => {
+  const ref = [
+    { alimentos: [{ nome: 'Ovo', quantidade: '3 ovos' }, { nome: 'Pão integral', quantidade: '2 fatias' }, { nome: 'Leite', quantidade: '200 ml' }] },
+    { alimentos: [{ nome: 'Frango grelhado', quantidade: '150 g' }, { nome: 'Arroz', quantidade: '4 colheres de sopa' }] },
+    { alimentos: [{ nome: 'Frango grelhado', quantidade: '150g' }, { nome: 'ovo', quantidade: '1 ovo' }, { nome: 'Banana', quantidade: '' }] },
+  ]
+  const l = Object.fromEntries(listaDeCompras(ref, 7).map(i => [i.nome, i.total]))
+  assert.equal(l['Frango grelhado'], '2,1 kg'); assert.equal(l['Ovo'], '28 ovos'); assert.equal(l['Leite'], '1,4 L')
+  assert.equal(l['Pão integral'], '14 fatias'); assert.equal(l['Arroz'], '28 colheres de sopa'); assert.equal(l['Banana'], '7x')
+})
+
+await t('PDF: arquivo válido com acentos, várias páginas e sem emoji', () => {
+  assert.equal(winAnsi('Ação (teste) 💪'), 'A\xe7\xe3o \\(teste\\) ')
+  const d = new DocPdf('Treino · Teste')
+  d.titulo1('Supino e mais')
+  for (let i = 0; i < 120; i++) d.texto(`Linha ${i} com série, repetição e descanso`)
+  const bytes = d.gerar()
+  const txt = Array.from(bytes, b => String.fromCharCode(b)).join('')
+  assert.ok(txt.startsWith('%PDF-1.4')); assert.ok(txt.trimEnd().endsWith('%%EOF'))
+  assert.ok(/\/Count [2-9]/.test(txt), 'quebrou em mais de uma página')
+  // a tabela xref aponta para o começo de cada objeto
+  const xref = Number(txt.match(/startxref\n(\d+)/)![1])
+  const offs = txt.slice(xref).match(/(\d{10}) 00000 n/g)!.map(x => Number(x.slice(0, 10)))
+  offs.forEach((o, i) => assert.ok(txt.startsWith(`${i + 1} 0 obj`, o), `objeto ${i + 1}`))
+  assert.ok(txt.includes('s\xe9rie'), 'acento em WinAnsi')
 })
 console.log(`\n${ok} testes passaram`)

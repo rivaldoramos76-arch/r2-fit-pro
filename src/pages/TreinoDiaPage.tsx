@@ -3,7 +3,12 @@ import CartaoRotinaTreino from '../components/CartaoRotinaTreino'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTreino } from '../lib/treinoApi'
-import { descreverGrupos, equipamentosCobertos, type ExercicioPlano, type PlanoTreino } from '../lib/treinoModel'
+import { dataLocalHoje, descreverGrupos, equipamentosCobertos, uid, type ExercicioPlano, type PlanoTreino } from '../lib/treinoModel'
+import { useHistoricoCargas } from '../lib/cargas'
+import { chaveExercicio } from '../lib/cargasBase'
+import { trocarPor } from '../lib/trocaBase'
+import { JanelaEvolucao, LinhaCarga } from '../components/treino/EvolucaoCarga'
+import TrocarExercicio from '../components/treino/TrocarExercicio'
 import { concluirExercicio, desmarcarExercicio, emAndamento, exercicioConcluido, novaSessao, seriesFeitas, sessaoAtual, type Sessao } from '../lib/sessoes'
 import ExercicioPicker from '../components/treino/ExercicioPicker'
 import AjustesExercicio from '../components/treino/AjustesExercicio'
@@ -39,6 +44,10 @@ export default function TreinoDiaPage() {
   const [execucao, setExecucao] = useState<string | null>(null)
   const [marcando, setMarcando] = useState<string | null>(null)
   const [menu, setMenu] = useState<string | null>(null)
+  const [evolucao, setEvolucao] = useState<string | null>(null)
+  const [trocando, setTrocando] = useState<string | null>(null)
+  const historico = useHistoricoCargas(user?.id)
+  const hoje = dataLocalHoje()
   const aoRegistrar = useCallback((s: Sessao) => setSessao(s), [])
   const contador = useContadorTreino({
     user, treino: treino ? { id: treino.id, nome: treino.nome } : null, diaIdx,
@@ -93,6 +102,7 @@ export default function TreinoDiaPage() {
       else setSessao(await concluirExercicio({
         userId: user.id, treinoId: treino.id, treinoNome: treino.nome, dia: diaIdx, exercicioId: ex.id, series: ex.series,
         exerciciosDoTreino: exercicios.map(e => ({ id: e.id, series: e.series })),
+        exercicio: ex,
       }))
     } catch { setAviso('Não foi possível salvar. Verifique sua conexão.') }
     setMarcando(null)
@@ -196,10 +206,14 @@ export default function TreinoDiaPage() {
                   <button onClick={() => setMenu(m => (m === ex.id ? null : ex.id))} aria-label="Mais opções" aria-expanded={menu === ex.id}
                     className={`w-6 h-8 shrink-0 rounded-md text-base leading-none ${menu === ex.id ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500'}`}>⋯</button>
                 </div>
+                {historico && <LinhaCarga ex={ex} pontos={historico.get(chaveExercicio(ex))} hoje={hoje}
+                  onAplicar={carga => atualizarExercicios(l => l.map(x => (x.id === ex.id ? { ...x, carga } : x)))}
+                  onAbrir={() => setEvolucao(ex.id)} />}
                 {menu === ex.id && (
                   <div className="flex gap-1.5 mt-1.5">
                     <button onClick={() => mover(i, -1)} disabled={i === 0} className="flex-1 h-8 rounded-lg text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para cima">↑ Subir</button>
                     <button onClick={() => mover(i, 1)} disabled={i === exercicios.length - 1} className="flex-1 h-8 rounded-lg text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 disabled:opacity-30" aria-label="Mover para baixo">↓ Descer</button>
+                    {ex.tipo !== 'cardio' && <button onClick={() => { setMenu(null); setTrocando(ex.id) }} className="flex-1 h-8 rounded-lg text-xs bg-zinc-800 text-zinc-300 border border-zinc-700" aria-label="Trocar exercício">⇄ Trocar</button>}
                     <button onClick={() => { setMenu(null); remover(ex) }} className="flex-1 h-8 rounded-lg text-xs bg-zinc-900 text-red-400/90 border border-zinc-800" aria-label="Remover">🗑 Remover</button>
                   </div>
                 )}
@@ -228,6 +242,15 @@ export default function TreinoDiaPage() {
           onAdicionar={e => atualizarExercicios(l => [...l, e])}
           onFechar={() => setPicker(false)} />
       )}
+      {(() => {
+        const ev = exercicios.find(e => e.id === evolucao)
+        return ev && historico ? <JanelaEvolucao ex={ev} pontos={historico.get(chaveExercicio(ev)) ?? []} onFechar={() => setEvolucao(null)} /> : null
+      })()}
+      {(() => {
+        const tr = exercicios.find(e => e.id === trocando)
+        return tr ? <TrocarExercicio ex={tr} equipamentos={equipamentosCobertos(treino.plano.config.equipamentos)} onFechar={() => setTrocando(null)}
+          onTrocar={c => { setTrocando(null); atualizarExercicios(l => l.map(x => (x.id === tr.id ? trocarPor(x, c, uid('e')) : x))) }} /> : null
+      })()}
       {contador.overlay}
     </div>
   )
