@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { Button, Input, Spinner } from '../components/UI'
 import { Logo } from '../components/Logo'
 import { traduzirErroAuth, validarSenha } from '../lib/formatos'
+import { detectarSistema, estaInstalado } from '../lib/instalacao'
 
 export default function RedefinirSenhaPage() {
   const navigate = useNavigate()
@@ -13,6 +14,7 @@ export default function RedefinirSenhaPage() {
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [concluido, setConcluido] = useState(false)
+  const ficaNoSafari = detectarSistema() === 'iphone' && !estaInstalado()
 
   useEffect(() => {
     // O link do e-mail cria uma sessão temporária de recuperação (evento PASSWORD_RECOVERY)
@@ -39,7 +41,8 @@ export default function RedefinirSenhaPage() {
     setSalvando(false)
     if (error) { setErro(traduzirErroAuth(error.message)); return }
     setConcluido(true)
-    setTimeout(() => navigate('/dashboard', { replace: true }), 1500)
+    // iPhone: o link do e-mail abre no Safari, que não é o app da Tela de Início (lá a pessoa entra de novo)
+    if (!ficaNoSafari) setTimeout(() => navigate('/dashboard', { replace: true }), 1500)
   }
 
   return (
@@ -55,7 +58,9 @@ export default function RedefinirSenhaPage() {
           </div>
         )}
         {pronto === 'ok' && (concluido ? (
-          <p role="status" className="text-green-400 text-sm">Senha alterada com sucesso! Redirecionando…</p>
+          <p role="status" className="text-green-400 text-sm">{ficaNoSafari
+            ? 'Senha alterada com sucesso! Agora abra o R2 Fit Pro pelo ícone na Tela de Início e entre com a nova senha.'
+            : 'Senha alterada com sucesso! Redirecionando…'}</p>
         ) : (
           <form onSubmit={salvar} className="flex flex-col gap-4" noValidate>
             <Input label="Nova senha" type="password" value={senha} onChange={e => setSenha(e.target.value)} autoComplete="new-password" hint="Mínimo de 8 caracteres, com letras e números." />

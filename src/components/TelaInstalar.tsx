@@ -80,9 +80,9 @@ export default function TelaInstalar({ aoContinuar }: { aoContinuar: () => void 
             <ol className="flex flex-col gap-2.5">
               {sistema === 'iphone' ? (
                 <>
-                  <Passo n={1}>No <b>Safari</b>, toque em <b>Compartilhar</b> <Share className="inline w-4 h-4 -mt-0.5" /> (quadrado com seta, na barra de baixo).</Passo>
+                  <Passo n={1}>No <b>Safari</b>, toque em <b>Compartilhar</b> <Share className="inline w-4 h-4 -mt-0.5" /> (quadrado com seta). No iOS mais novo ele fica no menu <b>···</b> ao lado do endereço.</Passo>
                   <Passo n={2}>Role a lista e toque em <b>Adicionar à Tela de Início</b> <PlusSquare className="inline w-4 h-4 -mt-0.5" />.</Passo>
-                  <Passo n={3}>Toque em <b>Adicionar</b>.</Passo>
+                  <Passo n={3}>Se aparecer <b>Abrir como App Web</b>, deixe ligado. Toque em <b>Adicionar</b>.</Passo>
                   <Passo n={4}>Abra o <b>R2 Fit Pro</b> pelo ícone e entre com seu e-mail e senha.</Passo>
                 </>
               ) : (

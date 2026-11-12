@@ -6,6 +6,7 @@ import { ativarPush, desativarPush, estadoPush, listarLembretes, salvarLembretes
 import { comPadroes, DIAS_CURTOS, MAX_AGUA, proximoHorarioAgua, REFEICOES, resumoDias, TODOS_OS_DIAS, type Lembrete, type TipoLembrete } from '../lib/lembretesBase'
 import { ErroApi } from '../lib/api'
 import { ehAppNativo } from '../lib/nativo'
+import { detectarSistema, estaInstalado } from '../lib/instalacao'
 import { Button, Spinner } from '../components/UI'
 
 function Chave({ ativo, onChange, rotulo }: { ativo: boolean; onChange: (v: boolean) => void; rotulo: string }) {
@@ -72,13 +73,17 @@ function Aparelho({ estado, onMudar }: { estado: EstadoPush | null; onMudar: (e:
           {estado === 'inativo' && <p className="text-sm text-zinc-400 mt-0.5">Ative para receber os lembretes mesmo com o app fechado.</p>}
           {estado === 'negado' && (ehAppNativo()
             ? <p className="text-sm text-zinc-400 mt-0.5">As notificações do app estão bloqueadas. Libere em Configurações do Android → Apps → R2 Fit Pro → Notificações e volte aqui.</p>
-            : <p className="text-sm text-zinc-400 mt-0.5">As notificações foram bloqueadas. Libere nas configurações do navegador (ícone de cadeado ao lado do endereço → Notificações → Permitir) e volte aqui.</p>)}
-          {estado === 'sem_suporte' && <p className="text-sm text-zinc-400 mt-0.5">Este navegador não recebe notificações. No Android use o Chrome; no iPhone, adicione o app à Tela de Início.</p>}
+            : detectarSistema() === 'iphone'
+              ? <p className="text-sm text-zinc-400 mt-0.5">As notificações foram bloqueadas. Libere em Ajustes do iPhone → Notificações → R2 Fit Pro → Permitir Notificações e volte aqui.</p>
+              : <p className="text-sm text-zinc-400 mt-0.5">As notificações foram bloqueadas. Libere nas configurações do navegador (ícone de cadeado ao lado do endereço → Notificações → Permitir) e volte aqui.</p>)}
+          {estado === 'sem_suporte' && <p className="text-sm text-zinc-400 mt-0.5">{detectarSistema() === 'iphone' && estaInstalado()
+            ? 'Este iPhone não recebe notificações de apps da Tela de Início. Atualize o iOS (16.4 ou mais novo) em Ajustes → Geral → Atualização de Software.'
+            : 'Este navegador não recebe notificações. No Android use o Chrome; no iPhone, adicione o app à Tela de Início.'}</p>}
           {estado === 'instalar' && (
             <div className="text-sm text-zinc-400 mt-1">
               <p>No iPhone, os lembretes só funcionam com o app na Tela de Início (iOS 16.4 ou mais novo):</p>
               <ol className="list-decimal ml-5 mt-1.5 space-y-0.5">
-                <li>Abra o site no Safari e toque em <Share className="inline w-4 h-4 -mt-0.5" /> Compartilhar</li>
+                <li>Abra o site no Safari e toque em <Share className="inline w-4 h-4 -mt-0.5" /> Compartilhar (no iOS mais novo, fica no menu ··· ao lado do endereço)</li>
                 <li>Escolha <b>Adicionar à Tela de Início</b></li>
                 <li>Abra o R2 Fit Pro pelo ícone e volte a esta tela</li>
               </ol>

@@ -183,7 +183,7 @@ export default function ExercicioPicker({ gruposDoTreino, equipamentos, onAdicio
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" onClick={onFechar}>
-      <div className="bg-zinc-950 border border-zinc-800 w-full max-w-lg h-[92dvh] sm:h-[85vh] rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden"
+      <div className="bg-zinc-950 border border-zinc-800 w-full max-w-lg h-[92dvh] sm:h-[85vh] rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]"
         onClick={e => e.stopPropagation()} translate="no" role="dialog" aria-label="Adicionar exercício">
         {selecionado ? (
           <div className="p-5 overflow-y-auto">

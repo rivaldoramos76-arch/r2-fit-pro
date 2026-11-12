@@ -7,7 +7,7 @@ import type { Sistema } from '../lib/instalacao'
 const PASSOS: Record<Exclude<Sistema, 'outro'>, { texto: ReactNode }[]> = {
   iphone: [
     { texto: <>Abra <b>r2fitpro.com.br</b> no <b>Safari</b>.</> },
-    { texto: <>Toque em <b>Compartilhar</b> <Share className="inline w-4 h-4 -mt-0.5" /> (quadrado com seta, na barra de baixo).</> },
+    { texto: <>Toque em <b>Compartilhar</b> <Share className="inline w-4 h-4 -mt-0.5" /> (quadrado com seta). No iOS mais novo, fica no menu <b>···</b> ao lado do endereço.</> },
     { texto: <>Role a lista e toque em <b>Adicionar à Tela de Início</b> <PlusSquare className="inline w-4 h-4 -mt-0.5" />.</> },
     { texto: <>Toque em <b>Adicionar</b>. Pronto: o ícone do R2 Fit Pro aparece na sua tela inicial.</> },
   ],

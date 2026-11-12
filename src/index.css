@@ -154,3 +154,8 @@ body {
   .animate-sheet-up, .animate-fade-in, .animate-pop { animation: none; }
   .anel-progresso, .barra-progresso { transition: none; }
 }
+
+/* iPhone: campo com letra menor que 16px faz o Safari dar zoom ao tocar (e o app instalado fica com zoom) */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px !important; }
+}

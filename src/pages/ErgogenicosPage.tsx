@@ -91,10 +91,14 @@ function Formulario({ inicial, onSalvar, onCancelar }: { inicial: ItemRotina; on
         <span className="text-xs text-zinc-400">Próximo dia de uso</span>
         <input type="date" value={f.proxima} onChange={e => e.target.value && set({ proxima: e.target.value })} className={CAMPO} aria-label="Próximo dia de uso" />
       </label>
-      <label className="flex items-center justify-between gap-3 py-1">
-        <span className="text-sm text-zinc-300">Lembrete no celular</span>
-        <input type="checkbox" checked={f.lembrete} onChange={e => set({ lembrete: e.target.checked })} className="w-5 h-5 accent-green-500" aria-label="Lembrete no celular" />
-      </label>
+      {ehAppNativo() ? (
+        <label className="flex items-center justify-between gap-3 py-1">
+          <span className="text-sm text-zinc-300">Lembrete no celular</span>
+          <input type="checkbox" checked={f.lembrete} onChange={e => set({ lembrete: e.target.checked })} className="w-5 h-5 accent-green-500" aria-label="Lembrete no celular" />
+        </label>
+      ) : (
+        <p className="text-[11px] text-zinc-500">No iPhone não tem alarme: o que é para hoje aparece no Início e na tela do treino.</p>
+      )}
       <label className="flex flex-col gap-1.5">
         <span className="text-xs text-zinc-400">Observação <span className="text-zinc-600">(opcional)</span></span>
         <input value={f.obs ?? ''} onChange={e => set({ obs: e.target.value })} placeholder="Ex.: alternar o local de aplicação" className={CAMPO} maxLength={200} />
@@ -192,7 +196,7 @@ export default function ErgogenicosPage() {
                       className="flex-1 min-w-0 text-left">
                       <p className="text-sm font-semibold text-zinc-100 truncate flex items-center gap-1">{i.nome}<ChevronDown className={`w-3.5 h-3.5 text-zinc-600 transition ${aberto === i.id ? 'rotate-180' : ''}`} /></p>
                       <p className="text-xs text-zinc-500">{textoDose(i)} · {textoIntervalo(i.intervaloDias)} · {textoVezes(i.vezes)}</p>
-                      <p className="text-xs text-zinc-500">próxima: {situacao(i, hoje).texto}{i.lembrete ? '' : ' · sem lembrete'}</p>
+                      <p className="text-xs text-zinc-500">próxima: {situacao(i, hoje).texto}{i.lembrete || !ehAppNativo() ? '' : ' · sem lembrete'}</p>
                       {i.obs && <p className="text-[11px] text-zinc-600 truncate">{i.obs}</p>}
                     </button>
                     <button onClick={() => setEditando(i)} aria-label={`Editar ${i.nome}`} className="p-2 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"><Pencil className="w-4 h-4" /></button>
@@ -238,7 +242,7 @@ export default function ErgogenicosPage() {
             <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${rotina.discreto ? 'translate-x-4' : ''}`} />
           </span>
         </button>
-        {!ehAppNativo() && <p className="text-xs text-zinc-500 mt-3">Os avisos no celular chegam pelo app instalado (Android). No navegador, o que é para hoje aparece no Início e no treino.</p>}
+        {!ehAppNativo() && <p className="text-xs text-zinc-500 mt-3">Os alarmes no celular são do app Android. No iPhone, o que é para hoje aparece no Início e na tela do treino.</p>}
       </section>
 
       <p className="flex gap-2 text-[11px] text-zinc-500 leading-relaxed px-1">
