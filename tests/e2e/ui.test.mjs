@@ -264,7 +264,9 @@ async function contexto(browser, { logado = false, estado = 'sem_assinatura', ad
       : { status: 0 }) }))
   await ctx.route('**/api/ai', r => {
     const corpo = JSON.stringify(r.request().postDataJSON())
-    const resposta = corpo.includes('estima pratos por foto')
+    const resposta = corpo.includes('O aluno perdeu um treino')
+      ? { sessoes: { S1: ['E1'], S2: ['E2'] }, explicacao: 'Supino na quarta e crucifixo na sexta, para nenhum dia ficar pesado.' }
+      : corpo.includes('estima pratos por foto')
       ? { alimentos: [
         { nome: 'Arroz branco', busca: 'arroz branco cozido', gramas: 120, quantidade: '4 colheres', calorias: 160, proteina_g: 3, carboidrato_g: 34, gordura_g: 0.3 },
         { nome: 'Molho da casa', busca: 'molho da casa', gramas: 30, quantidade: '2 colheres', calorias: 90, proteina_g: 0, carboidrato_g: 3, gordura_g: 9 }] }
@@ -911,12 +913,15 @@ await t('treino perdido: planejamento da divisão, confirmar, desfazer, encaixar
   await card.getByRole('button', { name: /Dividir no restante desta semana/ }).click()
   const previa = card.getByRole('group', { name: 'Planejamento da divisão' })
   await previa.getByText(/quarta, 11\/11 · Treino B/).waitFor()
+  await previa.getByText('Supino na quarta e crucifixo na sexta, para nenhum dia ficar pesado.').waitFor()
+  assert.ok(page.gravacoes.some(g => g.tabela === 'api_ai' && g.corpo.includes('O aluno perdeu um treino')), 'a IA analisa o treino')
   await card.screenshot({ path: `${SHOTS}/semana-previa.png`, animations: 'disabled' })
   assert.equal(page.gravacoes.filter(g => g.tabela === 'treinos').length, 0, 'só grava depois de confirmar')
   await previa.getByRole('button', { name: 'Confirmar divisão' }).click()
   await card.getByText(/Treino A dividido em \d treinos? até domingo, 15\/11\./).waitFor()
   const dividido = ultimoPlano()
-  assert.ok(dividido.extras.length === 2 && dividido.extras.every(x => x.origem === '2026-11-09' && x.letraOrigem === 'A' && x.letra !== 'A'))
+  assert.deepEqual(dividido.extras.map(x => [x.letra, x.exercicio.nome]), [['B', 'Supino reto com barra'], ['C', 'Crucifixo']], 'vale a divisão da IA')
+  assert.ok(dividido.extras.every(x => x.origem === '2026-11-09' && x.letraOrigem === 'A'))
   assert.equal(dividido.extras.reduce((t, x) => t + x.exercicio.series, 0), 7, 'mesmo volume')
   assert.ok(dividido.dias[1].exercicios.some(e => e.temporarioAte), 'já entra no treino de quarta')
   await card.getByText('Semana ajustada').waitFor()

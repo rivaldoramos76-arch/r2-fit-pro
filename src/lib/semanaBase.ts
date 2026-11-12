@@ -155,10 +155,14 @@ export const LIMITE_EXTRA = 8
 const seriesDe = (exs: ExercicioPlano[]) => exs.reduce((t, e) => t + Math.max(1, e.series), 0)
 
 export interface Destino { data: string; letra: string; diaIdx: number; exercicios: ExercicioPlano[]; series: number }
-export interface Divisao { semanas: 1 | 2; destinos: Destino[]; alertas: string[]; plano: PlanoTreino; ate: string }
+export interface Divisao {
+  semanas: 1 | 2; destinos: Destino[]; alertas: string[]; plano: PlanoTreino; ate: string
+  /** quem planejou: a IA (analisando o treino todo) ou as regras do app */
+  fonte: 'ia' | 'regras'; explicacao?: string
+}
 
 /** Treinos que podem receber parte do treino perdido: de hoje (se ainda não treinou) até o fim do período, menos o próprio treino perdido. */
-function vagas(p: PlanoTreino, perdido: Agendado, hoje: string, hojeFeito: boolean, semanas: 1 | 2): Agendado[] {
+export function vagas(p: PlanoTreino, perdido: Agendado, hoje: string, hojeFeito: boolean, semanas: 1 | 2): Agendado[] {
   return agendaDasSemanas(p, hoje, semanas).filter(a => (a.data > hoje || (a.data === hoje && !hojeFeito)) && a.diaIdx !== perdido.diaIdx)
 }
 
@@ -184,7 +188,6 @@ export function planejarDivisao(p: PlanoTreino, perdido: Agendado, hoje: string,
   if (!slots.length || !exs.length) return null
   const mapa = mapaDaSemana(p, hoje, perdido.data)
   const carga = new Map<string, ExercicioPlano[]>(slots.map(s => [s.data, []]))
-  const alertas: string[] = []
 
   // 1. partes, na ordem do treino
   const partes: ExercicioPlano[][] = []
@@ -211,11 +214,24 @@ export function planejarDivisao(p: PlanoTreino, perdido: Agendado, hoje: string,
     if (bloco.length > 1 && (melhor.c.colado || melhor.c.passa > 0)) { fila.push(...bloco.map(e => [e])); ordenar(); continue }
     carga.get(melhor.s.data)!.push(...bloco)
     bloco.forEach(e => { const f = familiaDoExercicio(e); if (f) mapa.set(melhor.s.data, new Set([...(mapa.get(melhor.s.data) ?? []), f])) })
-    if (melhor.c.colado) alertas.push(`${parteDoExercicio(bloco[0])} ficou colado em outro treino do mesmo grupo (${dataComDia(melhor.s.data).split(',')[0]}).`)
   }
 
-  const destinos: Destino[] = slots.filter(s => carga.get(s.data)!.length)
+  return montarDivisao(p, perdido, hoje, semanas, slots, carga, 'regras')
+}
+
+/** Monta a divisão a partir de quais exercícios vão em cada sessão (das regras ou da IA): avisos, janelas e o plano novo. */
+function montarDivisao(p: PlanoTreino, perdido: Agendado, hoje: string, semanas: 1 | 2, slots: Agendado[], carga: Map<string, ExercicioPlano[]>,
+  fonte: 'ia' | 'regras', explicacao?: string): Divisao {
+  const destinos: Destino[] = slots.filter(s => carga.get(s.data)?.length)
     .map(s => ({ ...s, exercicios: carga.get(s.data)!, series: seriesDe(carga.get(s.data)!) }))
+  // avisos: dia que passou do limite e músculo colado num treino do mesmo grupamento (contando o que foi dividido)
+  const mapa = mapaDaSemana(p, hoje, perdido.data)
+  destinos.forEach(d => d.exercicios.forEach(e => { const f = familiaDoExercicio(e); if (f) mapa.set(d.data, new Set([...(mapa.get(d.data) ?? []), f])) }))
+  const alertas: string[] = []
+  destinos.forEach(d => {
+    const colados = [...new Set(d.exercicios.map(familiaDoExercicio).filter((f): f is string => !!f && vizinhoCom(mapa, d.data, f)))]
+    colados.forEach(f => alertas.push(`${f} em dias seguidos (${dataComDia(d.data).split(',')[0]}).`))
+  })
   destinos.filter(d => d.series > LIMITE_EXTRA).forEach(d => alertas.push(`Fica puxado: +${d.series} séries em ${dataComDia(d.data)}.`))
 
   // janela de cada sessão: do dia seguinte à sessão anterior da mesma letra até a véspera da próxima (no máximo o domingo)
@@ -230,7 +246,35 @@ export function planejarDivisao(p: PlanoTreino, perdido: Agendado, hoje: string,
   })
   const todosExtras = [...(p.extras ?? []), ...extras]
   const plano = { ...p, extras: todosExtras, dias: aplicarExtras(p.dias, todosExtras, hoje) }
-  return { semanas, destinos, alertas, plano, ate: extras.reduce((m, x) => (x.ate > m ? x.ate : m), hoje) }
+  return { semanas, destinos, alertas, plano, ate: extras.reduce((m, x) => (x.ate > m ? x.ate : m), hoje), fonte, explicacao }
+}
+
+/** Exercícios do treino perdido que entram na divisão (sem os temporários). */
+export const exerciciosDoPerdido = (p: PlanoTreino, perdido: Agendado) => p.dias[perdido.diaIdx]?.exercicios.filter(e => !e.temporarioAte) ?? []
+
+/**
+ * Divisão a partir de uma resposta da IA: { data da sessão: [ids dos exercícios] }. Só vale se cada exercício do treino
+ * perdido aparece exatamente uma vez e só em sessões que podem receber; senão null (o app usa as regras).
+ */
+export function divisaoPorAtribuicao(p: PlanoTreino, perdido: Agendado, hoje: string, hojeFeito: boolean, semanas: 1 | 2,
+  porData: Record<string, string[]>, explicacao?: string): Divisao | null {
+  const slots = vagas(p, perdido, hoje, hojeFeito, semanas)
+  const exs = exerciciosDoPerdido(p, perdido)
+  if (!slots.length || !exs.length) return null
+  const carga = new Map<string, ExercicioPlano[]>(slots.map(s => [s.data, []]))
+  const usados = new Set<string>()
+  for (const [data, ids] of Object.entries(porData)) {
+    if (!carga.has(data) || !Array.isArray(ids)) return null
+    for (const id of ids) {
+      const e = exs.find(x => x.id === id)
+      if (!e || usados.has(id)) return null
+      usados.add(id); carga.get(data)!.push(e)
+    }
+  }
+  if (usados.size !== exs.length) return null
+  // mantém a ordem original do treino dentro de cada sessão
+  carga.forEach((l, k) => carga.set(k, [...l].sort((a, b) => exs.indexOf(a) - exs.indexOf(b))))
+  return montarDivisao(p, perdido, hoje, semanas, slots, carga, 'ia', explicacao)
 }
 
 /** Dias entre duas datas AAAA-MM-DD. */

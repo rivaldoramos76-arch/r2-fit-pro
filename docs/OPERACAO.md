@@ -206,6 +206,10 @@ observação; marca "feito" e a próxima vira hoje + intervalo (`src/lib/rotinaB
   Grava em `plano.extras` (`letra`, `validoDe`, `ate`, `origem`, `letraOrigem`, `exercicio`): cada exercício entra só na sessão escolhida daquele treino
   (do dia seguinte à sessão anterior de mesma letra até a véspera da próxima, no máximo o domingo); `normalizarPlano` põe nos treinos os que valem hoje
   (`aplicarExtras`, sem repetir) e descarta os vencidos. "Desfazer" no Início e na tela do treino.
+- IA (`planejarDivisaoComIA` em `src/lib/openai.ts`, pelo /api/ai): ao tocar numa opção de dividir, a IA recebe o plano dia a dia (o que cada dia treina,
+  descansos, o treino perdido, objetivo e nível), as regras acima e a proposta das regras, e devolve em qual sessão vai cada exercício com uma explicação curta.
+  O app confere (`divisaoPorAtribuicao`: todo exercício uma vez, só em sessões válidas) e calcula os avisos; se a IA falhar, errar ou propor algo com mais
+  avisos que as regras, vale a divisão pelas regras. A prévia mostra "Analisado pela IA: ..." quando foi a IA. Conta no limite diário de uso da IA.
 - Grupamentos para "dias seguidos": perna = quadríceps, posteriores, glúteos e adutores; abdômen, panturrilha e antebraço podem seguidos.
   No encaixe, os dias colados vão para o fim com aviso, e o último dia livre avisa "fica sem descanso até domingo".
   O editor de dias avisa grupamento em dias seguidos (domingo encosta na segunda) e semana sem descanso.

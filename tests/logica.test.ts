@@ -4,7 +4,7 @@ import { buscarExercicios, encontrarPorNome } from '../src/lib/busca'
 import { montarCronograma, estadoEm, renderizarFaixa, aparar, maximizar, chaveSerie, textoDoClipe, TreinoPlayer } from '../src/lib/workoutAudio'
 import { passoReps, passoCarga, lerTempo, mss } from '../src/components/treino/AjustesExercicio'
 import { marcarVez, desfazerVez, situacao, normalizarItem, normalizarRotina, textoAviso, somarDias, pendentesHoje, pendentesDoTreino, historicoPorDia, diaCompleto } from '../src/lib/rotinaBase'
-import { opcoesEncaixe, alertasSemana, familiaDoExercicio, treinosPerdidos, planejarDivisao, parteDoExercicio, desfazerAjuste, encaixar, diasLivres, podeDividir, ajustesDaSemana, avisosDaSemana, inicioSemana, semanaDoPlano, aplicarSemana, temDiasDaSemana } from '../src/lib/semanaBase'
+import { opcoesEncaixe, alertasSemana, familiaDoExercicio, treinosPerdidos, planejarDivisao, divisaoPorAtribuicao, parteDoExercicio, desfazerAjuste, encaixar, diasLivres, podeDividir, ajustesDaSemana, avisosDaSemana, inicioSemana, semanaDoPlano, aplicarSemana, temDiasDaSemana } from '../src/lib/semanaBase'
 import { aplicarExtras, passoTempo, normalizarPlano, opcoesDivisao, agendaPadrao, aplicarDivisao, modeloDivisao, proximoTreino } from '../src/lib/treinoModel'
 
 let ok = 0
@@ -356,6 +356,14 @@ await t('treino perdido: dividir nesta semana e na próxima quando a semana não
   const seg = duas.plano.extras!.filter(x => x.letra === 'A')
   assert.ok(seg.every(x => x.ate === '2026-11-22'), 'o da segunda que vem vale só na sessão de segunda')
   assert.deepEqual(ajustesDaSemana(duas.plano, '2026-11-17').map(a => [a.letra, a.ate]), [['B', '2026-11-22']], 'na semana seguinte ainda aparece para desfazer')
+  // resposta da IA: só vale com todos os exercícios uma vez e em sessões válidas
+  const ids = p.dias[1].exercicios.map(e => e.id)
+  const ia = divisaoPorAtribuicao(p, perdido, '2026-11-12', false, 2, { '2026-11-13': [ids[0], ids[2]], '2026-11-16': [ids[1]], '2026-11-20': [ids[3]] }, 'ok')!
+  assert.equal(ia.fonte, 'ia'); assert.deepEqual(ia.destinos.map(d => d.series), [8, 4, 3]); assert.deepEqual(ia.alertas, [])
+  assert.equal(divisaoPorAtribuicao(p, perdido, '2026-11-12', false, 2, { '2026-11-13': ids.slice(0, 3) }), null, 'faltou exercício')
+  assert.equal(divisaoPorAtribuicao(p, perdido, '2026-11-12', false, 2, { '2026-11-13': ids, '2026-11-16': [ids[0]] }), null, 'repetiu exercício')
+  assert.equal(divisaoPorAtribuicao(p, perdido, '2026-11-12', false, 2, { '2026-11-18': ids }), null, 'quarta é o próprio treino B')
+  assert.deepEqual(divisaoPorAtribuicao(p, perdido, '2026-11-12', false, 2, { '2026-11-13': ids })!.alertas, ['Fica puxado: +15 séries em sexta, 13/11.'], 'o app confere e avisa')
   // ombro: frente, lateral e trás são partes diferentes
   assert.equal(parteDoExercicio({ id: 'x', nome: 'Elevação frontal com halteres', grupos_musculares: [], series: 3, repeticoes: '10', tempo_execucao_segundos: 40, tempo_descanso_segundos: 60 }), 'Ombro (frente)')
   assert.equal(parteDoExercicio({ id: 'x', nome: 'Crucifixo invertido com halteres', grupos_musculares: [], series: 3, repeticoes: '10', tempo_execucao_segundos: 40, tempo_descanso_segundos: 60 }), 'Ombro (trás)')

@@ -2,9 +2,13 @@ import { CATALOGO, GRUPOS } from '../data/exercicios'
 import { encontrarPorNome } from './busca'
 import {
   equipamentosCobertos, normalizarExercicio, uid,
-  type ConfigTreino, type DiaTreino, type PlanoTreino, type SlotAgenda, type TreinoDivisao,
+  type ConfigTreino, type DiaTreino, type ExercicioPlano, type PlanoTreino, type SlotAgenda, type TreinoDivisao,
 } from './treinoModel'
 import { chatCompletion } from './aiClient'
+import {
+  LIMITE_EXTRA, agendaDasSemanas, dataComDia, divisaoPorAtribuicao, exerciciosDoPerdido, fimSemana, parteDoExercicio,
+  planejarDivisao, somar, vagas, type Agendado, type Divisao,
+} from './semanaBase'
 
 // --- Geração de Dieta ---
 
@@ -218,5 +222,77 @@ Retorne APENAS JSON válido neste formato:
     config,
     dias,
     observacoes: Array.isArray(r.observacoes) ? r.observacoes.map(String) : [],
+  }
+}
+
+// --- Treino perdido: divisão analisada pela IA ---
+
+/**
+ * A IA analisa o plano inteiro (o que cada dia treina, descansos, objetivo e nível) e diz em qual sessão vai cada
+ * exercício do treino perdido. O app confere a resposta (todo exercício uma vez, só em sessões válidas) e calcula os
+ * avisos; se a IA falhar, responder errado ou propor algo com mais avisos que as regras do app, vale a divisão pelas regras.
+ */
+export async function planejarDivisaoComIA(p: PlanoTreino, perdido: Agendado, hoje: string, hojeFeito: boolean, semanas: 1 | 2): Promise<Divisao | null> {
+  const regras = planejarDivisao(p, perdido, hoje, hojeFeito, semanas)
+  if (!regras) return null
+  try {
+    const slots = vagas(p, perdido, hoje, hojeFeito, semanas)
+    const exs = exerciciosDoPerdido(p, perdido)
+    const sid = new Map(slots.map((s, i) => [s.data, `S${i + 1}`]))
+    const eid = new Map(exs.map((e, i) => [e.id, `E${i + 1}`]))
+    const descr = (e: ExercicioPlano) => `${e.nome} (${parteDoExercicio(e)}; ${e.series}x${e.repeticoes || '-'})`
+    const fim = semanas === 2 ? somar(fimSemana(hoje), 7) : fimSemana(hoje)
+    const agenda = agendaDasSemanas(p, hoje, 3)
+    const linhas: string[] = []
+    for (let d = somar(hoje, -1); d <= somar(fim, 1); d = somar(d, 1)) {
+      const doDia = [
+        ...agenda.filter(a => a.data === d && a.data !== perdido.data).map(a => p.dias[a.diaIdx]),
+        ...(p.encaixes ?? []).filter(e => e.data === d).map(e => p.dias.find(x => x.letra === e.letra)),
+      ].filter((x): x is DiaTreino => !!x)
+      const marca = d === hoje ? ' (hoje)' : ''
+      const quem = sid.get(d) ? ` [${sid.get(d)}]` : ''
+      linhas.push(d === perdido.data ? `${dataComDia(d)}${marca}: treino perdido (não treinou)`
+        : doDia.length ? `${dataComDia(d)}${marca}${quem}: ${doDia.map(x => `Treino ${x.letra} — ${x.exercicios.filter(e => !e.temporarioAte).map(descr).join('; ') || x.foco}`).join(' + ')}`
+        : `${dataComDia(d)}${marca}: descanso`)
+    }
+    const propostaRegras = regras.destinos.map(d => `${sid.get(d.data)}: ${d.exercicios.map(e => eid.get(e.id)).join(', ')}`).join(' | ')
+
+    const prompt = `Você é um personal trainer. O aluno perdeu um treino e quer distribuir esse treino nas próximas sessões, sem perder o treino e sem atrapalhar o resultado.
+
+Aluno: objetivo ${p.config.objetivo}, nível ${p.config.nivel}.
+
+Treino perdido (Treino ${perdido.letra}, ${dataComDia(perdido.data)}):
+${exs.map(e => `${eid.get(e.id)}: ${descr(e)}`).join('\n')}
+
+Agenda dia a dia (as sessões que podem receber exercícios estão marcadas [S1], [S2]...):
+${linhas.join('\n')}
+
+Regras:
+- Cada exercício (E1, E2...) vai para exatamente UMA sessão marcada; não mude séries, repetições nem carga.
+- Evite o mesmo grupo muscular em dias seguidos (olhe a véspera e o dia seguinte de cada sessão, inclusive os já treinados).
+- Pode separar partes do mesmo grupo (ex.: bíceps num dia e tríceps em outro; quadríceps num dia e posterior em outro; uma parte das costas num dia e outra em outro), desde que não fiquem em dias seguidos.
+- Não deixe nenhuma sessão pesada: no máximo cerca de ${LIMITE_EXTRA} séries a mais por sessão, equilibrando entre as sessões.
+- Evite dobrar o volume de um músculo numa sessão que já treina pesado esse mesmo músculo.
+- Pense na recuperação e no objetivo do aluno; prefira as sessões mais cedo quando não houver prejuízo.
+
+Proposta inicial (pode manter ou melhorar): ${propostaRegras}
+
+Retorne APENAS JSON válido neste formato:
+{ "sessoes": { "S1": ["E1", "E2"], "S2": ["E3"] }, "explicacao": "uma ou duas frases simples, em português, dizendo como dividiu e por quê" }`
+
+    const response = await chatCompletion({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, temperature: 0.2 })
+    const r = JSON.parse(response.choices[0]?.message?.content ?? '{}') as { sessoes?: Record<string, string[]>; explicacao?: string }
+    const dataDe = new Map([...sid].map(([d, s]) => [s, d]))
+    const idDe = new Map([...eid].map(([id, e]) => [e, id]))
+    const porData: Record<string, string[]> = {}
+    for (const [s, lista] of Object.entries(r.sessoes ?? {})) {
+      const d = dataDe.get(s)
+      if (!d || !Array.isArray(lista)) return regras
+      porData[d] = lista.map(x => idDe.get(String(x)) ?? '?')
+    }
+    const ia = divisaoPorAtribuicao(p, perdido, hoje, hojeFeito, semanas, porData, typeof r.explicacao === 'string' ? r.explicacao.slice(0, 400) : undefined)
+    return ia && ia.alertas.length <= regras.alertas.length ? ia : regras
+  } catch {
+    return regras
   }
 }

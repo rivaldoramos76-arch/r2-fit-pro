@@ -25,6 +25,8 @@ export default function CartaoSemanaTreino({ userId }: { userId: string }) {
   const [aviso, setAviso] = useState('')
   const [escolhendoDia, setEscolhendoDia] = useState(false)
   const [previa, setPrevia] = useState<Divisao | null>(null)
+  const [analisando, setAnalisando] = useState<1 | 2 | null>(null)
+  const [analisadas, setAnalisadas] = useState<Partial<Record<1 | 2, Divisao>>>({})
   const [depois, setDepois] = useState(false)
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export default function CartaoSemanaTreino({ userId }: { userId: string }) {
     setOcupado(true); setErro('')
     try {
       const nova = await fazer()
-      setSemana(nova); setAviso(msg); setEscolhendoDia(false); setPrevia(null)
+      setSemana(nova); setAviso(msg); setEscolhendoDia(false); setPrevia(null); setAnalisadas({})
       agendarAvisosSemana(nova).catch(() => {})
     } catch (e) { setErro((e as Error).message) } finally { setOcupado(false) }
   }
@@ -93,19 +95,31 @@ export default function CartaoSemanaTreino({ userId }: { userId: string }) {
             </button>
             {([[1, div1, 'Dividir no restante desta semana', 'Não tem outro treino até domingo'],
               [2, div2, 'Dividir nesta semana e na próxima', 'Não tem outro treino nas duas semanas']] as const).map(([n, d, rotulo, sem]) => (
-              <button key={n} type="button" disabled={ocupado || !d} aria-pressed={previa?.semanas === n} onClick={() => { setPrevia(x => (x?.semanas === n ? null : d)); setEscolhendoDia(false) }}
+              <button key={n} type="button" disabled={ocupado || !d || analisando !== null} aria-pressed={previa?.semanas === n} onClick={() => {
+                setEscolhendoDia(false)
+                if (previa?.semanas === n) { setPrevia(null); return }
+                if (analisadas[n]) { setPrevia(analisadas[n]!); return }
+                // a IA analisa o treino todo; se não der, vale a divisão pelas regras do app
+                setPrevia(null); setAnalisando(n)
+                import('../lib/openai').then(m => m.planejarDivisaoComIA(plano, perdido, hoje, hojeFeito, n)).catch(() => d)
+                  .then(r => { const final = r ?? d; if (final) { setAnalisadas(x => ({ ...x, [n]: final })); setPrevia(final) } })
+                  .finally(() => setAnalisando(null))
+              }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border disabled:opacity-50 ${previa?.semanas === n ? 'bg-green-500/10 border-green-500/40 text-zinc-100' : 'bg-zinc-800 border-zinc-700 text-zinc-100'}`}>
                 <Split className="w-4 h-4 text-green-400 shrink-0" />
                 <span className="text-left flex-1">{rotulo}
                   {!d && <span className="block text-xs font-normal text-zinc-500">{sem}</span>}
-                  {d && d.alertas.length > 0 && <span className="block text-xs font-normal text-amber-400">Fica puxado em algum dia</span>}
+                  {analisando === n && <span role="status" className="block text-xs font-normal text-green-400">Analisando seu treino com IA…</span>}
+                  {d && analisando !== n && (analisadas[n] ?? d).alertas.length > 0 && <span className="block text-xs font-normal text-amber-400">Fica puxado em algum dia</span>}
                 </span>
                 {d && n === sugerida && <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-green-500 text-zinc-950">sugerido</span>}
               </button>
             ))}
             {previa && (
               <div role="group" aria-label="Planejamento da divisão" className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 flex flex-col gap-2">
-                <p className="text-xs text-zinc-400">O treino {perdido.letra} separado por músculo, sem pesar nenhum dia e sem o mesmo grupo em dias seguidos:</p>
+                {previa.fonte === 'ia' && previa.explicacao
+                  ? <p className="text-xs text-zinc-300"><span className="font-semibold text-green-400">Analisado pela IA: </span>{previa.explicacao}</p>
+                  : <p className="text-xs text-zinc-400">O treino {perdido.letra} separado por músculo, sem pesar nenhum dia e sem o mesmo grupo em dias seguidos:</p>}
                 <ul className="flex flex-col gap-1.5">
                   {previa.destinos.map(d => (
                     <li key={d.data} className="text-sm">
