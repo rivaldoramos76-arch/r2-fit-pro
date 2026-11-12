@@ -10,7 +10,7 @@ import { TreinoPlayer, carregarClipes, carregarSeries, estadoEm, type Clipes, ty
 import { carregarNomes } from '../../lib/vozNomes'
 import { carregarPreferencias, salvarPreferencias, type PrefsAudio } from '../../lib/preferencias'
 import { detectarSistema } from '../../lib/instalacao'
-import { contadorNativo } from '../../lib/nativo'
+import { bloquearVoltar, contadorNativo, telaLigadaNativa } from '../../lib/nativo'
 import type { ExercicioPlano } from '../../lib/treinoModel'
 import { lerTempo, mss, normalizarCarga, passoCarga } from './AjustesExercicio'
 import { passoTempo } from '../../lib/treinoModel'
@@ -144,7 +144,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
 
   // Tela sempre ligada e tela cheia enquanto o contador está aberto
   const pedirWakeLock = async () => {
-    contadorNativo()?.telaLigada({ ligada: true }).catch(() => {})
+    telaLigadaNativa(true)
     try {
       const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<WakeLockSentinel> } }).wakeLock
       if (wl && (!wakeRef.current || wakeRef.current.released)) {
@@ -152,7 +152,7 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
       }
     } catch { /* não suportado ou negado */ }
   }
-  const liberarWakeLock = () => { contadorNativo()?.telaLigada({ ligada: false }).catch(() => {}); wakeRef.current?.release().catch(() => {}); wakeRef.current = null }
+  const liberarWakeLock = () => { telaLigadaNativa(false); wakeRef.current?.release().catch(() => {}); wakeRef.current = null }
   const entrarTelaCheia = () => { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {}) }
   const sairTelaCheia = () => { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}) }
   /** Solta os controles de mídia do sistema (a música volta a ser a dona do som e do volume). */
@@ -161,6 +161,14 @@ export function useContadorTreino({ user, treino, diaIdx, dia, onSessao, avulso,
     navigator.mediaSession.metadata = null
     for (const a of ['play', 'pause'] as const) { try { navigator.mediaSession.setActionHandler(a, null) } catch { /* sem suporte */ } }
   }
+
+  // Botão voltar do Android no meio do treino: confirma antes de sair (sair para o contador)
+  const telaAtual = useRef(tela)
+  telaAtual.current = tela
+  useEffect(() => {
+    bloquearVoltar(() => telaAtual.current === 'concluido' || telaAtual.current === 'parado' || window.confirm('Sair do contador? O treino em andamento para.'))
+    return () => bloquearVoltar(null)
+  }, [])
 
   useEffect(() => () => {
     playerRef.current?.parar()

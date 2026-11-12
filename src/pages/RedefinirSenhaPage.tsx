@@ -5,6 +5,7 @@ import { Button, Input, Spinner } from '../components/UI'
 import { Logo } from '../components/Logo'
 import { traduzirErroAuth, validarSenha } from '../lib/formatos'
 import { detectarSistema, estaInstalado } from '../lib/instalacao'
+import { ehAppNativo } from '../lib/nativo'
 
 export default function RedefinirSenhaPage() {
   const navigate = useNavigate()
@@ -14,7 +15,9 @@ export default function RedefinirSenhaPage() {
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [concluido, setConcluido] = useState(false)
-  const ficaNoSafari = detectarSistema() === 'iphone' && !estaInstalado()
+  // iPhone: o link do e-mail abre no Safari (não no app da Tela de Início); Android: abre no Chrome (não no app)
+  const sistema = detectarSistema()
+  const ficaNoSafari = (sistema === 'iphone' && !estaInstalado()) || (sistema === 'android' && !ehAppNativo())
 
   useEffect(() => {
     // O link do e-mail cria uma sessão temporária de recuperação (evento PASSWORD_RECOVERY)
@@ -59,7 +62,7 @@ export default function RedefinirSenhaPage() {
         )}
         {pronto === 'ok' && (concluido ? (
           <p role="status" className="text-green-400 text-sm">{ficaNoSafari
-            ? 'Senha alterada com sucesso! Agora abra o R2 Fit Pro pelo ícone na Tela de Início e entre com a nova senha.'
+            ? `Senha alterada com sucesso! Agora abra o app R2 Fit Pro pelo ícone ${sistema === 'iphone' ? 'na Tela de Início' : 'do celular'} e entre com a nova senha.`
             : 'Senha alterada com sucesso! Redirecionando…'}</p>
         ) : (
           <form onSubmit={salvar} className="flex flex-col gap-4" noValidate>

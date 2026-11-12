@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ContadorNativoPlugin.class);
         registerPlugin(LembretesNativoPlugin.class);
+        registerPlugin(ArquivosNativoPlugin.class);
         super.onCreate(savedInstanceState);
         abrirDestino(getIntent(), 1500);
     }
@@ -25,6 +26,10 @@ public class MainActivity extends BridgeActivity {
         String url = intent.getStringExtra("url");
         if (url == null || !url.startsWith("/") || getBridge() == null) return;
         intent.removeExtra("url");
-        getBridge().getWebView().postDelayed(() -> getBridge().getWebView().loadUrl(Lembretes.SITE + url), atraso);
+        // Navega dentro do site já aberto (não recarrega: um treino em andamento continua); se o site não respondeu, carrega a página
+        String js = "window.__r2Navegar ? (window.__r2Navegar(" + org.json.JSONObject.quote(url) + "), 'ok') : 'nao'";
+        getBridge().getWebView().postDelayed(() -> getBridge().getWebView().evaluateJavascript(js, r -> {
+            if (!"\"ok\"".equals(r)) getBridge().getWebView().loadUrl(Lembretes.SITE + url);
+        }), atraso);
     }
 }

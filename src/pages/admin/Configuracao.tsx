@@ -69,7 +69,7 @@ export default function Configuracao() {
         <div className="grid grid-cols-2 gap-3">
           <Input label="Teste grátis (dias)" type="number" min={0} max={30} value={cfg.plano.teste_dias ?? 0} hint="Só para contas novas. 0 = desligado"
             onChange={e => setCfg({ ...cfg, plano: { ...cfg.plano, teste_dias: Number(e.target.value) } })} />
-          <Input label="IA por dia no teste" type="number" min={1} max={80} value={cfg.plano.teste_limite_ia ?? 15}
+          <Input label="IA por dia no teste" type="number" min={1} max={30} value={cfg.plano.teste_limite_ia ?? 15}
             onChange={e => setCfg({ ...cfg, plano: { ...cfg.plano, teste_limite_ia: Number(e.target.value) } })} />
         </div>
         <div className="grid grid-cols-2 gap-3">

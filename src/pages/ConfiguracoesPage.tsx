@@ -8,6 +8,7 @@ import { carregarPreferencias, salvarPreferencias, type Preferencias } from '../
 import { traduzirErroAuth, validarSenha } from '../lib/formatos'
 import { Button, Card, Input, Select, Spinner, Textarea } from '../components/UI'
 import { CartaoVersaoApp } from '../components/AvisoAtualizacaoApp'
+import { entregarArquivo } from '../lib/nativo'
 
 function Interruptor({ rotulo, descricao, valor, onChange, desabilitado }: { rotulo: string; descricao?: string; valor: boolean; onChange: (v: boolean) => void; desabilitado?: boolean }) {
   return (
@@ -74,7 +75,7 @@ export default function ConfiguracoesPage() {
     setExportando(true)
     try {
       const uid = user!.id
-      const tabelas = ['profiles', 'user_settings', 'treinos', 'sessoes_treino', 'dietas', 'food_logs', 'metas_nutricionais', 'alimentos_favoritos', 'registros_agua', 'registros_peso', 'exercicios_registro', 'receitas', 'lembretes', 'subscriptions', 'payments', 'support_tickets', 'privacy_requests'] as const
+      const tabelas = ['profiles', 'user_settings', 'treinos', 'sessoes_treino', 'dietas', 'food_logs', 'metas_nutricionais', 'alimentos_favoritos', 'registros_agua', 'registros_peso', 'medidas_corporais', 'fotos_evolucao', 'exercicios_registro', 'receitas', 'lembretes', 'subscriptions', 'payments', 'support_tickets', 'privacy_requests'] as const
       const resultado: Record<string, unknown> = { exportado_em: new Date().toISOString(), conta: { id: uid, email: user!.email, criada_em: user!.created_at } }
       for (const t of tabelas) {
         const coluna = t === 'profiles' ? 'id' : 'user_id'
@@ -83,11 +84,9 @@ export default function ConfiguracoesPage() {
         resultado[t] = data
       }
       const blob = new Blob([JSON.stringify(resultado, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = `r2fitpro-meus-dados-${new Date().toISOString().slice(0, 10)}.json`; a.click()
-      URL.revokeObjectURL(url)
-      mostrar('ok', 'Arquivo com seus dados gerado.')
+      const r = await entregarArquivo(blob, `r2fitpro-meus-dados-${new Date().toISOString().slice(0, 10)}.json`, 'Salvar meus dados')
+      if (r === 'sem_suporte') mostrar('erro', 'Atualize o app (versão nova no aviso do topo) para salvar o arquivo.')
+      else if (r !== 'cancelado') mostrar('ok', 'Arquivo com seus dados gerado.')
     } catch {
       mostrar('erro', 'Não foi possível exportar agora. Tente novamente.')
     } finally { setExportando(false) }

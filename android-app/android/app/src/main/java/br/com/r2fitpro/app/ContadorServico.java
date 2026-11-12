@@ -26,9 +26,17 @@ public class ContadorServico extends Service {
     private final android.os.Handler espera = new android.os.Handler(android.os.Looper.getMainLooper());
     /** O contador de verdade está tocando (o fim do teste não pode derrubar o serviço dele). */
     static volatile boolean contadorTocando = false;
+    static final String ACAO_PARAR = "br.com.r2fitpro.app.PARAR";
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // "Parar" na notificação: encerra o contador mesmo se a página que o comandava não existe mais
+        if (intent != null && ACAO_PARAR.equals(intent.getAction())) {
+            ContadorMotor.get(getApplicationContext()).parar();
+            stopForeground(true);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         String titulo = intent != null && intent.getStringExtra("titulo") != null ? intent.getStringExtra("titulo") : "Contador";
         boolean teste = intent != null && intent.getBooleanExtra("teste", false);
         rodando = true;
@@ -89,6 +97,8 @@ public class ContadorServico extends Service {
             .setContentTitle(titulo)
             .setContentText(texto)
             .setContentIntent(abrirApp(c))
+            .addAction(0, "Parar", PendingIntent.getService(c, 1, new Intent(c, ContadorServico.class).setAction(ACAO_PARAR),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT))
             .setOngoing(true)
             .setSilent(true)
             .setOnlyAlertOnce(true)
@@ -164,6 +174,15 @@ public class ContadorServico extends Service {
         NotificationManager nm = (NotificationManager) c.getSystemService(NOTIFICATION_SERVICE);
         nm.cancel(ID_FASE);
         nm.cancel(ID_FASE_B);
+    }
+
+    /** App fechado pela lista de recentes: para o contador (a página que o comandava foi embora). */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        ContadorMotor.get(getApplicationContext()).parar();
+        stopForeground(true);
+        stopSelf();
+        super.onTaskRemoved(rootIntent);
     }
 
     @Override

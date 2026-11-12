@@ -19,7 +19,7 @@ criado exclusivamente por `billing_registrar_pagamento` com pagamento aprovado c
 
 - Leitura/exclusão dos próprios treinos, dietas e registros: sempre permitida (LGPD).
 - Criação/edição de treinos, sessões, dietas e registros alimentares: exige Premium (RLS).
-- IA: exige Premium + limite diário (`registrar_uso_ia`).
+- IA: exige Premium + limite diário (`registrar_uso_ia`; 30 por dia, `AI_LIMITE_DIARIO` na Vercel muda). Alimento e exercício por texto usam gpt-4o-mini; fotos, treino, dieta e divisão usam gpt-4o.
 - Assinaturas, pagamentos, webhooks, auditoria: escrita apenas pelo backend (service role).
 
 ## Configuração pendente (responsável)

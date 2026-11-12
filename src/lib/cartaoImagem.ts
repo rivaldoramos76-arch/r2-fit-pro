@@ -1,3 +1,4 @@
+import { ehAppNativo, entregarArquivo } from './nativo'
 // Desenha o cartão de compartilhar (1080×1920, formato de stories) e abre o compartilhamento do celular.
 import { quebrarLinhas, SITE, type Cartao } from './cartoesBase'
 
@@ -109,6 +110,11 @@ export async function compartilharImagem(blob: Blob, texto: string, nomeArquivo 
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return 'cancelado'
     }
+  }
+  // App Android: o WebView não baixa arquivos; abre o "Compartilhar/Salvar" do Android
+  if (ehAppNativo()) {
+    const r = await entregarArquivo(blob, nomeArquivo, 'Compartilhar').catch(() => 'sem_suporte' as const)
+    return r === 'compartilhado' ? 'compartilhado' : r === 'cancelado' ? 'cancelado' : 'baixado'
   }
   baixarImagem(blob, nomeArquivo)
   return 'baixado'

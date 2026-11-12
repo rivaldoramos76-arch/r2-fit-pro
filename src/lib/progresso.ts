@@ -58,7 +58,7 @@ export async function salvarMetasExtras(userId: string, campos: { meta_agua_ml?:
 /** Exercício descrito em texto ("corri 5 km em 30 min"): a IA estima tempo e calorias pelo peso da pessoa. */
 export async function estimarExercicio(descricao: string, pesoKg: number): Promise<{ nome: string; duracao_min: number; calorias: number }> {
   const resp = await chatCompletion({
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
     response_format: { type: 'json_object' },
     temperature: 0.2,
     messages: [

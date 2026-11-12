@@ -20,13 +20,14 @@ public class LembreteAlarme extends BroadcastReceiver {
         String acao = intent.getAction();
         if ("br.com.r2fitpro.app.ROTINA".equals(acao)) {
             // Aviso com texto pronto: rotina de ergogênicos (discreto ou não; agenda o próximo) ou treino perdido (uma vez só)
-            String grupo = intent.getStringExtra("grupo");
-            boolean semana = Lembretes.SEMANA.equals(grupo);
-            JSONObject item = Lembretes.itemAviso(c, semana ? Lembretes.SEMANA : Lembretes.ROTINA, String.valueOf(intent.getStringExtra("id")));
+            String g = intent.getStringExtra("grupo");
+            String grupo = Lembretes.SEMANA.equals(g) || Lembretes.JEJUM.equals(g) ? g : Lembretes.ROTINA;
+            JSONObject item = Lembretes.itemAviso(c, grupo, String.valueOf(intent.getStringExtra("id")));
             if (item == null) return;
-            Lembretes.mostrar(c, ((semana ? "s" : "r") + item.optString("id")).hashCode(), item.optString("titulo", "Lembrete da sua rotina ⏰"),
-                item.optString("corpo", "Você tem um item para hoje. Toque para ver."), item.optString("url", semana ? "/" : "/ergogenicos"));
-            if (!semana) Lembretes.agendarAviso(c, Lembretes.ROTINA, item);
+            String url = item.optString("url", Lembretes.ROTINA.equals(grupo) ? "/ergogenicos" : "/");
+            Lembretes.mostrar(c, (Lembretes.prefixo(grupo) + item.optString("id")).hashCode(), item.optString("titulo", "Lembrete da sua rotina ⏰"),
+                item.optString("corpo", "Você tem um item para hoje. Toque para ver."), url.startsWith("/") ? url : "/");
+            if (!Lembretes.unico(grupo)) Lembretes.agendarAviso(c, Lembretes.ROTINA, item);
             return;
         }
         if (acao != null && !acao.equals("br.com.r2fitpro.app.LEMBRETE")) {

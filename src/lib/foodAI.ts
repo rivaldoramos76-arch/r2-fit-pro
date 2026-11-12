@@ -45,7 +45,7 @@ function parseJson(content: string | null | undefined): FoodEstimate[] {
 
 export async function estimarAlimentoTexto(descricao: string): Promise<FoodEstimate[]> {
   const resp = await chatCompletion({
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
     response_format: { type: 'json_object' },
     temperature: 0.3,
     messages: [
@@ -97,7 +97,7 @@ const num = (v: unknown) => Math.max(0, Number(v) || 0)
 /** Valores por 100 g de um alimento que não está na TACO nem no banco (vai para o banco compartilhado). */
 export async function estimarAlimentoBase(nome: string): Promise<EstimativaBase> {
   const resp = await chatCompletion({
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
     response_format: { type: 'json_object' },
     temperature: 0.2,
     messages: [

@@ -22,7 +22,7 @@ import java.util.Calendar;
  * Na hora, o LembreteAlarme pergunta ao servidor se o lembrete ainda vale (ex.: almoço já registrado não toca).
  */
 public final class Lembretes {
-    static final String API = "https://pzmhlxhdqghamyxgegwq.supabase.co/functions/v1/r2-api/app/lembrete";
+    static final String API = "https://pzmhlxhdqghamyxgegwq.supabase.co/functions/v1/r2-app/lembrete";
     static final String SITE = "https://r2fitpro.com.br";
     private static final String PREFS = "r2_lembretes";
     private static final String CANAL = "lembretes";
@@ -156,8 +156,12 @@ public final class Lembretes {
     // "rotina" (ergogênicos): na data da próxima vez e no horário; sem marcar como feito, repete no dia seguinte.
     // "semana" (treino perdido): uma vez só, na manhã seguinte ao dia de treino que ficou sem treino.
 
-    static final String ROTINA = "rotina", SEMANA = "semana";
-    private static String grupoValido(String g) { return SEMANA.equals(g) ? SEMANA : ROTINA; }
+    static final String ROTINA = "rotina", SEMANA = "semana", JEJUM = "jejum";
+    static final String[] GRUPOS = { ROTINA, SEMANA, JEJUM };
+    private static String grupoValido(String g) { return SEMANA.equals(g) || JEJUM.equals(g) ? g : ROTINA; }
+    /** Grupos de aviso único (não repetem): treino perdido e fim do jejum. */
+    static boolean unico(String grupo) { return SEMANA.equals(grupo) || JEJUM.equals(grupo); }
+    static String prefixo(String grupo) { return SEMANA.equals(grupo) ? "s" : JEJUM.equals(grupo) ? "j" : "r"; }
 
     static void definirAvisos(Context c, String grupo, JSONArray itens) {
         grupo = grupoValido(grupo);
@@ -183,7 +187,7 @@ public final class Lembretes {
     }
 
     static void agendarAvisosTodos(Context c) {
-        for (String grupo : new String[] { ROTINA, SEMANA }) {
+        for (String grupo : GRUPOS) {
             JSONArray l = avisos(c, grupo);
             for (int i = 0; i < l.length(); i++) {
                 JSONObject o = l.optJSONObject(i);
@@ -204,8 +208,7 @@ public final class Lembretes {
     private static PendingIntent intencaoAviso(Context c, String grupo, JSONObject o) {
         Intent i = new Intent(c, LembreteAlarme.class).setAction("br.com.r2fitpro.app.ROTINA")
             .putExtra("id", o.optString("id")).putExtra("grupo", grupo);
-        String prefixo = SEMANA.equals(grupo) ? "s" : "r";
-        return PendingIntent.getBroadcast(c, (prefixo + o.optString("id")).hashCode(), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        return PendingIntent.getBroadcast(c, (prefixo(grupo) + o.optString("id")).hashCode(), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     /** Data (AAAA-MM-DD) no horário; se já passou: aviso único → -1 (não avisa); rotina → hoje ou amanhã no horário. */
@@ -235,7 +238,7 @@ public final class Lembretes {
     }
 
     static void agendarAviso(Context c, String grupo, JSONObject o) {
-        long quando = proximoAviso(o, System.currentTimeMillis(), SEMANA.equals(grupo));
+        long quando = proximoAviso(o, System.currentTimeMillis(), unico(grupo));
         if (quando < 0) return;
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
         am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, quando, intencaoAviso(c, grupo, o));

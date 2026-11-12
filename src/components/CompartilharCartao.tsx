@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Download, Share2, X } from 'lucide-react'
 import type { Cartao } from '../lib/cartoesBase'
-import { baixarImagem, compartilharImagem, desenharCartao } from '../lib/cartaoImagem'
+import { compartilharImagem, desenharCartao } from '../lib/cartaoImagem'
+import { entregarArquivo } from '../lib/nativo'
 import { Button, Spinner } from './UI'
 
 /** Botão que gera o cartão (imagem para stories/WhatsApp) e abre a prévia com compartilhar e baixar. */
@@ -58,7 +59,7 @@ function Previa({ cartao, onFechar }: { cartao: Cartao; onFechar: () => void }) 
         {aviso && <p className="text-sm text-green-400 text-center">{aviso}</p>}
         <div className="flex gap-2">
           <Button className="flex-[2]" disabled={!blob} onClick={compartilhar}><Share2 className="w-4 h-4" />Compartilhar</Button>
-          <Button variant="secondary" className="flex-1" disabled={!blob} onClick={() => { if (blob) { baixarImagem(blob); setAviso('Imagem salva.') } }} aria-label="Baixar imagem"><Download className="w-4 h-4" /></Button>
+          <Button variant="secondary" className="flex-1" disabled={!blob} onClick={() => { if (blob) entregarArquivo(blob, 'r2-fit-pro.png').then(r => setAviso(r === 'baixado' ? 'Imagem salva.' : r === 'compartilhado' ? 'Pronto.' : r === 'sem_suporte' ? 'Atualize o app para salvar a imagem.' : '')).catch(() => setAviso('Não foi possível salvar a imagem.')) }} aria-label="Baixar imagem"><Download className="w-4 h-4" /></Button>
         </div>
       </div>
     </div>

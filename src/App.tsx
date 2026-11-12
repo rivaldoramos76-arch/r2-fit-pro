@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { AcessoProvider } from './context/AcessoContext'
 import { RotaPrivada, RotaPremium, RotaAdmin } from './components/Rotas'
@@ -38,7 +38,7 @@ import AmigosPage from './pages/AmigosPage'
 import { ListaAlunos, PainelAluno } from './pages/AlunosPage'
 import { Spinner } from './components/UI'
 import WelcomeSplash from './components/WelcomeSplash'
-import { ehAppNativo } from './lib/nativo'
+import { contadorNativo, ehAppNativo, escutarVoltar } from './lib/nativo'
 import AvisoAtualizacaoApp from './components/AvisoAtualizacaoApp'
 
 function Inicio() {
@@ -122,6 +122,16 @@ function AppRoutes() {
 /** App Android: ao abrir (logado), confere os alarmes de lembrete com os horários salvos. */
 function SincronizarApp() {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  // App Android: notificação tocada navega aqui dentro (sem recarregar), botão voltar e contador órfão
+  useEffect(() => {
+    if (!ehAppNativo()) return
+    ;(window as unknown as { __r2Navegar?: (u: string) => void }).__r2Navegar = (u: string) => { if (u.startsWith('/')) navigate(u) }
+    escutarVoltar()
+    // site acabou de abrir: um contador nativo que ficou tocando de antes (app recarregado) não tem mais quem o pare
+    const c = contadorNativo()
+    if (c && typeof c.parar === 'function') Promise.resolve().then(() => c.parar()).catch(() => {})
+  }, [navigate])
   useEffect(() => {
     if (user && ehAppNativo()) import('./lib/lembretes').then(m => m.sincronizarLembretesApp(user.id)).catch(() => {})
     // Rotina de ergogênicos (pode ter mudado em outro aparelho)

@@ -5,7 +5,7 @@
 
 const MODELOS = new Set(['gpt-4o', 'gpt-4o-mini'])
 const MAX_CORPO = 3_000_000
-const LIMITE_DIARIO = Number(process.env.AI_LIMITE_DIARIO || 80)
+const LIMITE_DIARIO = Number(process.env.AI_LIMITE_DIARIO || 30)
 
 const resposta = (status, corpo) =>
   new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } })
