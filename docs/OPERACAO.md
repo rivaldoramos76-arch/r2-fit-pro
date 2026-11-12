@@ -233,7 +233,7 @@ observação; marca "feito" e a próxima vira hoje + intervalo (`src/lib/rotinaB
 - Jejum: `/jejum` (`preferencias.jejum`); no app Android 1.9 alarme no fim (grupo "jejum"); card no Início quando ativo.
 - PDF sem biblioteca (`pdfSimples.ts`, Helvetica/WinAnsi): treino, dieta e relatório. No app Android sai pelo Compartilhar (plugin ArquivosNativo, 1.9+).
 
-## App Android 1.9.0 (código 11)
+## App Android 1.9.0 (código 11) — publicado em 12/11/2026
 
 - Lembretes perguntam a `r2-app/lembrete` (antes iam para um endereço que não existia e tocavam sempre); o `r2-api` repassa `/app/lembrete` para quem tem app antigo.
 - Contador: botão Parar na notificação, para ao fechar o app pela lista de recentes; o site recém-aberto para contador órfão.

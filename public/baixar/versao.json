@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "1.8.0",
-  "arquivo": "r2-fit-pro-1.8.0.apk",
-  "novidades": "Aviso de manhã quando um treino ficou para trás, lembretes da aba Ergo no celular (no horário e antes/depois do treino) e editar carga e tempos dentro do contador."
+  "versionCode": 11,
+  "versionName": "1.9.0",
+  "arquivo": "r2-fit-pro-1.9.0.apk",
+  "novidades": "Lembretes que não tocam quando você já registrou, botão Parar no contador, aviso no fim do jejum e PDF/imagens salvos direto do app."
 }
