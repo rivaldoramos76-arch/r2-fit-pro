@@ -71,6 +71,8 @@ export interface ExercicioPlano {
   temporarioAte?: string
   /** Data do treino perdido de onde veio (para desfazer a divisão) */
   origemTemp?: string
+  /** Exercício temporário que só entra no treino a partir desta data (divisão que vai para a semana seguinte) */
+  validoDe?: string
 }
 
 export interface DiaTreino {
@@ -86,6 +88,8 @@ export interface DiaTreino {
 export interface SlotAgenda { letra: string; diaSemana?: string }
 /** Treino perdido encaixado num dia livre (só nesta semana; some sozinho depois de `ate`) */
 export interface Encaixe { data: string; letra: string; origem: string; ate: string }
+/** Exercício de um treino perdido dividido entre os próximos treinos: entra no treino `letra` de `validoDe` até `ate` */
+export interface Extra { letra: string; validoDe: string; ate: string; origem: string; letraOrigem: string; exercicio: ExercicioPlano }
 
 export interface PlanoTreino {
   versao: 2
@@ -98,6 +102,8 @@ export interface PlanoTreino {
   agenda: SlotAgenda[]
   /** Ajustes temporários da semana (treino perdido encaixado num dia livre) */
   encaixes?: Encaixe[]
+  /** Treino perdido dividido nos próximos treinos (esta semana e a próxima) */
+  extras?: Extra[]
   config: ConfigTreino
   dias: DiaTreino[]
   observacoes: string[]
@@ -106,7 +112,17 @@ export interface PlanoTreino {
 export const LETRAS = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
 export const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
 
-function dataLocalHoje(): string {
+/** Põe nos treinos os exercícios divididos que valem hoje (sem repetir os que já estão lá). */
+export function aplicarExtras(dias: DiaTreino[], extras: Extra[], hoje: string): DiaTreino[] {
+  return dias.map(d => {
+    const ids = new Set(d.exercicios.map(e => e.id))
+    const novos = extras.filter(x => x.letra === d.letra && x.validoDe <= hoje && hoje <= x.ate && !ids.has(x.exercicio.id))
+      .map(x => ({ ...x.exercicio, temporarioAte: x.ate, origemTemp: x.origem, validoDe: x.validoDe }))
+    return novos.length ? { ...d, exercicios: [...d.exercicios, ...novos] } : d
+  })
+}
+
+export function dataLocalHoje(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
@@ -221,7 +237,8 @@ export function normalizarExercicio(raw: Record<string, unknown>, idPadrao: stri
     dica: raw.dica ? str(raw.dica) : undefined,
     ...(raw.tipo === 'cardio' ? { tipo: 'cardio' as const, met: num(raw.met, 8) } : {}),
     ...(typeof raw.temporarioAte === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.temporarioAte)
-      ? { temporarioAte: raw.temporarioAte, origemTemp: raw.origemTemp ? str(raw.origemTemp) : undefined } : {}),
+      ? { temporarioAte: raw.temporarioAte, origemTemp: raw.origemTemp ? str(raw.origemTemp) : undefined,
+          ...(typeof raw.validoDe === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.validoDe) ? { validoDe: raw.validoDe } : {}) } : {}),
   }
 }
 
@@ -262,8 +279,12 @@ export function normalizarPlano(raw: unknown, fallback?: { objetivo?: string; ni
 
   // Ajustes de treino perdido valem só até domingo: os vencidos somem ao carregar
   const hoje = dataLocalHoje()
-  const diasVigentes = dias.map(d => ({ ...d, exercicios: d.exercicios.filter(e => !e.temporarioAte || e.temporarioAte >= hoje) }))
   const ehData = (x: unknown) => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x)
+  const extras: Extra[] = (Array.isArray(p.extras) ? (p.extras as Extra[]) : [])
+    .filter(x => x && ehData(x.validoDe) && ehData(x.ate) && ehData(x.origem) && x.ate >= hoje && dias.some(d => d.letra === x.letra) && x.exercicio && typeof x.exercicio === 'object')
+    .map((x, k) => ({ letra: x.letra, validoDe: x.validoDe, ate: x.ate, origem: x.origem, letraOrigem: str(x.letraOrigem),
+      exercicio: normalizarExercicio(x.exercicio as unknown as Record<string, unknown>, `x${k}`) }))
+  const diasVigentes = aplicarExtras(dias.map(d => ({ ...d, exercicios: d.exercicios.filter(e => !e.temporarioAte || e.temporarioAte >= hoje) })), extras, hoje)
   const encaixes = (Array.isArray(p.encaixes) ? (p.encaixes as Encaixe[]) : [])
     .filter(e => e && ehData(e.data) && ehData(e.origem) && ehData(e.ate) && e.ate >= hoje && diasVigentes.some(d => d.letra === e.letra))
     .map(e => ({ data: e.data, letra: e.letra, origem: e.origem, ate: e.ate }))
@@ -282,6 +303,7 @@ export function normalizarPlano(raw: unknown, fallback?: { objetivo?: string; ni
     divisao: str(p.divisao) || dias.map(d => d.letra).join(''),
     agenda: agenda.length ? agenda : agendaPadrao(frequencia, Math.max(dias.length, 1)).filter(s => letrasValidas.has(s.letra)),
     ...(encaixes.length ? { encaixes } : {}),
+    ...(extras.length ? { extras } : {}),
     config,
     dias: diasVigentes,
     observacoes: Array.isArray(p.observacoes) ? (p.observacoes as unknown[]).map(o => str(o)) : [],

@@ -178,7 +178,7 @@ export default function TreinoDiaPage() {
                   </span>
                   <p className="flex-1 min-w-0 text-[13px] font-semibold text-zinc-100 leading-[1.15] line-clamp-2">
                     {ex.nome}
-                    {ex.temporarioAte && <span className="ml-1.5 align-middle text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400" title="Veio de um treino perdido; sai do treino no domingo">só esta semana</span>}
+                    {ex.temporarioAte && <span className="ml-1.5 align-middle text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400" title={`Veio de um treino perdido; sai do treino depois de ${ex.temporarioAte.split('-').reverse().slice(0, 2).join('/')}`}>temporário</span>}
                   </p>
                   {!contador.rodando && (animacaoDe(ex.nome)
                     ? execucao !== ex.id && <MiniExecucao nome={ex.nome} onAbrir={() => setExecucao(ex.id)} />

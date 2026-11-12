@@ -1,9 +1,10 @@
 // Treino perdido: lógica pura da semana (testada em tests/logica.test.ts).
 // Com os dias da semana de cada sessão do plano (agenda[].diaSemana), descobre os treinos que ficaram
 // para trás nesta semana e monta os ajustes temporários (só até domingo; o plano em si não muda):
-//  - dividir: os exercícios do treino perdido vão para os próximos dias de treino da semana, sem mudar o volume;
+//  - dividir: o treino perdido é separado por músculo e vai para os próximos treinos (desta semana ou desta e da
+//    próxima), sem mudar o volume, sem pesar nenhum dia e sem pôr o mesmo grupamento em dias seguidos (plano.extras);
 //  - encaixar: o treino perdido inteiro vai para um dia livre (plano.encaixes).
-import { DIAS_SEMANA, uid, type DiaTreino, type ExercicioPlano, type PlanoTreino } from './treinoModel'
+import { DIAS_SEMANA, aplicarExtras, uid, type DiaTreino, type ExercicioPlano, type Extra, type PlanoTreino } from './treinoModel'
 import { CATALOGO, GRUPOS, type GrupoMuscular } from '../data/exercicios'
 import { encontrarPorNome, normalizar } from './busca'
 
@@ -33,15 +34,17 @@ export interface Agendado { data: string; letra: string; diaIdx: number }
 /** O plano tem os dias da semana definidos? */
 export const temDiasDaSemana = (p: PlanoTreino) => p.agenda.some(s => !!s.diaSemana && DIAS_SEMANA.includes(s.diaSemana))
 
-/** Sessões do plano nesta semana (as que têm dia da semana), em ordem de data. */
-export function agendaDaSemana(p: PlanoTreino, hoje: string): Agendado[] {
+/** Sessões do plano nas `semanas` semanas a partir da semana da data (as que têm dia da semana), em ordem de data. */
+export function agendaDasSemanas(p: PlanoTreino, hoje: string, semanas = 1): Agendado[] {
   const seg = inicioSemana(hoje)
-  return p.agenda.flatMap(s => {
+  return Array.from({ length: semanas }, (_, w) => p.agenda.flatMap(s => {
     const i = s.diaSemana ? DIAS_SEMANA.indexOf(s.diaSemana) : -1
     const diaIdx = p.dias.findIndex(d => d.letra === s.letra)
-    return i >= 0 && diaIdx >= 0 ? [{ data: somar(seg, i), letra: s.letra, diaIdx }] : []
-  }).sort((a, b) => a.data.localeCompare(b.data))
+    return i >= 0 && diaIdx >= 0 ? [{ data: somar(seg, 7 * w + i), letra: s.letra, diaIdx }] : []
+  })).flat().sort((a, b) => a.data.localeCompare(b.data))
 }
+/** Sessões do plano nesta semana. */
+export const agendaDaSemana = (p: PlanoTreino, hoje: string) => agendaDasSemanas(p, hoje, 1)
 
 /** Grupos maiores primeiro (perna, costas, peito...) quando falta mais de um treino. */
 const PRIORIDADE = ['quadriceps', 'posteriores', 'gluteos', 'costas', 'peito', 'ombros', 'trapezio', 'biceps', 'triceps', 'panturrilhas', 'abdomen', 'antebracos', 'lombar', 'adutores']
@@ -53,6 +56,7 @@ export function origensAjustadas(p: PlanoTreino): Set<string> {
   return new Set([
     ...p.dias.flatMap(d => d.exercicios.map(e => e.origemTemp).filter((x): x is string => !!x)),
     ...(p.encaixes ?? []).map(e => e.origem),
+    ...(p.extras ?? []).map(e => e.origem),
   ])
 }
 
@@ -118,39 +122,119 @@ export function familiasDoDia(d: DiaTreino | undefined): Set<string> {
   ].filter((x): x is string => !!x))
 }
 
-/** Grupamentos de cada data da semana (sessões do plano e encaixes), sem a data de um treino perdido. */
+/** Grupamentos de cada data (sessões do plano e encaixes) desta semana e das 2 seguintes, sem a data de um treino perdido. */
 function mapaDaSemana(p: PlanoTreino, hoje: string, semData?: string): Map<string, Set<string>> {
   const m = new Map<string, Set<string>>()
-  const somarDia = (data: string, d: DiaTreino | undefined) => { if (data !== semData) m.set(data, new Set([...(m.get(data) ?? []), ...familiasDoDia(d)])) }
-  agendaDaSemana(p, hoje).forEach(a => somarDia(a.data, p.dias[a.diaIdx]))
-  ;(p.encaixes ?? []).forEach(e => somarDia(e.data, p.dias.find(d => d.letra === e.letra)))
+  const somarDia = (data: string, fams: Iterable<string>) => { if (data !== semData) m.set(data, new Set([...(m.get(data) ?? []), ...fams])) }
+  agendaDasSemanas(p, hoje, 3).forEach(a => somarDia(a.data, familiasDoDia(p.dias[a.diaIdx])))
+  ;(p.encaixes ?? []).forEach(e => somarDia(e.data, familiasDoDia(p.dias.find(d => d.letra === e.letra))))
   return m
 }
 const vizinhoCom = (m: Map<string, Set<string>>, data: string, f: string) => !!(m.get(somar(data, -1))?.has(f) || m.get(somar(data, 1))?.has(f))
 
-/**
- * Divide o treino perdido nos próximos dias de treino da semana, com as mesmas séries, repetições, carga e tempos.
- * Cada exercício vai para o dia com menos exercícios extras que não fique colado (dia antes ou depois) num treino
- * do mesmo grupamento; só se não houver jeito vai para um dia colado. Fica até domingo e some sozinho.
- */
-export function dividirNaSemana(p: PlanoTreino, perdido: Agendado, hoje: string, hojeFeito: boolean): PlanoTreino {
-  const restantes = diasDeTreinoRestantes(p, hoje, hojeFeito).filter(a => a.diaIdx !== perdido.diaIdx)
-  const destinos = [...new Set(restantes.map(a => a.diaIdx))]
-  const exs = p.dias[perdido.diaIdx]?.exercicios.filter(e => !e.temporarioAte) ?? []
-  if (!destinos.length || !exs.length) return p
-  const ate = fimSemana(hoje)
-  const mapa = mapaDaSemana(p, hoje, perdido.data)
-  const datasDe = (i: number) => restantes.filter(a => a.diaIdx === i).map(a => a.data)
-  const extra = new Map<number, ExercicioPlano[]>()
-  exs.forEach(e => {
-    const f = familiaDoExercicio(e)
-    const colado = (i: number) => (f && datasDe(i).some(d => vizinhoCom(mapa, d, f)) ? 1 : 0)
-    const alvo = [...destinos].sort((a, b) => colado(a) - colado(b) || (extra.get(a)?.length ?? 0) - (extra.get(b)?.length ?? 0) || destinos.indexOf(a) - destinos.indexOf(b))[0]
-    extra.set(alvo, [...(extra.get(alvo) ?? []), { ...e, id: uid('e'), temporarioAte: ate, origemTemp: perdido.data }])
-    if (f) datasDe(alvo).forEach(d => mapa.set(d, new Set([...(mapa.get(d) ?? []), f])))
-  })
-  return { ...p, dias: p.dias.map((d, i) => (extra.has(i) ? { ...d, exercicios: [...d.exercicios, ...extra.get(i)!] } : d)) }
+// --- Dividir o treino perdido ---
+
+/** Parte do músculo para separar o treino: bíceps de tríceps, quadríceps de posterior, ombro da frente do de trás... */
+export function parteDoExercicio(e: ExercicioPlano): string {
+  if (e.tipo === 'cardio') return 'Cardio'
+  const c = (e.catalogo_id ? CATALOGO.find(x => x.id === e.catalogo_id) : undefined) ?? encontrarPorNome(e.nome)
+  if (c) {
+    if (c.grupo === 'ombros') {
+      if (c.secundarios.includes('costas')) return 'Ombro (trás)' // crucifixo invertido, face pull
+      if (/^(elevação lateral|remada alta)/i.test(c.nome)) return 'Ombro (lateral)'
+      return 'Ombro (frente)' // desenvolvimento, elevação frontal
+    }
+    return GRUPOS[c.grupo]
+  }
+  const g = GRUPO_POR_NOME.get(normalizar(e.grupos_musculares?.[0] ?? '')) ?? GRUPO_POR_NOME.get(normalizar(e.grupos_musculares?.[0] ?? '').split(' ')[0])
+  return g ? GRUPOS[g] : (e.grupos_musculares?.[0] || e.nome)
 }
+
+/** Séries a mais que um treino aguenta sem ficar pesado (≈ 2 a 3 exercícios). */
+export const LIMITE_EXTRA = 8
+const seriesDe = (exs: ExercicioPlano[]) => exs.reduce((t, e) => t + Math.max(1, e.series), 0)
+
+export interface Destino { data: string; letra: string; diaIdx: number; exercicios: ExercicioPlano[]; series: number }
+export interface Divisao { semanas: 1 | 2; destinos: Destino[]; alertas: string[]; plano: PlanoTreino; ate: string }
+
+/** Treinos que podem receber parte do treino perdido: de hoje (se ainda não treinou) até o fim do período, menos o próprio treino perdido. */
+function vagas(p: PlanoTreino, perdido: Agendado, hoje: string, hojeFeito: boolean, semanas: 1 | 2): Agendado[] {
+  return agendaDasSemanas(p, hoje, semanas).filter(a => (a.data > hoje || (a.data === hoje && !hojeFeito)) && a.diaIdx !== perdido.diaIdx)
+}
+
+/** Dá para dividir? (há outro treino no período) */
+export const podeDividir = (p: PlanoTreino, perdido: Agendado, hoje: string, hojeFeito: boolean, semanas: 1 | 2 = 1) =>
+  vagas(p, perdido, hoje, hojeFeito, semanas).length > 0
+
+/**
+ * Planeja a divisão do treino perdido (só monta; quem confirma grava).
+ *  1. Separa o treino por parte do músculo (bíceps, tríceps, quadríceps, posterior, ombro da frente...), na ordem dele.
+ *  2. Coloca as partes maiores primeiro, cada uma no treino que menos atrapalha:
+ *     - nunca colado (dia antes ou depois) num treino do mesmo grupamento, se der;
+ *     - de preferência num treino que não seja do mesmo grupamento (não dobra o volume do músculo no dia);
+ *     - sem passar de 8 séries a mais por treino e equilibrando as séries entre os dias;
+ *     - nesta semana antes da próxima.
+ *  3. Parte que não cabe inteira num treino sem pesar é quebrada em exercícios (uma parte das costas num dia, outra em outro).
+ *  Séries, repetições, carga e tempos ficam iguais. Cada exercício entra só na sessão escolhida daquele treino
+ *  (do dia seguinte ao treino anterior de mesma letra até a véspera do próximo) e some sozinho depois.
+ */
+export function planejarDivisao(p: PlanoTreino, perdido: Agendado, hoje: string, hojeFeito: boolean, semanas: 1 | 2): Divisao | null {
+  const slots = vagas(p, perdido, hoje, hojeFeito, semanas)
+  const exs = p.dias[perdido.diaIdx]?.exercicios.filter(e => !e.temporarioAte) ?? []
+  if (!slots.length || !exs.length) return null
+  const mapa = mapaDaSemana(p, hoje, perdido.data)
+  const carga = new Map<string, ExercicioPlano[]>(slots.map(s => [s.data, []]))
+  const alertas: string[] = []
+
+  // 1. partes, na ordem do treino
+  const partes: ExercicioPlano[][] = []
+  const porParte = new Map<string, ExercicioPlano[]>()
+  exs.forEach(e => { const k = parteDoExercicio(e); if (!porParte.has(k)) { porParte.set(k, []); partes.push(porParte.get(k)!) } porParte.get(k)!.push(e) })
+  // parte grande demais para um dia já vai quebrada
+  let fila = partes.flatMap(pt => (seriesDe(pt) > LIMITE_EXTRA ? pt.map(e => [e]) : [pt]))
+  const ordenar = () => { fila = [...fila].sort((a, b) => seriesDe(b) - seriesDe(a)) }
+  ordenar()
+
+  const custo = (s: Agendado, bloco: ExercicioPlano[]) => {
+    const fams = new Set(bloco.map(familiaDoExercicio).filter((x): x is string => !!x))
+    const base = familiasDoDia(p.dias[s.diaIdx])
+    const atual = seriesDe(carga.get(s.data)!)
+    const depois = atual + seriesDe(bloco)
+    const colado = [...fams].some(f => vizinhoCom(mapa, s.data, f))
+    const mesmo = [...fams].some(f => base.has(f))
+    return { colado, mesmo, passa: Math.max(0, depois - LIMITE_EXTRA), valor: (colado ? 1000 : 0) + (mesmo ? 150 : 0) + Math.max(0, depois - LIMITE_EXTRA) * 40 + atual * 3 + diasEntre(hoje, s.data) * 0.5 }
+  }
+  while (fila.length) {
+    const bloco = fila.shift()!
+    const opcoes = slots.map(s => ({ s, c: custo(s, bloco) })).sort((a, b) => a.c.valor - b.c.valor)
+    const melhor = opcoes[0]
+    if (bloco.length > 1 && (melhor.c.colado || melhor.c.passa > 0)) { fila.push(...bloco.map(e => [e])); ordenar(); continue }
+    carga.get(melhor.s.data)!.push(...bloco)
+    bloco.forEach(e => { const f = familiaDoExercicio(e); if (f) mapa.set(melhor.s.data, new Set([...(mapa.get(melhor.s.data) ?? []), f])) })
+    if (melhor.c.colado) alertas.push(`${parteDoExercicio(bloco[0])} ficou colado em outro treino do mesmo grupo (${dataComDia(melhor.s.data).split(',')[0]}).`)
+  }
+
+  const destinos: Destino[] = slots.filter(s => carga.get(s.data)!.length)
+    .map(s => ({ ...s, exercicios: carga.get(s.data)!, series: seriesDe(carga.get(s.data)!) }))
+  destinos.filter(d => d.series > LIMITE_EXTRA).forEach(d => alertas.push(`Fica puxado: +${d.series} séries em ${dataComDia(d.data)}.`))
+
+  // janela de cada sessão: do dia seguinte à sessão anterior da mesma letra até a véspera da próxima (no máximo o domingo)
+  const todas = agendaDasSemanas(p, hoje, 3)
+  const extras: Extra[] = destinos.flatMap(d => {
+    const mesmas = todas.filter(a => a.letra === d.letra).map(a => a.data)
+    const antes = mesmas.filter(x => x < d.data).pop()
+    const depois = mesmas.find(x => x > d.data)
+    const validoDe = antes && somar(antes, 1) > hoje ? somar(antes, 1) : hoje
+    const ate = depois && somar(depois, -1) < fimSemana(d.data) ? somar(depois, -1) : fimSemana(d.data)
+    return d.exercicios.map(e => ({ letra: d.letra, validoDe, ate, origem: perdido.data, letraOrigem: perdido.letra, exercicio: { ...e, id: uid('e') } }))
+  })
+  const todosExtras = [...(p.extras ?? []), ...extras]
+  const plano = { ...p, extras: todosExtras, dias: aplicarExtras(p.dias, todosExtras, hoje) }
+  return { semanas, destinos, alertas, plano, ate: extras.reduce((m, x) => (x.ate > m ? x.ate : m), hoje) }
+}
+
+/** Dias entre duas datas AAAA-MM-DD. */
+const diasEntre = (a: string, b: string) => Math.round((paraData(b).getTime() - paraData(a).getTime()) / 86_400_000)
 
 /** Dia livre para encaixar: se fica colado num treino do mesmo grupamento e se tira o último descanso até domingo. */
 export interface DiaLivre { data: string; colado: string[]; semDescanso: boolean }
@@ -163,10 +247,6 @@ export function opcoesEncaixe(p: PlanoTreino, perdido: Agendado, hoje: string): 
     .sort((a, b) => Number(a.colado.length > 0) - Number(b.colado.length > 0) || a.data.localeCompare(b.data))
 }
 
-/** Dá para dividir? (há outro dia de treino até domingo) */
-export const podeDividir = (p: PlanoTreino, perdido: Agendado, hoje: string, hojeFeito: boolean) =>
-  diasDeTreinoRestantes(p, hoje, hojeFeito).some(a => a.diaIdx !== perdido.diaIdx)
-
 /** Encaixa o treino perdido inteiro num dia livre desta semana. */
 export const encaixar = (p: PlanoTreino, perdido: Agendado, data: string, hoje: string): PlanoTreino =>
   ({ ...p, encaixes: [...(p.encaixes ?? []), { data, letra: perdido.letra, origem: perdido.data, ate: fimSemana(hoje) }] })
@@ -176,19 +256,24 @@ export const desfazerAjuste = (p: PlanoTreino, origem: string): PlanoTreino => (
   ...p,
   dias: p.dias.map(d => ({ ...d, exercicios: d.exercicios.filter(e => e.origemTemp !== origem) })),
   encaixes: (p.encaixes ?? []).filter(e => e.origem !== origem),
+  extras: (p.extras ?? []).filter(e => e.origem !== origem),
 })
 
-export interface Ajuste { origem: string; letra: string; tipo: 'dividido' | 'encaixado'; data?: string; diaIdx: number }
+export interface Ajuste { origem: string; letra: string; tipo: 'dividido' | 'encaixado'; data?: string; ate: string; diaIdx: number }
 
-/** Ajustes desta semana, para mostrar "Semana ajustada · desfazer". */
+/** Ajustes ainda valendo (desta semana ou da próxima), para mostrar "Semana ajustada · desfazer". */
 export function ajustesDaSemana(p: PlanoTreino, hoje: string): Ajuste[] {
-  const seg = inicioSemana(hoje)
-  const letraDa = (origem: string) => agendaDaSemana(p, hoje).find(a => a.data === origem)?.letra ?? ''
-  const divididos = [...new Set(p.dias.flatMap(d => d.exercicios.filter(e => e.origemTemp && e.origemTemp >= seg).map(e => e.origemTemp!)))]
-    .map(origem => { const letra = letraDa(origem); return { origem, letra, tipo: 'dividido' as const, diaIdx: p.dias.findIndex(d => d.letra === letra) } })
-  const encaixados = (p.encaixes ?? []).filter(e => e.origem >= seg)
-    .map(e => ({ origem: e.origem, letra: e.letra, tipo: 'encaixado' as const, data: e.data, diaIdx: p.dias.findIndex(d => d.letra === e.letra) }))
-  return [...divididos, ...encaixados].sort((a, b) => a.origem.localeCompare(b.origem))
+  const letraDa = (origem: string) => agendaDasSemanas(p, somar(hoje, -7), 2).find(a => a.data === origem)?.letra ?? ''
+  const div = new Map<string, Ajuste>()
+  const somarDiv = (origem: string, letra: string, ate: string) => {
+    const a = div.get(origem)
+    div.set(origem, { origem, letra: a?.letra || letra, tipo: 'dividido', ate: a && a.ate > ate ? a.ate : ate, diaIdx: p.dias.findIndex(d => d.letra === (a?.letra || letra)) })
+  }
+  p.dias.forEach(d => d.exercicios.forEach(e => { if (e.origemTemp && e.temporarioAte && e.temporarioAte >= hoje) somarDiv(e.origemTemp, letraDa(e.origemTemp), e.temporarioAte) }))
+  ;(p.extras ?? []).forEach(x => { if (x.ate >= hoje) somarDiv(x.origem, x.letraOrigem || letraDa(x.origem), x.ate) })
+  const encaixados = (p.encaixes ?? []).filter(e => e.ate >= hoje)
+    .map(e => ({ origem: e.origem, letra: e.letra, tipo: 'encaixado' as const, data: e.data, ate: e.ate, diaIdx: p.dias.findIndex(d => d.letra === e.letra) }))
+  return [...div.values(), ...encaixados].sort((a, b) => a.origem.localeCompare(b.origem))
 }
 
 /** Treino encaixado para hoje (se houver e ainda não foi feito). */

@@ -119,7 +119,7 @@ export default function TreinoPlanoPage() {
           {erroDias && <p role="alert" className="text-xs text-red-400 mt-2">{erroDias}</p>}
           {!editandoDias && ajustesDaSemana(plano, hojeIso()).map(a => (
             <p key={`${a.tipo}-${a.origem}`} className="flex items-center gap-2 text-xs text-zinc-400 mt-2">
-              <span className="flex-1">Semana ajustada · treino {a.letra} de {dataComDia(a.origem).split(',')[0]} {a.tipo === 'dividido' ? 'dividido nos próximos treinos' : 'encaixado num dia livre'}</span>
+              <span className="flex-1">Semana ajustada · treino {a.letra} de {dataComDia(a.origem).split(',')[0]} {a.tipo === 'dividido' ? `dividido nos próximos treinos até ${dataComDia(a.ate)}` : 'encaixado num dia livre'}</span>
               <button type="button" onClick={() => salvar(desfazerAjuste(plano, a.origem)).catch(() => setErroDias('Não foi possível salvar. Confira a internet e tente de novo.'))}
                 className="font-semibold text-amber-400">desfazer</button>
             </p>

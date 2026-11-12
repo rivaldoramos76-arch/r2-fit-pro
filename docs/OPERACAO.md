@@ -196,11 +196,18 @@ observação; marca "feito" e a próxima vira hoje + intervalo (`src/lib/rotinaB
 - Usa os dias da semana do plano (`plano.agenda[].diaSemana`). Sem dias, o Início pergunta uma vez ("Agora não" guarda no aparelho); dá para editar em "Editar dias" na tela do treino.
 - Um treino é perdido quando o dia dele já passou nesta semana (segunda a domingo) e não há treino feito daquela letra na semana (feito em outro dia conta).
   Mais de um: grupos maiores primeiro (perna, costas, peito...).
-- Opções do card: marcar como concluído (cria a sessão no dia, com todas as séries), dividir no restante da semana (os exercícios vão um a um para os próximos treinos,
-  com as mesmas séries/carga/tempos, marcados com `temporarioAte`/`origemTemp`) ou encaixar num dia livre (`plano.encaixes`).
-  Tudo some sozinho depois de domingo (`normalizarPlano` descarta os vencidos); "desfazer" no Início e na tela do treino.
-- Grupamentos: ao dividir, cada exercício evita o dia colado (antes/depois) num treino do mesmo grupamento (perna = quadríceps, posteriores, glúteos e adutores;
-  abdômen, panturrilha e antebraço podem seguidos). No encaixe, os dias colados vão para o fim com aviso, e o último dia livre avisa "fica sem descanso até domingo".
+- Opções do card: marcar como concluído (cria a sessão no dia, com todas as séries), dividir no restante desta semana,
+  dividir nesta semana e na próxima, ou encaixar num dia livre (`plano.encaixes`). A divisão mostra o planejamento e só grava ao confirmar;
+  o card marca como "sugerido" a de uma semana se ela não pesa nenhum dia, senão a de duas.
+- Divisão (`planejarDivisao`): separa o treino perdido por parte do músculo (bíceps, tríceps, quadríceps, posterior, glúteo, ombro da frente/lateral/trás...)
+  e põe as partes maiores primeiro, cada uma no treino que menos atrapalha: nunca colado (dia antes/depois) num treino do mesmo grupamento se der,
+  de preferência num treino de outro grupamento, até 8 séries a mais por treino (`LIMITE_EXTRA`), equilibrando as séries e nesta semana antes da próxima.
+  Parte que não cabe inteira é quebrada em exercícios. Sobrou peso ou grupo colado sem jeito: aparece o aviso na prévia.
+  Grava em `plano.extras` (`letra`, `validoDe`, `ate`, `origem`, `letraOrigem`, `exercicio`): cada exercício entra só na sessão escolhida daquele treino
+  (do dia seguinte à sessão anterior de mesma letra até a véspera da próxima, no máximo o domingo); `normalizarPlano` põe nos treinos os que valem hoje
+  (`aplicarExtras`, sem repetir) e descarta os vencidos. "Desfazer" no Início e na tela do treino.
+- Grupamentos para "dias seguidos": perna = quadríceps, posteriores, glúteos e adutores; abdômen, panturrilha e antebraço podem seguidos.
+  No encaixe, os dias colados vão para o fim com aviso, e o último dia livre avisa "fica sem descanso até domingo".
   O editor de dias avisa grupamento em dias seguidos (domingo encosta na segunda) e semana sem descanso.
 - App Android (1.8+): aviso às 8h do dia seguinte a cada dia de treino sem treino (grupo "semana" do `agendarRotina`, uma vez só); refeito ao abrir o app e quando um treino começa.
 

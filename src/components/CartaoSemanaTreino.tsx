@@ -4,8 +4,8 @@ import { CalendarDays, Check, Split, CalendarPlus, Undo2 } from 'lucide-react'
 import EditorDiasSemana from './treino/EditorDiasSemana'
 import { agendarAvisosSemana, carregarSemana, marcarConcluido, salvarAjuste, type Semana } from '../lib/semana'
 import {
-  ajustesDaSemana, aplicarSemana, dataComDia, desfazerAjuste, diasDeTreinoRestantes, diasLivres, dividirNaSemana,
-  encaixar, encaixeDeHoje, opcoesEncaixe, podeDividir, temDiasDaSemana, treinosPerdidos,
+  ajustesDaSemana, aplicarSemana, dataComDia, desfazerAjuste, diasLivres, encaixar, encaixeDeHoje, opcoesEncaixe,
+  planejarDivisao, temDiasDaSemana, treinosPerdidos, type Divisao,
 } from '../lib/semanaBase'
 
 const CHAVE_DEPOIS = 'r2-dias-semana-depois'
@@ -14,8 +14,8 @@ const lerDepois = (id: string) => { try { return localStorage.getItem(CHAVE_DEPO
 /**
  * Início: semana de treino.
  *  - primeira vez: pergunta os dias da semana de treino;
- *  - treino que ficou para trás: marcar como concluído, dividir no restante da semana ou encaixar num dia livre
- *    (o mesmo volume, só até domingo; o plano não muda);
+ *  - treino que ficou para trás: marcar como concluído, dividir (nesta semana, ou nesta e na próxima) ou encaixar
+ *    num dia livre. A divisão mostra o planejamento antes de gravar. Mesmo volume, temporário; o plano não muda;
  *  - "Semana ajustada · desfazer" e o treino encaixado de hoje.
  */
 export default function CartaoSemanaTreino({ userId }: { userId: string }) {
@@ -24,6 +24,7 @@ export default function CartaoSemanaTreino({ userId }: { userId: string }) {
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
   const [escolhendoDia, setEscolhendoDia] = useState(false)
+  const [previa, setPrevia] = useState<Divisao | null>(null)
   const [depois, setDepois] = useState(false)
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function CartaoSemanaTreino({ userId }: { userId: string }) {
     setOcupado(true); setErro('')
     try {
       const nova = await fazer()
-      setSemana(nova); setAviso(msg); setEscolhendoDia(false)
+      setSemana(nova); setAviso(msg); setEscolhendoDia(false); setPrevia(null)
       agendarAvisosSemana(nova).catch(() => {})
     } catch (e) { setErro((e as Error).message) } finally { setOcupado(false) }
   }
@@ -67,7 +68,10 @@ export default function CartaoSemanaTreino({ userId }: { userId: string }) {
   if (!perdido && !ajustes.length && !aviso) return null
 
   const livres = diasLivres(plano, hoje)
-  const dividir = perdido && podeDividir(plano, perdido, hoje, hojeFeito)
+  const div1 = perdido ? planejarDivisao(plano, perdido, hoje, hojeFeito, 1) : null
+  const div2 = perdido ? planejarDivisao(plano, perdido, hoje, hojeFeito, 2) : null
+  // sugere a que termina mais cedo, se não pesa; senão a de duas semanas
+  const sugerida = div1 && !div1.alertas.length ? 1 : div2 ? 2 : 1
   const foco = (letra: string) => plano.dias.find(d => d.letra === letra)?.foco
 
   return (
@@ -87,12 +91,40 @@ export default function CartaoSemanaTreino({ userId }: { userId: string }) {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-zinc-800 text-zinc-100 border border-zinc-700 disabled:opacity-50">
               <Check className="w-4 h-4 text-green-400" />Marcar como concluído
             </button>
-            <button type="button" disabled={ocupado || !dividir} onClick={() => aplicar(() => comPlano(dividirNaSemana(plano, perdido, hoje, hojeFeito)),
-              `Exercícios do treino ${perdido.letra} divididos em: ${[...new Set(diasDeTreinoRestantes(plano, hoje, hojeFeito).filter(a => a.diaIdx !== perdido.diaIdx).map(a => `${dataComDia(a.data).split(',')[0]} (${a.letra})`))].join(', ')}.`)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-zinc-800 text-zinc-100 border border-zinc-700 disabled:opacity-50">
-              <Split className="w-4 h-4 text-green-400" /><span className="text-left">Dividir esse treino no restante da semana{!dividir && <span className="block text-xs font-normal text-zinc-500">Não tem outro treino até domingo</span>}</span>
-            </button>
-            <button type="button" disabled={ocupado || !livres.length} aria-expanded={escolhendoDia} onClick={() => setEscolhendoDia(x => !x)}
+            {([[1, div1, 'Dividir no restante desta semana', 'Não tem outro treino até domingo'],
+              [2, div2, 'Dividir nesta semana e na próxima', 'Não tem outro treino nas duas semanas']] as const).map(([n, d, rotulo, sem]) => (
+              <button key={n} type="button" disabled={ocupado || !d} aria-pressed={previa?.semanas === n} onClick={() => { setPrevia(x => (x?.semanas === n ? null : d)); setEscolhendoDia(false) }}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border disabled:opacity-50 ${previa?.semanas === n ? 'bg-green-500/10 border-green-500/40 text-zinc-100' : 'bg-zinc-800 border-zinc-700 text-zinc-100'}`}>
+                <Split className="w-4 h-4 text-green-400 shrink-0" />
+                <span className="text-left flex-1">{rotulo}
+                  {!d && <span className="block text-xs font-normal text-zinc-500">{sem}</span>}
+                  {d && d.alertas.length > 0 && <span className="block text-xs font-normal text-amber-400">Fica puxado em algum dia</span>}
+                </span>
+                {d && n === sugerida && <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-green-500 text-zinc-950">sugerido</span>}
+              </button>
+            ))}
+            {previa && (
+              <div role="group" aria-label="Planejamento da divisão" className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 flex flex-col gap-2">
+                <p className="text-xs text-zinc-400">O treino {perdido.letra} separado por músculo, sem pesar nenhum dia e sem o mesmo grupo em dias seguidos:</p>
+                <ul className="flex flex-col gap-1.5">
+                  {previa.destinos.map(d => (
+                    <li key={d.data} className="text-sm">
+                      <span className="font-semibold text-zinc-100">{dataComDia(d.data)} · Treino {d.letra}</span>
+                      <span className="text-zinc-500"> (+{d.series} séries)</span>
+                      <span className="block text-xs text-zinc-400">{d.exercicios.map(e => `${e.nome} ${e.series}×`).join(' · ')}</span>
+                    </li>
+                  ))}
+                </ul>
+                {previa.alertas.map(a => <p key={a} className="text-xs text-amber-400">⚠ {a}</p>)}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setPrevia(null)} className="flex-1 py-2 rounded-lg text-sm font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700">Voltar</button>
+                  <button type="button" disabled={ocupado} onClick={() => aplicar(() => comPlano(previa.plano),
+                    `Treino ${perdido.letra} dividido em ${previa.destinos.length} ${previa.destinos.length === 1 ? 'treino' : 'treinos'} até ${dataComDia(previa.ate)}.`)}
+                    className="flex-1 py-2 rounded-lg text-sm font-bold bg-green-500 text-zinc-950 disabled:opacity-50">Confirmar divisão</button>
+                </div>
+              </div>
+            )}
+            <button type="button" disabled={ocupado || !livres.length} aria-expanded={escolhendoDia} onClick={() => { setEscolhendoDia(x => !x); setPrevia(null) }}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-zinc-800 text-zinc-100 border border-zinc-700 disabled:opacity-50">
               <CalendarPlus className="w-4 h-4 text-green-400" /><span className="text-left">Encaixar num dia livre{!livres.length && <span className="block text-xs font-normal text-zinc-500">Não tem dia livre até domingo</span>}</span>
             </button>
@@ -111,7 +143,7 @@ export default function CartaoSemanaTreino({ userId }: { userId: string }) {
               </div>
             )}
           </div>
-          <p className="text-xs text-zinc-500 mt-2">Sem mudar o volume; vale só até domingo. O plano continua o mesmo.</p>
+          <p className="text-xs text-zinc-500 mt-2">Sem mudar o volume e só por um tempo: o plano continua o mesmo.</p>
         </div>
       )}
 
@@ -132,7 +164,7 @@ export default function CartaoSemanaTreino({ userId }: { userId: string }) {
             {ajustes.map(a => (
               <li key={`${a.tipo}-${a.origem}`} className="flex items-center gap-2 text-sm text-zinc-300">
                 <span className="flex-1 min-w-0">
-                  Treino {a.letra} de {dataComDia(a.origem).split(',')[0]}: {a.tipo === 'dividido' ? 'dividido na semana' : `encaixado ${a.data === hoje ? 'hoje' : `em ${dataComDia(a.data!)}`}`}
+                  Treino {a.letra} de {dataComDia(a.origem)}: {a.tipo === 'dividido' ? `dividido até ${dataComDia(a.ate)}` : `encaixado ${a.data === hoje ? 'hoje' : `em ${dataComDia(a.data!)}`}`}
                 </span>
                 <button type="button" disabled={ocupado} onClick={() => aplicar(() => comPlano(desfazerAjuste(plano, a.origem)), `Ajuste do treino ${a.letra} desfeito.`)}
                   aria-label={`Desfazer ajuste do treino ${a.letra}`} className="flex items-center gap-1 text-xs font-semibold text-amber-400 disabled:opacity-50">

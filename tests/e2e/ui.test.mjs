@@ -897,7 +897,7 @@ await t('treino perdido: pergunta os dias na primeira vez e edita na tela do tre
   await ctx.close()
 })
 
-await t('treino perdido: dividir no restante da semana, desfazer, encaixar hoje e marcar como concluído', async () => {
+await t('treino perdido: planejamento da divisão, confirmar, desfazer, encaixar hoje e marcar como concluído', async () => {
   const { ctx, page } = await contexto(browser, { logado: true, estado: 'ativa', nutricao: true, treino: 'semana' })
   await page.clock.setFixedTime(new Date('2026-11-10T09:00:00')) // terça; o treino A era segunda
   await page.goto(BASE + '/dashboard')
@@ -906,16 +906,24 @@ await t('treino perdido: dividir no restante da semana, desfazer, encaixar hoje 
   await card.getByText(/Era segunda, 09\/11 · Peito/).waitFor()
   await card.screenshot({ path: `${SHOTS}/semana-perdido.png`, animations: 'disabled' })
   const ultimoPlano = () => page.gravacoes.filter(g => g.tabela === 'treinos').pop().corpo.plano
-  await card.getByRole('button', { name: /Dividir esse treino/ }).click()
-  await card.getByText('Exercícios do treino A divididos em: quarta (B), sexta (C).').waitFor()
+  await card.getByRole('button', { name: /Dividir nesta semana e na próxima/ }).click()
+  await card.getByRole('group', { name: 'Planejamento da divisão' }).waitFor()
+  await card.getByRole('button', { name: /Dividir no restante desta semana/ }).click()
+  const previa = card.getByRole('group', { name: 'Planejamento da divisão' })
+  await previa.getByText(/quarta, 11\/11 · Treino B/).waitFor()
+  await card.screenshot({ path: `${SHOTS}/semana-previa.png`, animations: 'disabled' })
+  assert.equal(page.gravacoes.filter(g => g.tabela === 'treinos').length, 0, 'só grava depois de confirmar')
+  await previa.getByRole('button', { name: 'Confirmar divisão' }).click()
+  await card.getByText(/Treino A dividido em \d treinos? até domingo, 15\/11\./).waitFor()
   const dividido = ultimoPlano()
-  assert.deepEqual(dividido.dias[1].exercicios.map(e => [e.nome, e.series, e.temporarioAte ?? '']), [['Agachamento', 4, ''], ['Supino reto com barra', 4, '2026-11-15']])
-  assert.deepEqual(dividido.dias[2].exercicios.map(e => e.nome), ['Remada curvada', 'Crucifixo'])
+  assert.ok(dividido.extras.length === 2 && dividido.extras.every(x => x.origem === '2026-11-09' && x.letraOrigem === 'A' && x.letra !== 'A'))
+  assert.equal(dividido.extras.reduce((t, x) => t + x.exercicio.series, 0), 7, 'mesmo volume')
+  assert.ok(dividido.dias[1].exercicios.some(e => e.temporarioAte), 'já entra no treino de quarta')
   await card.getByText('Semana ajustada').waitFor()
   await card.screenshot({ path: `${SHOTS}/semana-ajustada.png`, animations: 'disabled' })
   await card.getByRole('button', { name: 'Desfazer ajuste do treino A' }).click()
   await card.getByText('Ajuste do treino A desfeito.').waitFor()
-  assert.ok(ultimoPlano().dias.every(d => d.exercicios.every(e => !e.temporarioAte)))
+  assert.ok(ultimoPlano().dias.every(d => d.exercicios.every(e => !e.temporarioAte))); assert.deepEqual(ultimoPlano().extras ?? [], [])
   await card.getByRole('button', { name: /Encaixar num dia livre/ }).click()
   await card.getByRole('group', { name: 'Dias livres' }).getByRole('button', { name: 'Hoje' }).click()
   await card.getByRole('link', { name: /Hoje: treino A encaixado/ }).waitFor()
